@@ -1,5 +1,5 @@
 """
-Vesper v5.0 — Intelligence Engine (Fixed & Hardened)
+Vesper v5.0 — Intelligence Engine (Final Resilience)
 """
 
 from __future__ import annotations
@@ -87,7 +87,15 @@ async def _fetch_full_history(tickers: List[str]) -> pd.DataFrame:
     return pd.DataFrame(all_series)
 
 def _compute_risk_history_from_prices(prices: pd.DataFrame, tickers: List[str], weights_dict: Dict[str, float]) -> Dict[str, Any]:
-    empty = {"asset_risk": {t: {} for t in tickers}, "portfolio_risk": {"cagr_inception": 0, "volatility": 0.15, "sharpe_ratio": 0, "var_95_daily": 0}, "future_value": {"p10": [1.0]*11, "p50": [1.0]*11, "p90": [1.0]*11}, "history": {"__portfolio__": {"dates": [], "values": []}}, "risk_contributions": {t: 0 for t in tickers}, "asset_vols": {t: 0.2 for t in tickers}, "asset_betas": {t: 1.0 for t in tickers}}
+    empty = {
+        "asset_risk": {t: {"cagr_inception": 0, "volatility": 0.2} for t in tickers}, 
+        "portfolio_risk": {"cagr_inception": 0, "volatility": 0.15, "sharpe_ratio": 0, "var_95_daily": 0}, 
+        "future_value": {"p10": [1.0]*11, "p50": [1.0]*11, "p90": [1.0]*11}, 
+        "history": {"__portfolio__": {"dates": [], "values": []}}, 
+        "risk_contributions": {t: 0 for t in tickers}, 
+        "asset_vols": {t: 0.2 for t in tickers}, 
+        "asset_betas": {t: 1.0 for t in tickers}
+    }
     try:
         if prices.empty: return empty
         asset_risk, history, asset_vols = {}, {}, {}
@@ -95,14 +103,21 @@ def _compute_risk_history_from_prices(prices: pd.DataFrame, tickers: List[str], 
         def calc_cagr(s, y):
             if y <= 0 or len(s) < 2: return 0
             try:
+                if s.iloc[0] <= 0: return 0
                 val = (s.iloc[-1] / s.iloc[0])**(1/y)-1
                 return round(float(val), 4) if np.isfinite(val) else 0
             except: return 0
 
         for t in tickers:
-            if t not in prices.columns: continue
-            p = prices[t].dropna(); 
-            if len(p) < 2: continue
+            if t not in prices.columns: 
+                asset_risk[t] = {"cagr_inception": 0, "volatility": 0.2}
+                asset_vols[t] = 0.2
+                continue
+            p = prices[t].dropna()
+            if len(p) < 2: 
+                asset_risk[t] = {"cagr_inception": 0, "volatility": 0.2}
+                asset_vols[t] = 0.2
+                continue
             last = p.index[-1]
             p_1y = p[p.index >= (last - pd.Timedelta(days=365.25))]
             if not p_1y.empty:
@@ -116,7 +131,7 @@ def _compute_risk_history_from_prices(prices: pd.DataFrame, tickers: List[str], 
         filled = prices.ffill().dropna()
         valid = [t for t in tickers if t in filled.columns]
         if not valid: return empty
-        w = np.array([weights_dict.get(t, 0.0) for t in valid]); 
+        w = np.array([weights_dict.get(t, 0.0) for t in valid])
         if w.sum() > 0: w = w/w.sum() 
         else: w = np.ones(len(valid))/len(valid)
         
@@ -125,7 +140,7 @@ def _compute_risk_history_from_prices(prices: pd.DataFrame, tickers: List[str], 
         
         cov_matrix = rets.cov() * 252
         port_var = np.dot(w.T, np.dot(cov_matrix, w))
-        port_vol = np.sqrt(port_var)
+        port_vol = np.sqrt(max(port_var, 1e-9))
         marginal_contribution = np.dot(cov_matrix, w) / port_vol
         risk_contributions = {tk: round(float((w[i] * marginal_contribution[i]) / port_vol), 4) for i, tk in enumerate(valid)}
         
@@ -141,6 +156,8 @@ def _compute_risk_history_from_prices(prices: pd.DataFrame, tickers: List[str], 
                         asset_betas[tk] = round(float(c/v), 3) if v != 0 else 1.0
                     else: asset_betas[tk] = 1.0
                 except: asset_betas[tk] = 1.0
+        else:
+            asset_betas = {t: 1.0 for t in tickers}
 
         port_rets = rets.values @ w
         port_series = pd.Series(port_rets, index=rets.index)
@@ -167,7 +184,6 @@ def _get_advanced_intelligence(assets, portfolio, risk_level, risk_data):
     beta = portfolio.get("portfolio_beta", 1.0)
     var_95 = portfolio.get("var_95_daily", 0)
     asset_vols = risk_data.get("asset_vols", {})
-    asset_betas = risk_data.get("asset_betas", {})
     
     kill_switch = "SYSTEM OVERLOAD: Guardrails breached. Rotate to GLD/VIG." if (var_95 > 0.035 or beta > 1.3) else None
     
@@ -219,12 +235,11 @@ def _get_market_outlook(assets, portfolio):
 
 def _get_global_events():
     now = datetime.datetime.now()
-    events = [
+    return [
         {"d": (now + pd.Timedelta(days=12)).strftime("%Y-%m-%d"), "e": "US Fed Meeting", "i": "Rate decision."},
         {"d": (now + pd.Timedelta(days=18)).strftime("%Y-%m-%d"), "e": "US CPI Data", "i": "Inflation trigger."},
         {"d": (now + pd.Timedelta(days=25)).strftime("%Y-%m-%d"), "e": "BoE Meeting", "i": "GBP driver."}
     ]
-    return events
 
 def _generate_recommendations(assets, portfolio, risk_level):
     recs = []
