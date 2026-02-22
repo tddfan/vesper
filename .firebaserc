@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "vesper-1e6b7"
+  },
+  "targets": {
+    "vesper-1e6b7": {
+      "hosting": {
+        "portfoliointel": [
+          "portfoliointel"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

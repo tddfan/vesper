@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vesper v5.0 — Institutional Apex</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'] },
+        },
+      },
+    }
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    .glass { background: #0f172a; border: 1px solid #1e293b; border-radius: 1rem; }
+    .glass:hover { border-color: #334155; }
+    .tnum { font-feature-settings: "tnum"; font-variant-numeric: tabular-nums; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { animation: spin 1s linear infinite; }
+    .vesper-glow { box-shadow: 0 0 60px rgba(99, 102, 241, 0.12); }
+    .sentiment-bar { height: 8px; border-radius: 9999px; overflow: hidden; display: flex; }
+    .tooltip-trigger { cursor: pointer; color: #6366f1; transition: color 0.2s; }
+    .tooltip-trigger:hover { color: #818cf8; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 9999px; }
+    #tooltip-modal { display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; background: rgba(2, 6, 23, 0.8); backdrop-filter: blur(4px); }
+    .modal-content { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 90%; max-width: 450px; background: #0f172a; border: 1px solid #312e81; padding: 2.5rem; border-radius: 1.5rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased">
+  <div id="tooltip-modal" onclick="this.style.display='none'">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <div class="flex justify-between items-start mb-4">
+        <p id="tooltip-title" class="text-[10px] font-black text-indigo-400 uppercase tracking-[0.3em]"></p>
+        <button onclick="document.getElementById('tooltip-modal').style.display='none'" class="text-slate-500 hover:text-white transition-colors">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <p id="tooltip-body" class="text-sm text-slate-300 leading-relaxed font-medium"></p>
+      <div class="mt-8 pt-4 border-t border-slate-800 flex justify-between items-center">
+        <p class="text-[10px] text-slate-600 font-bold uppercase tracking-widest">Quant Verification Suite v5.0</p>
+        <div class="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></div>
+      </div>
+    </div>
+  </div>
+
+  <header class="sticky top-0 z-20 border-b border-slate-800/70 backdrop-blur bg-slate-950/80 px-6 py-4">
+    <div class="max-w-6xl mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-3 group cursor-pointer" onclick="location.reload()">
+        <div class="relative w-10 h-10 flex items-center justify-center">
+          <div class="absolute inset-0 bg-indigo-500/20 blur-2xl group-hover:bg-indigo-500/40 transition-all rounded-full"></div>
+          <svg class="relative w-8 h-8 text-indigo-500 filter drop-shadow-[0_0_8px_rgba(99,102,241,0.8)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+          </svg>
+        </div>
+        <div>
+          <span class="text-xl font-black tracking-tighter block leading-none bg-clip-text text-transparent bg-gradient-to-r from-white via-indigo-200 to-slate-400">VESPER v5.0</span>
+          <span class="text-[9px] text-slate-500 font-black uppercase tracking-[0.3em] block mt-0.5">Quant Intelligence</span>
+        </div>
+      </div>
+      <div id="health-dot" class="flex items-center gap-3 text-[10px] text-slate-600 font-black tracking-widest uppercase">
+        <span class="w-2 h-2 rounded-full bg-slate-700 inline-block shadow-[0_0_5px_rgba(51,65,85,0.5)]" id="health-indicator"></span>
+        <span id="health-label">System Init...</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 sm:px-6 py-10">
+    <section id="builder-section" class="mb-10">
+      <h1 class="text-3xl font-black mb-1 text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-500 uppercase tracking-tight">Portfolio Forge</h1>
+      <p class="text-slate-500 text-sm mb-6">Real-time asset allocation with v5.0 institutional risk logic.</p>
+      <div class="glass p-6 sm:p-8 vesper-glow">
+        <div id="ticker-rows" class="space-y-3 mb-5"></div>
+        <div class="mb-6 p-4 bg-slate-900/50 rounded-xl border border-slate-800">
+          <div class="flex items-center justify-between mb-3">
+            <p class="text-xs font-bold text-slate-500 uppercase tracking-widest">Mandate Target</p>
+            <span class="text-[10px] text-slate-600 font-medium italic">Configures rebalancing logic</span>
+          </div>
+          <div class="grid grid-cols-3 gap-2">
+            <label class="cursor-pointer"><input type="radio" name="risk-level" value="Conservative" class="hidden peer"><div class="py-2.5 text-center rounded-lg border border-slate-700 peer-checked:border-emerald-500 peer-checked:bg-emerald-500/10 peer-checked:text-emerald-400 hover:bg-slate-800 transition-all"><div class="text-sm mb-0.5">🛡️</div><div class="text-[9px] font-black uppercase tracking-tighter">Conservative</div></div></label>
+            <label class="cursor-pointer"><input type="radio" name="risk-level" value="Balanced" checked class="hidden peer"><div class="py-2.5 text-center rounded-lg border border-slate-700 peer-checked:border-indigo-500 peer-checked:bg-indigo-500/10 peer-checked:text-indigo-400 hover:bg-slate-800 transition-all"><div class="text-sm mb-0.5">⚖️</div><div class="text-[9px] font-black uppercase tracking-tighter">Balanced</div></div></label>
+            <label class="cursor-pointer"><input type="radio" name="risk-level" value="Aggressive" class="hidden peer"><div class="py-2.5 text-center rounded-lg border border-slate-700 peer-checked:border-orange-500 peer-checked:bg-orange-500/10 peer-checked:text-orange-400 hover:bg-slate-800 transition-all"><div class="text-sm mb-0.5">🚀</div><div class="text-[9px] font-black uppercase tracking-tighter">Aggressive</div></div></label>
+          </div>
+        </div>
+        <button id="add-btn" class="w-full py-2.5 rounded-xl border border-dashed border-slate-700 text-slate-500 hover:text-slate-300 hover:border-slate-500 text-sm font-semibold transition-all flex items-center justify-center gap-2 mb-5"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Add Position</button>
+        <button id="analyse-btn" class="w-full py-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 font-black text-lg hover:from-indigo-500 hover:to-violet-500 transition-all shadow-lg shadow-indigo-900/40 flex items-center justify-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>EXECUTE QUANT SUITE</button>
+      </div>
+    </section>
+
+    <div id="loading-state" class="hidden text-center py-24">
+      <div class="inline-flex items-center justify-center w-16 h-16 rounded-full border-4 border-slate-800 border-t-indigo-500 spinner mb-6"></div>
+      <h3 class="text-xl font-bold mb-2">Simulating Scenarios...</h3>
+      <p class="text-slate-400 text-sm font-mono uppercase tracking-widest text-[10px]">Hedge Optimization • Real Value Forecasting • Neural Synthesis</p>
+    </div>
+
+    <section id="results-section" class="hidden space-y-6">
+      <div id="summary-grid" class="grid grid-cols-2 lg:grid-cols-4 gap-4"></div>
+      
+      <!-- Risk Profile -->
+      <div class="glass p-6 border-l-4 border-indigo-500">
+        <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">Risk Profile Analysis <span class="tooltip-trigger" onclick="showTooltip('Efficiency Identity', 'Risk-adjusted metrics relative to your chosen profile mandate.')">ⓘ</span></p>
+        <div id="risk-profile-content" class="grid grid-cols-1 md:grid-cols-3 gap-6"></div>
+      </div>
+
+      <!-- Advanced Intelligence -->
+      <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div class="glass p-6 border-t-2 border-indigo-500/50"><p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">Hedge Optimizer (GLD) <span class="tooltip-trigger" onclick="showTooltip('Adaptive Hedging', 'Calculates exact weight of GLD needed to reduce portfolio VaR by 20%.')">ⓘ</span></p><div id="hedge-content" class="space-y-4"></div></div>
+        <div class="glass p-6 border-t-2 border-emerald-500/50"><p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">Post-Trade Efficiency <span class="tooltip-trigger" onclick="showTooltip('Efficiency Gains', 'Projected Sharpe and Beta after suggested trades are executed.')">ⓘ</span></p><div id="rebalance-content" class="space-y-4"></div></div>
+        <div class="glass p-6 border-t-2 border-amber-500/50"><p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">Factor Breadth (DR) <span class="tooltip-trigger" onclick="showTooltip('Diversification Ratio', 'Measures if assets are cancelling out each other noise. DR > 1.2 is healthy.')">ⓘ</span></p><div id="factor-content" class="space-y-4"></div></div>
+        <div class="glass p-6 border-t-2 border-red-500/50"><p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">FX Sensitivity (5%) <span class="tooltip-trigger" onclick="showTooltip('Currency Beta', 'Projected loss if the Pound strengthens by 5% against your USD assets.')">ⓘ</span></p><div id="fx-panel" class="space-y-3"></div></div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="glass p-6 flex flex-col"><p class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Allocation Spectrum</p><div class="flex items-center justify-center flex-1" style="min-height:260px;"><canvas id="allocationChart"></canvas></div></div>
+        <div class="glass p-6 flex flex-col"><p class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Global Macro Catalyst Calendar (US/UK)</p><div id="global-events" class="space-y-3 flex-1 overflow-y-auto pr-2" style="max-height:320px;"></div></div>
+      </div>
+
+      <div class="glass p-6"><p class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1 flex items-center gap-2">Historical Growth Velocity <span class="tooltip-trigger" onclick="showTooltip('Velocity', 'Individual asset growth lines normalized to 100 base.')">ⓘ</span></p><p class="text-[10px] text-slate-600 mb-4">Compare relative speed of asset price expansion.</p><div style="height:340px;" class="mt-4"><canvas id="historyChart"></canvas></div></div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="glass p-6 flex flex-col"><p class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">Vesper 5-Point Intelligence <span class="tooltip-trigger" onclick="showTooltip('Intelligence Suite', 'Automated synthesis of regime, rotation, alpha, and strategy.')">ⓘ</span></p><div id="market-outlook" class="space-y-4"></div></div>
+        <div class="glass p-6 flex flex-col"><p class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Real Value Projection (Inflation Adj.)</p><p class="text-[10px] text-slate-600 mb-4">10-Year corridor adjusted for 2.5% annual inflation. Hover for outcomes.</p><div class="flex-1" style="min-height:240px;"><canvas id="futureChart"></canvas></div><div id="future-details" class="mt-4 p-4 bg-indigo-950/20 border-l-2 border-indigo-500 rounded text-[10px] text-slate-400 leading-relaxed"></div></div>
+      </div>
+
+      <div class="glass p-6 flex flex-col">
+        <p class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Sentiment Trend & Exhaustion Engine</p>
+        <div id="sentiment-summary-panel" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
+      </div>
+
+      <div>
+        <p class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Advisory Optimizer</p>
+        <div id="risk-optimizer" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+      </div>
+
+      <div>
+        <p class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Asset Detail Suite</p>
+        <div id="asset-cards" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="mt-20 border-t border-slate-900 py-10 text-center text-slate-700 text-xs font-mono tracking-widest uppercase">Vesper Intelligence Engine • Senior Quant Suite v5.0</footer>
+
+  <script>
+    'use strict';
+    const API_URL = '/api/analyze';
+    let rowIndex = 0, allocChart = null, historyChart = null, futureChart = null;
+    const PALETTE = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6','#f97316','#14b8a6','#ef4444','#a855f7'];
+
+    function addRow(t = '', q = '') {
+      try {
+        rowIndex++; const id = 'row-' + rowIndex;
+        const div = document.createElement('div'); div.id = id; div.className = 'grid grid-cols-[1fr_110px_44px] gap-3 items-center';
+        div.innerHTML = `<input type="text" value="${t}" placeholder="Ticker" class="ticker-input bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm font-bold uppercase focus:border-indigo-500 focus:outline-none transition-all shadow-inner"><input type="number" value="${q}" placeholder="Qty" class="qty-input bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm font-bold focus:border-indigo-500 focus:outline-none transition-all shadow-inner"><button onclick="document.getElementById('${id}').remove()" class="w-10 h-10 rounded border border-slate-800 text-slate-700 hover:text-red-500 transition-colors flex items-center justify-center font-bold">×</button>`;
+        document.getElementById('ticker-rows').appendChild(div);
+      } catch (e) { console.error("addRow error:", e); }
+    }
+
+    async function analyzePortfolio() {
+      const holdings = {};
+      document.querySelectorAll('#ticker-rows > div').forEach(row => {
+        const t = row.querySelector('.ticker-input').value.trim().toUpperCase();
+        const q = parseFloat(row.querySelector('.qty-input').value);
+        if (t && !isNaN(q) && q > 0) holdings[t] = q;
+      });
+      if (Object.keys(holdings).length === 0) return;
+      document.getElementById('loading-state').classList.remove('hidden'); document.getElementById('results-section').classList.add('hidden');
+      try {
+        const res = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ holdings, risk_level: document.querySelector('input[name="risk-level"]:checked').value }) });
+        renderResults(await res.json());
+      } finally { document.getElementById('loading-state').classList.add('hidden'); }
+    }
+
+    function fmt(v, t = 'plain') {
+      if (v === 'N/A' || v == null) return 'N/A';
+      const n = parseFloat(v); if (isNaN(n)) return v;
+      if (t === 'currency') return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2 });
+      if (t === 'pct') return (n * 100).toFixed(2) + '%';
+      return n.toLocaleString();
+    }
+    function retClr(v) { const n = parseFloat(v); return isNaN(n) ? '' : n >= 0 ? 'text-green-400' : 'text-red-400'; }
+    function sentimentBadge(l) { return l === 'positive' ? { text: 'Bullish', cls: 'text-green-400 bg-green-950 border-green-500/30' } : l === 'negative' ? { text: 'Bearish', cls: 'text-red-400 bg-red-950 border-red-500/30' } : { text: 'Neutral', cls: 'text-slate-400 bg-slate-900 border-slate-700' }; }
+    function showTooltip(t, b) { document.getElementById('tooltip-title').textContent = t; document.getElementById('tooltip-body').textContent = b; document.getElementById('tooltip-modal').style.display = 'block'; }
+
+    function renderResults(data) {
+      const { portfolio: p, assets: a, risk: r, advanced_intel: ai, recommendations: recs, market_outlook: mo, events: ev, global_macro_events: gme } = data;
+      document.getElementById('results-section').classList.remove('hidden');
+      const ksId = 'kill-switch-banner'; let ks = document.getElementById(ksId);
+      if (ai.kill_switch) {
+        if (!ks) { ks = document.createElement('div'); ks.id = ksId; document.getElementById('results-section').prepend(ks); }
+        ks.className = 'bg-red-600 text-white p-4 rounded-xl mb-6 flex items-center gap-4 animate-pulse border-2 border-red-400 shadow-[0_0_20px_rgba(220,38,38,0.5)]';
+        ks.innerHTML = `<div class="text-2xl">⚠️</div><div><p class="font-black uppercase tracking-tighter text-sm">System Guardrail Breach</p><p class="text-xs font-bold text-red-100">${ai.kill_switch}</p></div>`;
+      } else if (ks) ks.remove();
+
+      document.getElementById('summary-grid').innerHTML = [
+        { l: 'Net Value', v: fmt(p.total_value, 'currency'), i: '💼', t: 'Net Liquidity', d: 'Total dollar value of all holdings.' },
+        { l: 'VaR 95%', v: fmt(p.var_95_daily, 'pct'), i: '🛡️', t: 'Value at Risk', d: 'Daily max likely loss. Good Range: < 1.5%.' },
+        { l: 'Sharpe', v: p.sharpe_ratio, i: '📊', t: 'Sharpe Ratio', d: 'Return per risk. Good: > 1.0.' },
+        { l: 'Real CAGR', v: fmt(ai.real_cagr, 'pct'), i: '📈', t: 'Real Returns', d: 'Return minus 2.5% projected inflation.' }
+      ].map(c => `<div class="glass p-5 border-t-2 border-indigo-500/20"><div class="flex justify-between items-start"><div class="text-2xl mb-3">${c.i}</div><button onclick="showTooltip('${c.t}', '${c.d}')" class="text-[10px] text-slate-700 font-bold uppercase tracking-widest hover:text-indigo-400 transition-colors">ⓘ</button></div><div class="text-2xl font-black mb-0.5">${c.v}</div><div class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">${c.l}</div></div>`).join('');
+
+      document.getElementById('hedge-content').innerHTML = `<div class="bg-slate-900/50 p-3 rounded border border-slate-800"><p class="text-[8px] text-slate-500 uppercase font-black">Target -20% VaR</p><p class="text-xs font-black text-emerald-400">Add ${fmt(ai.hedge_optimizer.optimal_gld_weight, 'pct')} GLD</p></div><p class="text-[8px] text-slate-600 font-black uppercase mt-2">Efficiency: ${ai.hedge_optimizer.hedge_efficiency}</p>`;
+      document.getElementById('rebalance-content').innerHTML = `<div class="grid grid-cols-2 gap-2"><div class="bg-slate-900/50 p-2 rounded"><p class="text-[8px] text-slate-500 font-black">PROJ SHARPE</p><p class="text-xs font-black text-emerald-400">→ ${ai.rebalancing.projected_sharpe}</p></div><div class="bg-slate-900/50 p-2 rounded"><p class="text-[8px] text-slate-500 font-black">TX COST</p><p class="text-xs font-black text-red-400">$${ai.rebalancing.transaction_cost_estimate}</p></div></div><p class="text-[10px] text-slate-400 italic mt-2 font-medium">${ai.rebalancing.trade || 'Portfolio aligned.'}</p>`;
+      const dr = ai.attribution.div_ratio || 1.0; const drCls = dr < 1.1 ? 'text-red-400 animate-pulse' : 'text-emerald-400';
+      document.getElementById('factor-content').innerHTML = `<div class="flex justify-between mb-2"><span class="text-[10px] font-bold text-slate-400 uppercase">Div. Ratio (DR)</span><span class="text-xs font-black ${drCls}">${dr}</span></div><div class="h-1 bg-slate-800 rounded-full mt-4"><div class="h-full bg-indigo-500" style="width:${Math.min(100, dr*50)}%"></div></div>`;
+      document.getElementById('fx-panel').innerHTML = `<div class="flex justify-between"><span class="text-[10px] font-black text-slate-500">SHOCK IMPACT</span><span class="text-xs font-black text-amber-400">-$${fmt(ai.scenarios.fx_5pct_shock)}</span></div><p class="text-[8px] text-slate-600 font-black uppercase mt-2">Risk: ${ai.attribution.fx_exposure_risk}</p>`;
+      document.getElementById('global-events').innerHTML = gme.map(x => `<div class="p-3 bg-slate-900/50 rounded-lg border border-slate-800"><div class="flex justify-between items-center mb-1"><span class="text-[10px] font-black text-indigo-400">${x.d}</span><span class="text-[10px] font-black text-slate-200 uppercase">${x.e}</span></div><p class="text-[10px] text-slate-500 leading-tight">${x.i}</p></div>`).join('');
+
+      if (allocChart) allocChart.destroy();
+      allocChart = new Chart(document.getElementById('allocationChart'), { type: 'doughnut', data: { labels: Object.keys(a), datasets: [{ data: Object.values(a).map(x => x.value), backgroundColor: PALETTE, borderColor: '#020617', borderWidth: 3 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { position: 'right', labels: { color: '#94a3b8', font: { weight: 'bold', family: 'JetBrains Mono' } } } } } });
+
+      if (historyChart) historyChart.destroy();
+      const h_pf = r.history['__portfolio__'];
+      const ds = Object.keys(a).map((tk, i) => ({ label: tk, data: r.history[tk]?.values, borderColor: PALETTE[i%PALETTE.length], borderWidth: 1.5, pointRadius: 0, tension: 0.3, borderDash: [2, 2], hidden: true }));
+      ds.push({ label: 'CORE PORTFOLIO', data: h_pf.values, borderColor: '#fff', borderWidth: 3, pointRadius: 0, tension: 0.3 });
+      historyChart = new Chart(document.getElementById('historyChart'), { type: 'line', data: { labels: h_pf.dates, datasets: ds }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { position: 'bottom', labels: { color: '#64748b', font: { size: 9, weight: 'bold' }, usePointStyle: true } } }, scales: { x: { ticks: { color: '#334155', font: { size: 9 }, maxTicksLimit: 8 } }, y: { ticks: { color: '#334155', font: { size: 9 } }, grid: { color: '#1e293b' } } } } });
+
+      document.getElementById('market-outlook').innerHTML = mo.points.map(x => `<div class="p-4 bg-slate-900/50 rounded-xl border border-slate-800 transition-all group hover:border-indigo-500/30"><div class="flex items-center gap-3 mb-2"><div class="text-xl group-hover:scale-110 transition-transform">${x.i}</div><div><p class="text-[10px] font-bold text-slate-600 uppercase tracking-widest">${x.l}</p><p class="text-xs font-black text-indigo-400">${x.v}</p></div></div><p class="text-[10px] leading-relaxed text-slate-500 font-medium">${x.d}</p></div>`).join('') + `<div class="mt-6 space-y-4"><div class="p-4 bg-indigo-950/20 border-l-4 border-indigo-500 rounded-r-xl"><p class="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-2">Quant Intelligence</p><p class="text-sm text-slate-300 leading-relaxed">${mo.commentary}</p></div><div class="p-4 bg-violet-950/20 border-l-4 border-violet-500 rounded-r-xl"><p class="text-xs font-bold text-violet-400 uppercase tracking-widest mb-2">Strategic Outlook</p><p class="text-sm text-slate-300 leading-relaxed">${mo.future_outlook}</p></div></div>`;
+
+      if (futureChart) futureChart.destroy();
+      futureChart = new Chart(document.getElementById('futureChart'), { type: 'line', data: { labels: Array.from({length:11}, (_,i)=>`Y${i}`), datasets: [
+        { label: 'Optimistic (P90)', data: r.future_value.p90.map(v => Math.round(v * p.total_value)), borderColor: '#22c55e', borderDash: [5, 5], pointRadius: 0, tension: 0.3 },
+        { label: 'Real Value (Median)', data: r.future_value.p50.map((v, i) => Math.round(v * p.total_value / Math.pow(1.025, i))), borderColor: '#6366f1', fill: true, backgroundColor: 'rgba(99,102,241,0.1)', borderWidth: 3, tension: 0.3 },
+        { label: 'Stressed (P10)', data: r.future_value.p10.map(v => Math.round(v * p.total_value)), borderColor: '#ef4444', borderDash: [5, 5], pointRadius: 0, tension: 0.3 }
+      ] }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { display: true, labels: { color: '#64748b', font: { size: 9, weight: 'bold' } } } }, scales: { y: { ticks: { color: '#475569', font: { size: 9 }, callback: v => '$' + (v/1000).toFixed(0) + 'k' } } } } });
+      document.getElementById('future-details').innerHTML = `<div class="grid grid-cols-1 md:grid-cols-3 gap-6"><div class="bg-indigo-500/5 p-4 rounded-xl border border-indigo-500/20"><p class="font-black text-indigo-400 uppercase tracking-tighter mb-2">Median Real (2036)</p><p class="text-lg font-black text-slate-200 mb-1">${fmt(r.future_value.p50[10]*p.total_value/Math.pow(1.025, 10), 'currency')}</p></div><div class="bg-emerald-500/5 p-4 rounded-xl border border-emerald-500/20"><p class="font-black text-emerald-400 uppercase tracking-tighter mb-2">Optimistic</p><p class="text-lg font-black text-slate-200 mb-1">${fmt(r.future_value.p90[10]*p.total_value, 'currency')}</p></div><div class="bg-red-500/5 p-4 rounded-xl border border-red-500/20"><p class="font-black text-red-400 uppercase tracking-tighter mb-2">Stressed</p><p class="text-lg font-black text-slate-200 mb-1">${fmt(r.future_value.p10[10]*p.total_value, 'currency')}</p></div></div>`;
+
+      document.getElementById('risk-optimizer').innerHTML = recs.map(r => `<div class="border rounded-xl p-5 border-indigo-900/40 bg-indigo-950/10 space-y-3 transition-all hover:scale-[1.01]"><div class="flex justify-between items-start gap-4"><div class="flex gap-3"><div class="text-xl shrink-0 mt-0.5">${r.icon}</div><div><p class="text-[11px] font-black text-slate-100 uppercase tracking-tight leading-tight">${r.title}</p><p class="text-[10px] text-slate-400 font-medium mt-1">${r.detail}</p></div></div><span class="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter bg-indigo-500 text-white shadow-lg shadow-indigo-500/20">${r.action || 'ADVISORY'}</span></div><div class="pt-3 border-t border-slate-800/50"><p class="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1 italic">Strategic Rationale</p><p class="text-[10px] text-slate-400 leading-relaxed font-medium">${r.rationale}</p></div></div>`).join('') || '<div class="text-center py-10 text-slate-700 text-xs italic">Alignment Verified.</div>';
+
+      document.getElementById('sentiment-summary-panel').innerHTML = Object.entries(a).map(([tk, asset]) => {
+        const s = asset.sentiment || {}, b = Math.round((s.bullish || 0)*100), r_pct = Math.round((s.bearish || 0)*100), badge = sentimentBadge(s.label), delta = s.sentiment_delta || 0, deltaCls = delta < 0 ? 'text-red-400' : 'text-green-400', exhaustion = s.exhaustion_alert ? '<span class="text-[7px] bg-red-600 text-white px-1 rounded animate-bounce">EXHAUSTION</span>' : '';
+        return `<div class="p-4 bg-slate-900/30 rounded-xl border border-slate-800 hover:bg-slate-900/50 transition-all"><div class="flex items-center justify-between mb-2"><span class="font-black text-sm text-slate-200">${tk}</span><div class="flex items-center gap-2">${exhaustion}<span class="text-[9px] font-black px-2 py-0.5 rounded border ${badge.cls}">${badge.text}</span></div></div><div class="sentiment-bar mb-2"><div style="width:${b}%; background:#22c55e; box-shadow: 0 0 10px rgba(34,197,94,0.4)"></div><div style="width:${Math.max(0, 100-b-r_pct)}%; background:#334155;"></div><div style="width:${r_pct}%; background:#ef4444; box-shadow: 0 0 10px rgba(239,68,68,0.4)"></div></div><div class="flex justify-between text-[8px] font-black uppercase tracking-tighter"><span>Bull ${b}%</span><span class="${deltaCls}">D: ${delta > 0 ? '+' : ''}${delta}</span><span>Bear ${r_pct}%</span></div></div>`;
+      }).join('');
+
+      document.getElementById('asset-cards').innerHTML = Object.entries(a).map(([tk, asset], i) => {
+        const c = PALETTE[i % PALETTE.length], b = sentimentBadge(asset.sentiment?.label), safety = ai.div_safety[tk] || 0, safetyColor = safety > 70 ? 'text-emerald-400' : safety > 40 ? 'text-amber-400' : 'text-red-400';
+        const headlines = (asset.sentiment?.headlines || []).slice(0,5).map(h => `<li class="text-[9px] text-slate-500 leading-tight mb-2 flex gap-2 font-medium"><span>•</span><span class="line-clamp-2">${typeof h === 'object' ? h.title : h}</span></li>`).join('') || '<li class="text-[9px] text-slate-700 italic font-bold uppercase tracking-widest text-center py-2">No signals detected.</li>';
+        const evts = ev[tk] || {}, evtItems = Object.entries(evts).filter(([k,v]) => v).map(([k,v]) => `<div class="flex justify-between text-[9px] py-0.5 border-b border-slate-800/30 last:border-0"><span class="text-slate-500 font-black uppercase tracking-tighter">${k.replace(/_/g,' ')}</span><span class="text-slate-300 font-black font-mono">${v}</span></div>`).join('');
+        return `<div class="glass p-5 border-t-2 transition-all hover:shadow-2xl" style="border-top-color: ${c}"><div class="flex justify-between mb-4"><div><div class="flex items-center gap-2 mb-1.5"><span class="text-[10px] font-black px-2 py-0.5 rounded shadow-sm" style="background:${c}22;color:${c}">${tk}</span><span class="text-[9px] font-black px-2 py-0.5 rounded border shadow-sm ${b.cls}">${b.text}</span></div><div class="font-bold text-sm text-slate-200 line-clamp-2 leading-tight">${asset.name}</div></div><div class="text-right"><div class="text-lg font-black tnum text-slate-100">${fmt(asset.price, 'currency')}</div><p class="text-[8px] font-black ${safetyColor} uppercase tracking-tighter flex items-center justify-end gap-1">Safety: ${safety} <button onclick="showTooltip('Safety Score', 'Sustainability index.')" class="hover:text-white transition-colors">ⓘ</button></p></div></div><div class="grid grid-cols-2 gap-2 text-xs"><div class="bg-slate-900/50 p-2 rounded border border-slate-800"><p class="text-slate-600 text-[9px] font-black uppercase">Risk Contrib</p><p class="text-xs font-black text-slate-200">${asset.risk_contribution_pct}%</p></div><div class="bg-slate-900/50 p-2 rounded border border-slate-800"><p class="text-slate-600 text-[9px] font-black uppercase">Inst. Flow</p><p class="text-indigo-400 font-black text-xs">${asset.institutional_flow_score}</p></div></div><div class="border-t border-slate-800/50 mt-4 pt-3"><p class="text-[9px] font-black text-slate-600 uppercase tracking-widest mb-2">Upcoming Events</p>${evtItems || '<p class="text-[9px] text-slate-700 italic font-bold">No upcoming signals.</p>'}</div><div class="border-t border-slate-800/50 mt-4 pt-3"><p class="text-[9px] font-black text-slate-600 uppercase tracking-widest mb-2">${asset.sentiment?.headline_count > 0 ? 'Neural News synthesis' : 'Macro Factor Synthesis'}</p><ul class="list-none m-0 p-0">${headlines}</ul></div></div>`;
+      }).join('');
+    }
+
+    function pollHealth() {
+      fetch('/health').then(r => r.json()).then(d => {
+        const dot = document.getElementById('health-indicator'), lbl = document.getElementById('health-label');
+        if (dot && lbl && d.status === 'ok') { dot.className = 'w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_#22c55e]'; lbl.textContent = 'NEURAL ENGINE READY'; lbl.className = 'text-green-600 font-black tracking-widest'; }
+        else setTimeout(pollHealth, 3000);
+      }).catch(() => setTimeout(pollHealth, 5000));
+    }
+
+    document.getElementById('add-btn').onclick = () => addRow();
+    document.getElementById('analyse-btn').onclick = () => analyzePortfolio();
+    window.addEventListener('DOMContentLoaded', () => { rowIndex=0; [['AAPL', 10], ['VWRP.L', 5]].forEach(x => addRow(x[0], x[1])); pollHealth(); });
+  </script>
+</body>
+</html>

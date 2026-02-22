@@ -1,0 +1,29 @@
+{
+  "hosting": {
+    "target": "portfoliointel",
+    "public": "public",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+          "rewrites": [
+          {
+            "source": "/api/**",
+            "function": "vesper_api"
+          },
+    
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  },
+      "functions": [
+      {
+        "source": "functions",
+        "runtime": "python312"
+      }
+    ]
+  
+}
