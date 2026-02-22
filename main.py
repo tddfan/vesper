@@ -1,5 +1,5 @@
 """
-Vesper v5.0 — Intelligence Engine (Final Resilience)
+Vesper v5.0 — Intelligence Engine (Multi-Currency Apex)
 """
 
 from __future__ import annotations
@@ -45,6 +45,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, 
 class PortfolioRequest(BaseModel):
     holdings: Dict[str, float]
     risk_level: str = "Balanced"
+    base_currency: str = "GBP"
 
     @field_validator("holdings")
     @classmethod
@@ -69,6 +70,16 @@ def _round(val: Any, decimals: int = 4) -> Any:
 async def _in_thread(fn, *args):
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(_executor, fn, *args)
+
+async def _get_fx_rate(from_curr: str, to_curr: str) -> float:
+    if from_curr == to_curr: return 1.0
+    try:
+        pair = f"{from_curr}{to_curr}=X"
+        t = yf.Ticker(pair)
+        info = await _in_thread(lambda: t.info)
+        rate = info.get("regularMarketPrice") or info.get("previousClose")
+        return float(rate) if rate else 1.0
+    except: return 1.0
 
 async def _fetch_full_history(tickers: List[str]) -> pd.DataFrame:
     all_series = {}
@@ -179,7 +190,7 @@ def _compute_risk_history_from_prices(prices: pd.DataFrame, tickers: List[str], 
         traceback.print_exc()
         return empty
 
-def _get_advanced_intelligence(assets, portfolio, risk_level, risk_data):
+def _get_advanced_intelligence(assets, portfolio, risk_level, risk_data, base_currency):
     total_val = portfolio.get("total_value", 0)
     beta = portfolio.get("portfolio_beta", 1.0)
     var_95 = portfolio.get("var_95_daily", 0)
@@ -190,7 +201,7 @@ def _get_advanced_intelligence(assets, portfolio, risk_level, risk_data):
     weighted_vol_sum = sum(assets[tk]["weight"] * asset_vols.get(tk, 0.2) for tk in assets)
     div_ratio = round(weighted_vol_sum / portfolio.get("volatility", 0.15), 3) if portfolio.get("volatility", 0) > 0 else 1.0
 
-    usd_val = sum(a["value"] for a in assets.values() if a["currency"] == "USD")
+    non_base_val = sum(a["value"] for a in assets.values() if a["currency"] != base_currency)
     real_cagr = round(portfolio.get("cagr_inception", 0.08) - 0.025, 4)
 
     targets = {"Conservative": 0.20, "Balanced": 0.40, "Aggressive": 0.70}
@@ -204,14 +215,14 @@ def _get_advanced_intelligence(assets, portfolio, risk_level, risk_data):
     if abs(drift) > 0.05:
         amt = abs(drift) * total_val
         cost = round(amt * 0.006, 2)
-        trade_suggestion = f"{'Sell' if drift > 0 else 'Buy'} ${amt:,.0f} of Growth factor to re-align."
+        trade_suggestion = f"{'Sell' if drift > 0 else 'Buy'} {base_currency} {amt:,.0f} of Growth factor to re-align."
 
     div_safety = {tk: max(0, min(100, round(100 - (_to_float(a.get("pe_ratio")) or 20)*1.2 - (_to_float(a.get("dividend_yield")) or 0)*400))) for tk, a in assets.items()}
     
     return {
-        "scenarios": {"nasdaq_10": round(total_val*beta*-0.1, 2), "fx_5pct_shock": round(usd_val*0.05, 2)},
+        "scenarios": {"nasdaq_10": round(total_val*beta*-0.1, 2), "fx_5pct_shock": round(non_base_val*0.05, 2)},
         "rebalancing": {"current": round(curr_g_w, 4), "drift": round(drift, 4), "trade": trade_suggestion, "projected_beta": round(beta - (drift*0.2), 2), "projected_sharpe": round(portfolio.get("sharpe_ratio", 0.5)*1.2, 2), "transaction_cost_estimate": cost},
-        "attribution": {"factor": "Growth Dominant" if curr_g_w > 0.5 else "Core/Value", "div_ratio": div_ratio, "fx_exposure_risk": "HIGH" if usd_val/total_val > 0.7 else "LOW"},
+        "attribution": {"factor": "Growth Dominant" if curr_g_w > 0.5 else "Core/Value", "div_ratio": div_ratio, "fx_exposure_risk": "HIGH" if non_base_val/total_val > 0.7 else "LOW"},
         "div_safety": div_safety,
         "kill_switch": kill_switch,
         "hedge_optimizer": {"optimal_gld_weight": 0.12, "hedge_efficiency": "HIGH" if beta > 1.1 else "LOW"},
@@ -305,6 +316,8 @@ async def _get_sentiment(ticker: str) -> Dict[str, Any]:
 async def analyze_portfolio(request: PortfolioRequest):
     try:
         holdings = request.holdings; tickers = list(holdings.keys())
+        base_curr = request.base_currency or "GBP"
+        
         async def _fetch_info(ticker):
             try:
                 t = yf.Ticker(ticker); info = await _in_thread(lambda: t.info) or {}
@@ -313,11 +326,36 @@ async def analyze_portfolio(request: PortfolioRequest):
             except: return ticker, {}, 0
         
         res_info = await asyncio.gather(*[_fetch_info(t) for t in tickers])
-        infos = {tk: info for tk, info, p in res_info}; assets = {}
+        infos = {tk: info for tk, info, p in res_info}
+        
+        # Currency Normalization Logic
+        usd_gbp = await _get_fx_rate("USD", base_curr)
+        gbp_usd = 1.0 / usd_gbp if usd_gbp else 1.0
+        
+        assets = {}
         for tk, info, p in res_info:
             curr = safe_fetch(info, "currency", "USD")
             if curr in ("GBp", "GBX"): p /= 100.0; curr = "GBP"
-            assets[tk] = {"name": safe_fetch(info, "longName", tk), "price": round(p, 2), "quantity": holdings[tk], "value": round(p*holdings[tk], 2), "dividend_yield": _round(info.get("dividendYield")), "pe_ratio": _round(info.get("trailingPE")), "beta": _round(info.get("beta")), "sector": safe_fetch(info, "sector", "N/A"), "currency": curr, "institutional_flow_score": round(_to_float(info.get("heldPercentInstitutions", 0.5))*100, 1)}
+            
+            # Convert asset price to base_currency for summary
+            fx_to_base = 1.0
+            if curr == "USD" and base_curr == "GBP": fx_to_base = usd_gbp
+            elif curr == "GBP" and base_curr == "USD": fx_to_base = gbp_usd
+            
+            val_in_base = round(p * holdings[tk] * fx_to_base, 2)
+            
+            assets[tk] = {
+                "name": safe_fetch(info, "longName", tk), 
+                "price": round(p, 2), 
+                "quantity": holdings[tk], 
+                "value": val_in_base, 
+                "currency": curr,
+                "dividend_yield": _round(info.get("dividendYield")), 
+                "pe_ratio": _round(info.get("trailingPE")), 
+                "beta": _round(info.get("beta")), 
+                "sector": safe_fetch(info, "sector", "N/A"), 
+                "institutional_flow_score": round(_to_float(info.get("heldPercentInstitutions", 0.5))*100, 1)
+            }
         
         total_val = sum(a["value"] for a in assets.values())
         if total_val <= 0: total_val = 1.0
@@ -331,8 +369,8 @@ async def analyze_portfolio(request: PortfolioRequest):
             assets[tk]["sentiment"] = s
             assets[tk]["risk_contribution_pct"] = round(risk_data.get("risk_contributions", {}).get(tk, 0) * 100, 2)
         
-        p_summary = {**risk_data["portfolio_risk"], "total_value": round(total_val, 2), "weighted_dividend_yield": round(sum((_to_float(a["dividend_yield"]) or 0)*a["weight"] for a in assets.values()), 4), "portfolio_beta": round(sum((_to_float(a["beta"]) or 1)*a["weight"] for a in assets.values()), 2), "asset_count": len(tickers)}
-        advanced = _get_advanced_intelligence(assets, p_summary, request.risk_level, risk_data)
+        p_summary = {**risk_data["portfolio_risk"], "total_value": round(total_val, 2), "weighted_dividend_yield": round(sum((_to_float(a["dividend_yield"]) or 0)*a["weight"] for a in assets.values()), 4), "portfolio_beta": round(sum((_to_float(a["beta"]) or 1)*a["weight"] for a in assets.values()), 2), "asset_count": len(tickers), "currency": base_curr}
+        advanced = _get_advanced_intelligence(assets, p_summary, request.risk_level, risk_data, base_curr)
         
         return {
             "portfolio": p_summary, "assets": assets, "risk": risk_data, "advanced_intel": advanced, 
