@@ -46,6 +46,7 @@ class PortfolioRequest(BaseModel):
     holdings: Dict[str, float]
     risk_level: str = "Balanced"
     base_currency: str = "GBP"
+    fallback_prices: Dict[str, float] = {}
 
     @field_validator("holdings")
     @classmethod
@@ -206,19 +207,65 @@ def _get_advanced_intelligence(assets, portfolio, risk_level, risk_data, base_cu
 
     targets = {"Conservative": 0.20, "Balanced": 0.40, "Aggressive": 0.70}
     target_g_w = targets.get(risk_level, 0.40)
+    # Segment Identification (v5.0 Hardened)
     growth_tks = [tk for tk, a in assets.items() if a["sector"] in ("Technology", "Communication Services") or (_to_float(a.get("pe_ratio")) or 0) > 30]
+    defensive_tks = [tk for tk, a in assets.items() if "Treasury" in a["name"] or "Gold" in a["name"] or tk in ("SGLN.L", "TN28.L", "GLD")]
+    core_tks = [tk for tk in assets if tk not in growth_tks and tk not in defensive_tks]
+    
+    targets = {"Conservative": 0.20, "Balanced": 0.40, "Aggressive": 0.70}
+    target_g_w = targets.get(risk_level, 0.40)
     curr_g_w = sum(assets[tk]["weight"] for tk in growth_tks)
     drift = curr_g_w - target_g_w
     
     trade_suggestion = None
     cost = 0.0
     if abs(drift) > 0.05:
+        # Physical Capping Logic: Ensure we never suggest selling more than 100% of an asset
         amt = abs(drift) * total_val
         cost = round(amt * 0.006, 2)
-        trade_suggestion = f"{'Sell' if drift > 0 else 'Buy'} {base_currency} {amt:,.0f} of Growth factor to re-align."
+        
+        if drift > 0: # Overweight Growth -> Sell Growth, Buy Core or Defensive
+            sell_tk = max(growth_tks, key=lambda x: assets[x]["weight"]) if growth_tks else "Growth Segment"
+            buy_tk = max(core_tks, key=lambda x: assets[x]["weight"]) if core_tks else "Core Segment"
+            # Cap the trade at the actual value of the sell candidate
+            actual_trade_amt = min(amt, assets.get(sell_tk, {"value": amt})["value"])
+            trade_suggestion = f"Sell {base_currency} {actual_trade_amt:,.0f} of {sell_tk} and reallocate to {buy_tk}."
+        else: # Underweight Growth -> Sell Core (NEVER Sell Defensive/Hedge)
+            # Only sell from Core, preserve Hedges/Gilts
+            sell_source = core_tks if core_tks else [tk for tk in assets if tk not in growth_tks]
+            sell_tk = max(sell_source, key=lambda x: assets[x]["weight"]) if sell_source else "Portfolio"
+            buy_tk = max(growth_tks, key=lambda x: assets[x]["weight"]) if growth_tks else "Growth Proxy"
+            actual_trade_amt = min(amt, assets.get(sell_tk, {"value": amt})["value"])
+            trade_suggestion = f"Reduce {sell_tk} by {base_currency} {actual_trade_amt:,.0f} to fund {buy_tk} expansion."
 
     div_safety = {tk: max(0, min(100, round(100 - (_to_float(a.get("pe_ratio")) or 20)*1.2 - (_to_float(a.get("dividend_yield")) or 0)*400))) for tk, a in assets.items()}
     
+    # Ideal Portfolio Blueprint
+    ideal_mapping = {
+        "Conservative": {"Growth": 0.20, "Core": 0.50, "Defensive": 0.30},
+        "Balanced": {"Growth": 0.45, "Core": 0.40, "Defensive": 0.15},
+        "Aggressive": {"Growth": 0.75, "Core": 0.20, "Defensive": 0.05}
+    }
+    blueprint = ideal_mapping.get(risk_level, ideal_mapping["Balanced"])
+    
+    current_structure = {"Growth": curr_g_w, "Defensive": sum(assets[tk]["weight"] for tk in defensive_tks), "Core": 0.0}
+    current_structure["Core"] = 1.0 - current_structure["Growth"] - current_structure["Defensive"]
+
+    # Generate Blueprint Actions with Ticker References
+    blueprint_actions = []
+    segments = {"Growth": growth_tks, "Core": core_tks, "Defensive": defensive_tks}
+    for cat, target in blueprint.items():
+        diff = target - current_structure[cat]
+        if abs(diff) > 0.05:
+            action = "Increase" if diff > 0 else "Trim"
+            members = ", ".join(segments[cat]) if segments[cat] else "None held"
+            blueprint_actions.append({
+                "category": cat, 
+                "action": action, 
+                "impact": f"{abs(diff)*100:.1f}% shift required",
+                "tickers": segments[cat]
+            })
+
     return {
         "scenarios": {"nasdaq_10": round(total_val*beta*-0.1, 2), "fx_5pct_shock": round(non_base_val*0.05, 2)},
         "rebalancing": {"current": round(curr_g_w, 4), "drift": round(drift, 4), "trade": trade_suggestion, "projected_beta": round(beta - (drift*0.2), 2), "projected_sharpe": round(portfolio.get("sharpe_ratio", 0.5)*1.2, 2), "transaction_cost_estimate": cost},
@@ -227,22 +274,48 @@ def _get_advanced_intelligence(assets, portfolio, risk_level, risk_data, base_cu
         "kill_switch": kill_switch,
         "hedge_optimizer": {"optimal_gld_weight": 0.12, "hedge_efficiency": "HIGH" if beta > 1.1 else "LOW"},
         "real_cagr": real_cagr,
-        "outlook_score": sum((2 if a.get("sentiment", {}).get("label") == "positive" else -2 if a.get("sentiment", {}).get("label") == "negative" else 0) for a in assets.values())
+        "outlook_score": sum((2 if a.get("sentiment", {}).get("label") == "positive" else -2 if a.get("sentiment", {}).get("label") == "negative" else 0) for a in assets.values()),
+        "ideal_blueprint": {"target": blueprint, "current": current_structure, "actions": blueprint_actions, "segments": segments}
     }
 
 def _get_market_outlook(assets, portfolio):
     points = [
-        {"l": "Macro Regime", "v": "Fiscal Dominance", "d": "Capital scarcity era. Durable margins are the primary alpha driver.", "i": "📈"},
-        {"l": "Sector Rotation", "v": "Utility Enablers", "d": "AI trade shifting from Training (Chips) to Inference (Power Grid).", "i": "🚀"},
-        {"l": "Regional Alpha", "v": "Balkanization", "d": "Supply chain reshoring creating permanent alpha in ASEAN corridors.", "i": "🌍"},
-        {"l": "Valuation Pivot", "v": "FCF Yield > PE", "d": "Aggressive penalty on cash-burning growth names.", "i": "💎"},
-        {"l": "Strategic Hedge", "v": "Hard Assets", "d": "Gold acts as a structural volatility dampener vs equity correlations.", "i": "🛡️"}
+        {
+            "l": "Macro Regime", "v": "Fiscal Dominance & Rate Floor", 
+            "d": "We have entered a regime of 'Fiscal Dominance' where government deficit spending outpaces monetary tightening. This creates a 'Higher for Longer' floor on interest rates, significantly raising the cost of capital. In this environment, the 'Equity Risk Premium' (ERP) has compressed, making fundamental margin durability and internal cash-flow generation the only reliable factors for long-term outperformance. Success now requires identified companies that can clear a 5%+ risk-free hurdle while maintaining a positive Information Ratio.", 
+            "i": "📈"
+        },
+        {
+            "l": "Sector Rotation", "v": "Physical AI & Power Grid", 
+            "d": "The AI trade is rapidly evolving from the 'Training Phase' (GPUs/Nvidia) to the 'Inference & Physicals Phase.' Capital is aggressively migrating into 'Utility Enablers'—companies specialized in data center power density, liquid cooling (e.g., Vertiv), and electrical grid modernization (e.g., Eaton). We expect a surge in demand for base-load energy sources, including nuclear SMR infrastructure, to sustain the exponential AI compute requirements of the next decade.", 
+            "i": "🚀"
+        },
+        {
+            "l": "Regional Alpha", "v": "ASEAN Corridor Alpha", 
+            "d": "Global deglobalization is accelerating. As the 'China + 1' strategy matures, permanent alpha channels are opening in 'Friend-Shoring' hubs such as the ASEAN corridors (Vietnam/Thailand) and Mexico. Regional leaders in these zones are capturing a 'Geopolitical Risk Discount,' gaining market share from legacy globalists who are trapped in the crossfire of trade fragmentation and rising tariff barriers.", 
+            "i": "🌍"
+        },
+        {
+            "l": "Valuation Pivot", "v": "WACC Sensitivity & FCF Yield", 
+            "d": "The era of 'Growth at Any Price' is dead. The market has pivoted to 'FCF Yield over Multiple Expansion.' With a higher Weighted Average Cost of Capital (WACC), the market is aggressively discounting 'Terminal Value' in DCF models. Institutional capital is now penalizing cash-burning names and prioritizing 'Quality Growth'—companies that can self-fund expansion while maintaining 20%+ FCF margins without relying on expensive capital markets.", 
+            "i": "💎"
+        },
+        {
+            "l": "Strategic Hedge", "v": "Hard Assets & Credit Volatility", 
+            "d": "Hard Assets are no longer optional. Gold and Physical Commodities provide a structural 'Safe Haven' against currency debasement and systemic credit events. In a world of weaponized dollar-hegemony, these assets maintain low-to-negative correlations to tech-heavy portfolios, providing a vital 'Volatility Floor' and asymmetric payoff potential during non-linear tail-risk liquidation events.", 
+            "i": "🛡️"
+        }
     ]
     comm = []
     sharpe = portfolio.get("sharpe_ratio", 0)
-    if sharpe > 1.2: comm.append("Exceptional risk harvesting.")
-    elif sharpe < 0.7: comm.append("Suboptimal efficiency.")
-    return {"points": points, "commentary": " ".join(comm), "future_outlook": "Anticipate a broadening trade into secondary software and energy tech."}
+    if sharpe > 1.2: 
+        comm.append("Exceptional risk-adjusted harvesting detected. Your allocation is efficiently capturing alpha while successfully suppressing 'Factor Crowding' noise. This asset mix is mathematically optimized to extract returns from market swings without incurring the non-linear drawdown risk typically associated with unhedged high-beta portfolios.")
+    elif sharpe < 0.7: 
+        comm.append("Suboptimal efficiency detected. Your portfolio is currently exhibiting 'Noisy Volatility'—taking on significant price swings that are not being compensated by equivalent realized returns. This usually indicates 'Overlapping Factor Correlation' or 'Diworsification,' where multiple assets respond identically to interest rate or liquidity shocks, effectively destroying the benefits of traditional diversification.")
+    
+    future_outlook = "We anticipate a structural 'Broadening Trade.' As mega-cap tech valuations reach historical exhaustion points and face 'Multiple Compression,' institutional capital will rotate into 'Undervalued Quality.' This migration will likely favor secondary SaaS players with proven unit economics and industrial energy infrastructure providers poised to profit from the massive Western re-industrialization and AI-driven power reflation cycle."
+    
+    return {"points": points, "commentary": " ".join(comm), "future_outlook": future_outlook}
 
 def _get_global_events():
     now = datetime.datetime.now()
@@ -255,11 +328,49 @@ def _get_global_events():
 def _generate_recommendations(assets, portfolio, risk_level):
     recs = []
     pb = portfolio.get("portfolio_beta", 1.0)
-    if risk_level == "Conservative" and pb > 0.85:
-        recs.append({"type": "warning", "icon": "🛡️", "title": "Beta Exposure", "detail": f"Beta {pb:.2f} > 0.80 target.", "rationale": "High sensitivity.", "action": "Add VIG"})
-    if len(assets) < 3:
-        recs.append({"type": "warning", "icon": "🏗️", "title": "Concentration", "detail": "Low diversification.", "rationale": "High idiosyncratic risk.", "action": "Add factors"})
-    return recs
+    sharpe = portfolio.get("sharpe_ratio", 0.0)
+    yld = portfolio.get("weighted_dividend_yield", 0.0)
+    
+    # Beta Optimization
+    if pb > 1.2:
+        recs.append({
+            "type": "warning", "icon": "📉", "title": "High Beta Skew", 
+            "detail": f"Beta {pb:.2f} is Aggressive.", 
+            "rationale": "Sensitivity to S&P 500 is excessive for current mandate. Higher risk of non-linear drawdown.", 
+            "action": "Rotate to VIG/GLD"
+        })
+    elif pb < 0.7:
+        recs.append({
+            "type": "suggestion", "icon": "📈", "title": "Beta Lag", 
+            "detail": f"Beta {pb:.2f} is Defensive.", 
+            "rationale": "Portfolio may significantly lag in bull markets. Room for controlled growth expansion.", 
+            "action": "Increase QQQ/SPY"
+        })
+
+    # Sharpe / Efficiency Optimization
+    if sharpe < 0.8:
+        recs.append({
+            "type": "warning", "icon": "⚖️", "title": "Efficiency Gap", 
+            "detail": f"Sharpe {sharpe:.2f} is Suboptimal.", 
+            "rationale": "Taking too much volatility for the realized return. Portfolio is 'noisy'.", 
+            "action": "Add Quality Factor"
+        })
+    elif sharpe > 1.5:
+        recs.append({
+            "type": "success", "icon": "💎", "title": "Apex Efficiency", 
+            "detail": f"Sharpe {sharpe:.2f} is Exceptional.", 
+            "rationale": "Harvesting maximum alpha per unit of risk. Maintain current factor weights.", 
+            "action": "HODL"
+        })
+
+    # Income & Diversification
+    if yld < 0.02:
+        recs.append({"type": "suggestion", "icon": "💸", "title": "Income Floor", "detail": "Yield < 2%.", "rationale": "Dividends act as a structural shock absorber during flat market regimes.", "action": "Add SCHD"})
+    
+    if len(assets) < 4:
+        recs.append({"type": "warning", "icon": "🏗️", "title": "Factor Concentration", "detail": "Low ticker breadth.", "rationale": "Exposure to idiosyncratic company-specific risk is too high.", "action": "Add 2+ Assets"})
+    
+    return recs[:6]
 
 def _extract_events(info: dict) -> Dict[str, Any]:
     def _ts(val) -> Optional[str]:
@@ -312,6 +423,18 @@ async def _get_sentiment(ticker: str) -> Dict[str, Any]:
     except: 
         return {"bullish": 0.33, "bearish": 0.33, "label": "neutral", "headline_count": len(headlines), "headlines": headlines, "sentiment_delta": 0, "exhaustion_alert": False}
 
+@app.get("/api/config")
+async def get_config():
+    return {
+        "apiKey": os.getenv("FB_API_KEY"),
+        "authDomain": os.getenv("FB_AUTH_DOMAIN"),
+        "projectId": os.getenv("FB_PROJECT_ID"),
+        "storageBucket": os.getenv("FB_STORAGE_BUCKET"),
+        "messagingSenderId": os.getenv("FB_MESSAGING_SENDER_ID"),
+        "appId": os.getenv("FB_APP_ID"),
+        "measurementId": os.getenv("FB_MEASUREMENT_ID")
+    }
+
 @app.post("/api/analyze")
 async def analyze_portfolio(request: PortfolioRequest):
     try:
@@ -331,11 +454,21 @@ async def analyze_portfolio(request: PortfolioRequest):
         # Currency Normalization Logic
         usd_gbp = await _get_fx_rate("USD", base_curr)
         gbp_usd = 1.0 / usd_gbp if usd_gbp else 1.0
+        fallbacks = request.fallback_prices or {}
         
         assets = {}
         for tk, info, p in res_info:
-            curr = safe_fetch(info, "currency", "USD")
+            # Default to GBP for London tickers if info is missing
+            default_curr = "GBP" if tk.endswith(".L") else "USD"
+            curr = safe_fetch(info, "currency", default_curr)
             if curr in ("GBp", "GBX"): p /= 100.0; curr = "GBP"
+            
+            # Apply fallback if primary price is 0/None
+            if (not p or p <= 0) and tk in fallbacks:
+                p = fallbacks[tk]
+                # If it's a London asset and the price is high (>1000), it's likely in pence
+                if tk.endswith(".L") and p > 500:
+                    p /= 100.0
             
             # Convert asset price to base_currency for summary
             fx_to_base = 1.0

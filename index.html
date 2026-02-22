@@ -6,7 +6,13 @@
   <title>Vesper v5.0 — Institutional Apex</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
-    tailwind.config = { theme: { extend: { fontFamily: { mono: ['"JetBrains Mono"', 'monospace'] } } } }
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'] },
+        },
+      },
+    }
   </script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
   
@@ -19,6 +25,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
   <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Inter', system-ui, sans-serif; }
     .glass { background: #0f172a; border: 1px solid #1e293b; border-radius: 1rem; }
     .glass:hover { border-color: #334155; }
     .tnum { font-feature-settings: "tnum"; font-variant-numeric: tabular-nums; }
@@ -37,8 +45,8 @@
   <div id="auth-modal" style="display: flex;">
     <div class="modal-content">
       <div class="text-center mb-8">
-        <h2 class="text-2xl font-black text-indigo-500 mb-2">VESPER ACCESS</h2>
-        <p class="text-xs text-slate-500 uppercase tracking-widest">Institutional Intelligence Suite</p>
+        <h2 class="text-2xl font-black text-indigo-500 mb-2 text-center">VESPER ACCESS</h2>
+        <p class="text-xs text-slate-500 uppercase tracking-widest text-center">Institutional Intelligence Suite</p>
       </div>
       <div id="auth-form" class="space-y-4">
         <input type="email" id="auth-email" placeholder="Email" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none transition-all">
@@ -56,10 +64,10 @@
   <div id="tooltip-modal" onclick="this.style.display='none'">
     <div class="modal-content" onclick="event.stopPropagation()">
       <div class="flex justify-between items-start mb-4">
-        <p id="tooltip-title" class="text-[10px] font-black text-indigo-400 uppercase tracking-widest"></p>
+        <p id="tooltip-title" class="text-[10px] font-black text-indigo-400 uppercase tracking-[0.3em]"></p>
         <button onclick="document.getElementById('tooltip-modal').style.display='none'" class="text-slate-500 hover:text-white transition-colors">×</button>
       </div>
-      <p id="tooltip-body" class="text-sm text-slate-300 leading-relaxed"></p>
+      <p id="tooltip-body" class="text-sm text-slate-300 leading-relaxed font-medium"></p>
     </div>
   </div>
 
@@ -80,12 +88,12 @@
 
   <main id="main-content" class="hidden max-w-6xl mx-auto px-4 sm:px-6 py-10">
     <section id="builder-section" class="mb-10">
-      <div class="glass p-8">
+      <div class="glass p-8 shadow-2xl">
         <div id="ticker-rows" class="space-y-3 mb-6"></div>
         <div class="grid grid-cols-3 gap-2 mb-6 p-4 bg-slate-900/50 rounded-xl border border-slate-800">
-          <label class="cursor-pointer"><input type="radio" name="risk-level" value="Conservative" class="hidden peer"><div class="py-2 text-center rounded border border-slate-700 peer-checked:border-emerald-500 peer-checked:text-emerald-400 text-[10px] font-black uppercase">Conservative</div></label>
-          <label class="cursor-pointer"><input type="radio" name="risk-level" value="Balanced" checked class="hidden peer"><div class="py-2 text-center rounded border border-slate-700 peer-checked:border-indigo-500 peer-checked:text-indigo-400 text-[10px] font-black uppercase">Balanced</div></label>
-          <label class="cursor-pointer"><input type="radio" name="risk-level" value="Aggressive" class="hidden peer"><div class="py-2 text-center rounded border border-slate-700 peer-checked:border-orange-500 peer-checked:text-orange-400 text-[10px] font-black uppercase">Aggressive</div></label>
+          <label class="cursor-pointer"><input type="radio" name="risk-level" value="Conservative" class="hidden peer"><div class="py-2.5 text-center rounded border border-slate-700 peer-checked:border-emerald-500 peer-checked:text-emerald-400 text-[10px] font-black uppercase">Conservative</div></label>
+          <label class="cursor-pointer"><input type="radio" name="risk-level" value="Balanced" checked class="hidden peer"><div class="py-2.5 text-center rounded border border-slate-700 peer-checked:border-indigo-500 peer-checked:text-indigo-400 text-[10px] font-black uppercase">Balanced</div></label>
+          <label class="cursor-pointer"><input type="radio" name="risk-level" value="Aggressive" class="hidden peer"><div class="py-2.5 text-center rounded border border-slate-700 peer-checked:border-orange-500 peer-checked:text-orange-400 text-[10px] font-black uppercase">Aggressive</div></label>
         </div>
         <div class="flex gap-3 mb-4">
           <button id="add-btn" onclick="addRow()" class="flex-1 py-3 border border-dashed border-slate-700 text-slate-500 text-xs font-black uppercase hover:text-white transition-colors">Add Position</button>
@@ -102,62 +110,96 @@
     </div>
 
     <section id="results-section" class="hidden space-y-6">
-      <div id="summary-grid" class="grid grid-cols-2 lg:grid-cols-4 gap-4"></div>
+      <div id="summary-grid" class="grid grid-cols-2 lg:grid-cols-5 gap-4"></div>
+      
+      <div class="glass p-6 border-l-4 border-indigo-500">
+        <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">Risk Profile Analysis <button onclick="showTooltip('Efficiency Identity', 'Risk-adjusted metrics relative to your chosen profile mandate.')" class="hover:text-indigo-400">ⓘ</button></p>
+        <div id="risk-profile-content" class="grid grid-cols-1 md:grid-cols-3 gap-6"></div>
+      </div>
+
       <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        <div class="glass p-6 border-t-2 border-indigo-500/50"><p class="text-[10px] font-black text-slate-500 uppercase mb-4">Hedge Optimizer (GLD)</p><div id="hedge-content" class="space-y-4"></div></div>
-        <div class="glass p-6 border-t-2 border-emerald-500/50"><p class="text-[10px] font-black text-slate-500 uppercase mb-4">Post-Trade Efficiency</p><div id="rebalance-content" class="space-y-4"></div></div>
-        <div class="glass p-6 border-t-2 border-amber-500/50"><p class="text-[10px] font-black text-slate-500 uppercase mb-4">Factor Breadth (DR)</p><div id="factor-content" class="space-y-4"></div></div>
-        <div class="glass p-6 border-t-2 border-red-500/50"><p class="text-[10px] font-black text-slate-500 uppercase mb-4">FX Sensitivity (5%)</p><div id="fx-panel" class="space-y-3"></div></div>
+        <div class="glass p-6 border-t-2 border-indigo-500/50"><p class="text-[10px] font-black text-slate-500 uppercase mb-4 flex items-center gap-2">Hedge Optimizer (GLD) <button onclick="showTooltip('Adaptive Hedging', 'Calculates exact weight of GLD needed to reduce portfolio VaR by 20%.')" class="hover:text-indigo-400">ⓘ</button></p><div id="hedge-content" class="space-y-4"></div></div>
+        <div class="glass p-6 border-t-2 border-emerald-500/50"><p class="text-[10px] font-black text-slate-500 uppercase mb-4 flex items-center gap-2">Post-Trade Efficiency <button onclick="showTooltip('Efficiency Gains', 'Projected Sharpe and Beta after suggested trades are executed.')" class="hover:text-indigo-400">ⓘ</button></p><div id="rebalance-content" class="space-y-4"></div></div>
+        <div class="glass p-6 border-t-2 border-amber-500/50"><p class="text-[10px] font-black text-slate-500 uppercase mb-4 flex items-center gap-2">Factor Breadth (DR) <button onclick="showTooltip('Diversification Ratio', 'Measures if assets are cancelling out each other noise. DR > 1.2 is healthy.')" class="hover:text-indigo-400">ⓘ</button></p><div id="factor-content" class="space-y-4"></div></div>
+        <div class="glass p-6 border-t-2 border-red-500/50"><p class="text-[10px] font-black text-slate-500 uppercase mb-4 flex items-center gap-2">FX Sensitivity (5%) <button onclick="showTooltip('Currency Beta', 'Projected loss if non-base currencies strengthen against your portfolio.')" class="hover:text-indigo-400">ⓘ</button></p><div id="fx-panel" class="space-y-3"></div></div>
       </div>
+
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div class="glass p-6 flex flex-col"><p class="text-xs font-black text-slate-500 uppercase mb-4">Real Value Projection (Inflation Adj.)</p><div class="flex-1" style="min-height:260px;"><canvas id="futureChart"></canvas></div><div id="future-details" class="mt-4"></div></div>
-        <div class="glass p-6 flex flex-col"><p class="text-xs font-black text-slate-500 uppercase mb-4">Global Macro Catalyst Calendar (US/UK)</p><div id="global-events" class="space-y-3"></div></div>
+        <div class="glass p-6 flex flex-col"><p class="text-xs font-bold text-slate-500 uppercase mb-4">Allocation Spectrum</p><div class="flex items-center justify-center flex-1" style="min-height:260px;"><canvas id="allocationChart"></canvas></div></div>
+        <div class="glass p-6 flex flex-col"><p class="text-xs font-bold text-slate-500 uppercase mb-4">Global Macro Catalyst Calendar (US/UK)</p><div id="global-events" class="space-y-3 flex-1 overflow-y-auto pr-2" style="max-height:320px;"></div></div>
       </div>
-      <div class="glass p-6"><p class="text-xs font-black text-slate-500 uppercase mb-1">Historical Growth Velocity</p><div style="height:340px;" class="mt-4"><canvas id="historyChart"></canvas></div></div>
+
+      <div class="glass p-6">
+        <p class="text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-2">Historical Growth Velocity <button onclick="showTooltip('Velocity', 'Individual asset growth lines normalized to 100 base.')" class="hover:text-indigo-400">ⓘ</button></p>
+        <p class="text-[10px] text-slate-600 mb-4">Compare relative speed of asset price expansion.</p>
+        <div style="height:340px;" class="mt-4"><canvas id="historyChart"></canvas></div>
+      </div>
+
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div class="glass p-6"><p class="text-xs font-black text-slate-500 uppercase mb-4">Vesper 5-Point Intelligence</p><div id="market-outlook" class="space-y-4"></div></div>
-        <div class="glass p-6"><p class="text-xs font-black text-slate-500 uppercase mb-4">Advisory Optimizer</p><div id="risk-optimizer" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div></div>
+        <div class="glass p-6 flex flex-col"><p class="text-xs font-bold text-slate-500 uppercase mb-4 flex items-center gap-2">Vesper 5-Point Intelligence <button onclick="showTooltip('Intelligence Suite', 'Automated synthesis of regime, rotation, alpha, and strategy.')" class="hover:text-indigo-400">ⓘ</button></p><div id="market-outlook" class="space-y-4"></div></div>
+        <div class="glass p-6 flex flex-col"><p class="text-xs font-bold text-slate-500 uppercase mb-1">Real Value Projection (Inflation Adj.)</p><p class="text-[10px] text-slate-600 mb-4">10-Year corridor adjusted for 2.5% annual inflation. Hover for outcomes.</p><div class="flex-1" style="min-height:240px;"><canvas id="futureChart"></canvas></div><div id="future-details" class="mt-4"></div></div>
       </div>
-      <div class="glass p-6 flex flex-col"><p class="text-xs font-black text-slate-500 uppercase mb-4">Sentiment Trend & Exhaustion Engine</p><div id="sentiment-summary-panel" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div></div>
+
+      <div class="glass p-6 flex flex-col"><p class="text-xs font-bold text-slate-500 uppercase mb-4">Sentiment Trend & Exhaustion Engine</p><div id="sentiment-summary-panel" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div></div>
+
+      <div>
+        <p class="text-xs font-bold text-slate-500 uppercase mb-4">Advisory Optimizer</p>
+        <div id="risk-optimizer" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+      </div>
+
       <div id="asset-cards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+
+      <!-- Ideal Portfolio Section -->
+      <section class="mt-12 border-t-2 border-indigo-500/30 pt-12">
+        <h2 class="text-3xl font-black mb-2 text-transparent bg-clip-text bg-gradient-to-r from-white to-indigo-400 uppercase tracking-tight">Ideal Portfolio & Execution Path</h2>
+        <p class="text-slate-500 text-sm mb-8 italic">The v5.0 Quantitative Blueprint for your chosen mandate.</p>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div class="glass p-8 border-l-4 border-indigo-500"><p class="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-6">Strategic Blueprint</p><div id="blueprint-content" class="space-y-6"></div></div>
+          <div class="glass p-8 border-l-4 border-emerald-500"><p class="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-6">Suggested Execution Path</p><div id="blueprint-actions" class="space-y-4"></div></div>
+        </div>
+      </section>
     </section>
   </main>
+
+  <footer class="mt-20 border-t border-slate-900 py-10 text-center text-slate-700 text-xs font-mono tracking-widest uppercase">Vesper Intelligence Engine • Senior Quant Suite v5.0</footer>
 
   <script>
     'use strict';
 
-    // Firebase Config (Replace with your actual keys from Firebase Console)
-    const firebaseConfig = {
-      apiKey: "AIzaSyDuIfJIAGKuj0J5-U6eaOWyDAINF7w4TlY",
-      authDomain: "vesper-1e6b7.firebaseapp.com",
-      projectId: "vesper-1e6b7",
-      storageBucket: "vesper-1e6b7.firebasestorage.app",
-      messagingSenderId: "424122831129",
-      appId: "1:424122831129:web:87ae9cbe496cb3122cb588",
-      measurementId: "G-PDSR59CTZS"
-    };
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
-    const auth = firebase.auth();
-
+    let db, auth;
     const API_URL = '/api/analyze';
     let rowIndex = 0, allocChart = null, historyChart = null, futureChart = null;
     const PALETTE = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6','#f97316','#14b8a6','#ef4444','#a855f7'];
 
-    // Auth Handling
-    auth.onAuthStateChanged(user => {
-      if (user) {
-        document.getElementById('auth-modal').style.display = 'none';
-        document.getElementById('main-content').classList.remove('hidden');
-        document.getElementById('logout-btn').classList.remove('hidden');
-        loadPortfolio();
-      } else {
-        document.getElementById('auth-modal').style.display = 'flex';
-        document.getElementById('main-content').classList.add('hidden');
-        document.getElementById('logout-btn').classList.add('hidden');
-        document.getElementById('ticker-rows').innerHTML = '';
+    async function initFirebase() {
+      try {
+        const res = await fetch('/api/config');
+        const config = await res.json();
+        firebase.initializeApp(config);
+        db = firebase.firestore();
+        auth = firebase.auth();
+        setupAuthListener();
+      } catch (e) {
+        console.error("Firebase Init Error:", e);
+        document.getElementById('auth-error').textContent = "Failed to load system security configuration.";
       }
-    });
+    }
+
+    function setupAuthListener() {
+      auth.onAuthStateChanged(user => {
+        if (user) {
+          document.getElementById('auth-modal').style.display = 'none';
+          document.getElementById('main-content').classList.remove('hidden');
+          document.getElementById('logout-btn').classList.remove('hidden');
+          loadPortfolio();
+        } else {
+          document.getElementById('auth-modal').style.display = 'flex';
+          document.getElementById('main-content').classList.add('hidden');
+          document.getElementById('logout-btn').classList.add('hidden');
+          document.getElementById('ticker-rows').innerHTML = '';
+        }
+      });
+    }
 
     async function handleAuth(type) {
       const email = document.getElementById('auth-email').value;
@@ -170,7 +212,6 @@
       }
     }
 
-    // DB Persistence
     async function savePortfolio(holdings) {
       const user = auth.currentUser;
       if (user) await db.collection('portfolios').doc(user.uid).set({ holdings, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
@@ -193,8 +234,9 @@
     function addRow(t = '', q = '') {
       rowIndex++; const id = `row-${rowIndex}`, div = document.createElement('div');
       div.id = id; div.className = 'grid grid-cols-[1fr_110px_44px] gap-3 items-center';
-      div.innerHTML = `<input type="text" value="${t}" placeholder="Ticker" class="ticker-input bg-slate-900 border border-slate-700 rounded px-4 py-2.5 text-sm font-bold uppercase focus:border-indigo-500 outline-none"><input type="number" value="${q}" placeholder="Qty" class="qty-input bg-slate-900 border border-slate-700 rounded px-4 py-2.5 text-sm font-bold outline-none"><button onclick="document.getElementById('${id}').remove()" class="text-slate-700 hover:text-red-500 font-bold text-xl">×</button>`;
+      div.innerHTML = `<input type="text" value="${t}" placeholder="Ticker" class="ticker-input bg-slate-900 border border-slate-700 rounded px-4 py-2.5 text-sm font-bold uppercase focus:border-indigo-500 outline-none"><input type="number" value="${q}" placeholder="Qty" class="qty-input bg-slate-900 border border-slate-700 rounded px-4 py-2.5 text-sm font-bold outline-none"><button onclick="document.getElementById('${id}').remove()" class="text-slate-700 hover:text-red-500 font-bold text-xl transition-colors">×</button>`;
       document.getElementById('ticker-rows').appendChild(div);
+      return div;
     }
 
     function handleCSV(file) {
@@ -206,12 +248,27 @@
           const line = lines[i].trim();
           if (!line || line.startsWith('""') || line.includes('Totals')) continue;
           const parts = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-          if (parts.length < 3) continue;
+          if (parts.length < 4) continue;
           let symbol = parts[0].replace(/"/g, '').trim();
           let qty = parseFloat(parts[2].replace(/"/g, '').replace(/,/g, '').trim());
+          let priceStr = parts[3].replace(/"/g, '').replace(/£/g, '').replace(/,/g, '').trim();
+          let price = parseFloat(priceStr);
+          if (priceStr.toLowerCase().endsWith('p')) price = parseFloat(priceStr.slice(0, -1)) / 100;
           if (symbol && !isNaN(qty) && qty > 0) {
             if (symbol.length >= 4 && !symbol.includes('.')) symbol = symbol + '.L';
-            addRow(symbol, qty);
+            symbol = symbol.toUpperCase();
+            let existingRow = null;
+            document.querySelectorAll('#ticker-rows > div').forEach(row => {
+              if (row.querySelector('.ticker-input').value.trim().toUpperCase() === symbol) existingRow = row;
+            });
+            if (existingRow) {
+              const qtyInput = existingRow.querySelector('.qty-input');
+              qtyInput.value = (parseFloat(qtyInput.value) || 0) + qty;
+              if (!isNaN(price)) existingRow.querySelector('.ticker-input').dataset.fallbackPrice = price;
+            } else {
+              const row = addRow(symbol, qty);
+              if (row && !isNaN(price)) row.querySelector('.ticker-input').dataset.fallbackPrice = price;
+            }
           }
         }
         document.getElementById('csv-upload').value = '';
@@ -220,88 +277,190 @@
     }
 
     async function analyzePortfolio() {
-      const holdings = {};
+      const holdings = {}, fallbackPrices = {};
       document.querySelectorAll('#ticker-rows > div').forEach(row => {
-        const t = row.querySelector('.ticker-input').value.trim().toUpperCase();
+        const tInput = row.querySelector('.ticker-input');
+        const t = tInput.value.trim().toUpperCase();
         const q = parseFloat(row.querySelector('.qty-input').value);
-        if (t && !isNaN(q) && q > 0) holdings[t] = q;
+        if (t && !isNaN(q) && q > 0) {
+          holdings[t] = q;
+          if (tInput.dataset.fallbackPrice) fallbackPrices[t] = parseFloat(tInput.dataset.fallbackPrice);
+        }
       });
       if (Object.keys(holdings).length === 0) return;
-      
-      savePortfolio(holdings); // Persistent save on execution
-      
+      savePortfolio(holdings); 
       document.getElementById('loading-state').classList.remove('hidden'); document.getElementById('results-section').classList.add('hidden');
       try {
-        const res = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ holdings, risk_level: document.querySelector('input[name="risk-level"]:checked').value }) });
+        const riskLevel = document.querySelector('input[name="risk-level"]:checked').value;
+        const res = await fetch(API_URL, { 
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json' }, 
+          body: JSON.stringify({ holdings, risk_level: riskLevel, base_currency: 'GBP', fallback_prices: fallbackPrices }) 
+        });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || 'Engine execution failed.');
-        renderResults(data);
+        renderResults(data, riskLevel);
       } catch (e) {
-        console.error(e);
-        alert("CRITICAL ERROR: " + e.message);
+        console.error(e); alert("CRITICAL ERROR: " + e.message);
       } finally { document.getElementById('loading-state').classList.add('hidden'); }
     }
 
     function getCurrencySymbol(c) { return c === 'GBP' ? '£' : '$'; }
-    function fmt(v, t = 'plain', curr = 'USD') { 
+    function fmt(v, t = 'plain', curr = 'GBP') { 
       if (v == null || v === 'N/A') return 'N/A'; 
       const n = parseFloat(v); if (isNaN(n)) return v; 
       const symbol = getCurrencySymbol(curr);
-      if (t === 'currency') return symbol + n.toLocaleString('en-GB', { minimumFractionDigits: 2 }); 
+      if (t === 'currency') return symbol + n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); 
       if (t === 'pct') return (n * 100).toFixed(2) + '%'; 
       return n.toLocaleString(); 
     }
     function retClr(v) { const n = parseFloat(v); return isNaN(n) ? '' : n >= 0 ? 'text-green-400' : 'text-red-400'; }
     function sentimentBadge(l) { return l === 'positive' ? { text: 'Bullish', cls: 'text-green-400 bg-green-950 border-green-500/30' } : l === 'negative' ? { text: 'Bearish', cls: 'text-red-400 bg-red-950 border-red-500/30' } : { text: 'Neutral', cls: 'text-slate-400 bg-slate-900 border-slate-700' }; }
-    
-    function renderResults(data) {
+    function showTooltip(t, b) { document.getElementById('tooltip-title').textContent = t; document.getElementById('tooltip-body').textContent = b; document.getElementById('tooltip-modal').style.display = 'block'; }
+
+    function renderResults(data, riskLevel) {
       if (!data || !data.advanced_intel) return;
       const { portfolio: p, assets: a, risk: r, advanced_intel: ai, recommendations: recs, market_outlook: mo, events: ev, global_macro_events: gme } = data;
       document.getElementById('results-section').classList.remove('hidden');
       
       const ksId = 'kill-switch-banner'; let ks = document.getElementById(ksId);
-      if (ai.kill_switch) { if (!ks) { ks = document.createElement('div'); ks.id = ksId; document.getElementById('results-section').prepend(ks); } ks.className = 'bg-red-600 text-white p-4 rounded-xl mb-6 flex items-center gap-4 animate-pulse border-2 border-red-400 shadow-lg'; ks.innerHTML = `⚠️ <div class="text-xs font-black uppercase">${ai.kill_switch}</div>`; }
-      else if (ks) ks.remove();
+      if (ai.kill_switch) {
+        if (!ks) { ks = document.createElement('div'); ks.id = ksId; document.getElementById('results-section').prepend(ks); }
+        ks.className = 'bg-red-600 text-white p-4 rounded-xl mb-6 flex items-center gap-4 animate-pulse border-2 border-red-400 shadow-lg';
+        ks.innerHTML = `<div class="text-2xl">⚠️</div><div><p class="font-black uppercase tracking-tighter text-sm">System Guardrail Breach</p><p class="text-xs font-bold text-red-100">${ai.kill_switch}</p></div>`;
+      } else if (ks) ks.remove();
 
+      renderRiskProfile(p, riskLevel, ai);
+      renderSummaryCards(p, ai);
+      renderAdvancedIntel(ai);
+      renderGlobalEvents(gme);
+      renderAllocationChart(a);
+      renderHistoryChart(r.history || {}, a);
+      renderMarketOutlook(mo || {});
+      renderFutureValue(r.future_value || {}, p.total_value, p.currency);
+      renderRiskOptimizer(recs || []);
+      renderSentimentSummary(a);
+      renderAssetCards(a, ev, r.asset_risk, ai, p);
+      renderBlueprint(ai.ideal_blueprint);
+      
+      document.getElementById('results-section').classList.remove('hidden');
+      document.getElementById('results-section').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function renderRiskProfile(p, level, ai) {
+      const badgeCls = level === 'Conservative' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50' : level === 'Aggressive' ? 'bg-orange-500/20 text-orange-400 border-orange-500/50' : 'bg-indigo-500/20 text-indigo-400 border-indigo-500/50';
+      document.getElementById('risk-profile-content').innerHTML = `
+        <div class="space-y-1"><p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-2">Target Profile <button onclick="showTooltip('Mandate', 'Your chosen risk target. Conservative (<0.8 Beta), Balanced (1.0), Aggressive (>1.2).')" class="hover:text-indigo-400">ⓘ</button></p><span class="px-3 py-1 rounded-full border text-xs font-black ${badgeCls}">${level}</span></div>
+        <div class="space-y-1"><p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-2">Efficiency (Sharpe) <button onclick="showTooltip('Sharpe Ratio', 'Return per unit of risk. Range: < 0.5 (Poor), 1.0 (Good), > 2.0 (Exceptional).')" class="hover:text-indigo-400">ⓘ</button></p><p class="text-xl font-black text-slate-200">${p.sharpe_ratio}</p></div>
+        <div class="space-y-1"><p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-2">Outlook Score <button onclick="showTooltip('Outlook Index', 'Sentiment trend score. Ranges from -10 (Extreme Fear) to +10 (Euphoria).')" class="hover:text-indigo-400">ⓘ</button></p><p class="text-xl font-black ${retClr(ai.outlook_score)}">${ai.outlook_score > 0 ? '+' : ''}${ai.outlook_score}</p></div>
+      `;
+    }
+
+    function renderSummaryCards(p, ai) {
       document.getElementById('summary-grid').innerHTML = [
-        { l: 'Net Value', v: fmt(p.total_value, 'currency'), i: '💼' },
-        { l: 'VaR 95%', v: fmt(p.var_95_daily, 'pct'), i: '🛡️' },
-        { l: 'Sharpe', v: p.sharpe_ratio, i: '📊' },
-        { l: 'Real CAGR', v: fmt(ai.real_cagr, 'pct'), i: '📈' }
-      ].map(c => `<div class="glass p-5 border-t-2 border-indigo-500/20"><div class="text-2xl mb-2">${c.i}</div><div class="text-2xl font-black">${c.v}</div><div class="text-[10px] text-slate-500 font-bold uppercase">${c.l}</div></div>`).join('');
+        { l: 'Net Value', v: fmt(p.total_value, 'currency', p.currency), i: '💼', t: 'Net Liquidity', d: 'Total value of all positions in base currency.' },
+        { l: 'VaR 95%', v: fmt(p.var_95_daily, 'pct'), i: '🛡️', t: 'Value at Risk', d: 'Maximum likely daily loss. Target: < 1.5%.' },
+        { l: 'Beta Sensitivity', v: `<span class="${p.portfolio_beta >= 0.8 && p.portfolio_beta <= 1.1 ? 'text-green-400' : 'text-amber-400'}">${p.portfolio_beta}</span>`, i: '📊', t: 'Beta (β)', d: 'Market sensitivity. Target: 0.8 - 1.1 (Neutral). Avoid > 1.3.' },
+        { l: 'Efficiency', v: p.sharpe_ratio, i: '📈', t: 'Sharpe Ratio', d: 'Returns per unit of risk. Target: > 1.0.' },
+        { l: 'Real CAGR', v: fmt(ai.real_cagr, 'pct'), i: '🚀', t: 'Inflation-Adjusted', d: ' CAGR minus 2.5% projected inflation.' }
+      ].map(c => `<div class="glass p-5 border-t-2 border-indigo-500/20 hover:bg-slate-900/50 transition-colors"><div class="flex justify-between items-start"><div class="text-2xl mb-3">${c.i}</div><button onclick="showTooltip('${c.t}', '${c.d}')" class="text-[10px] text-slate-700 font-bold uppercase hover:text-indigo-400 transition-colors">ⓘ</button></div><div class="text-2xl font-black mb-0.5">${c.v}</div><div class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">${c.l}</div></div>`).join('');
+    }
 
+    function renderAdvancedIntel(ai) {
       document.getElementById('hedge-content').innerHTML = `<div class="bg-slate-900/50 p-3 rounded border border-slate-800"><p class="text-[8px] text-slate-500 uppercase font-black">Target -20% VaR</p><p class="text-xs font-black text-emerald-400">Add ${fmt(ai.hedge_optimizer.optimal_gld_weight, 'pct')} GLD</p></div><p class="text-[8px] text-slate-600 font-black uppercase mt-2">Efficiency: ${ai.hedge_optimizer.hedge_efficiency}</p>`;
-      document.getElementById('rebalance-content').innerHTML = `<div class="grid grid-cols-2 gap-2"><div class="bg-slate-900/50 p-2 rounded"><p class="text-[8px] text-slate-500 font-black uppercase">PROJ SHARPE</p><p class="text-xs font-black text-emerald-400">→ ${ai.rebalancing.projected_sharpe}</p></div><div class="bg-slate-900/50 p-2 rounded"><p class="text-[8px] text-slate-500 font-black uppercase">TX COST</p><p class="text-xs font-black text-red-400">$${ai.rebalancing.transaction_cost_estimate}</p></div></div><p class="text-[10px] text-slate-400 italic mt-2">${ai.rebalancing.trade || 'Aligned.'}</p>`;
-      document.getElementById('factor-content').innerHTML = `<div class="flex justify-between mb-2"><span class="text-[10px] font-bold text-slate-400 uppercase">Div. Ratio (DR)</span><span class="text-xs font-black text-emerald-400">${ai.attribution.div_ratio}</span></div><div class="h-1 bg-slate-800 rounded-full mt-4"><div class="h-full bg-indigo-500" style="width:${Math.min(100, ai.attribution.div_ratio*50)}%"></div></div>`;
+      document.getElementById('rebalance-content').innerHTML = `<div class="grid grid-cols-2 gap-2"><div class="bg-slate-900/50 p-2 rounded"><p class="text-[8px] text-slate-500 font-black uppercase">PROJ SHARPE</p><p class="text-xs font-black text-emerald-400">→ ${ai.rebalancing.projected_sharpe}</p></div><div class="bg-slate-900/50 p-2 rounded"><p class="text-[8px] text-slate-500 font-black uppercase">TX COST</p><p class="text-xs font-black text-red-400">$${ai.rebalancing.transaction_cost_estimate}</p></div></div><p class="text-[10px] text-slate-400 italic mt-2 font-medium">${ai.rebalancing.trade || 'Aligned.'}</p>`;
+      const dr = ai.attribution.div_ratio || 1.0; const drCls = dr < 1.1 ? 'text-red-400 animate-pulse' : 'text-emerald-400';
+      document.getElementById('factor-content').innerHTML = `<div class="flex justify-between mb-2"><span class="text-[10px] font-bold text-slate-400 uppercase">Div. Ratio (DR)</span><span class="text-xs font-black ${drCls}">${dr}</span></div><div class="h-1 bg-slate-800 rounded-full mt-4"><div class="h-full bg-indigo-500" style="width:${Math.min(100, ai.attribution.div_ratio*50)}%"></div></div>`;
       document.getElementById('fx-panel').innerHTML = `<div class="flex justify-between"><span class="text-[10px] font-black text-slate-500 uppercase">SHOCK IMPACT</span><span class="text-xs font-black text-amber-400">-$${fmt(ai.scenarios.fx_5pct_shock)}</span></div><p class="text-[8px] text-slate-600 font-black uppercase mt-2">Risk: ${ai.attribution.fx_exposure_risk}</p>`;
+    }
+
+    function renderGlobalEvents(gme) {
       document.getElementById('global-events').innerHTML = gme.map(x => `<div class="p-3 bg-slate-900/50 rounded-lg border border-slate-800"><div class="flex justify-between items-center"><span class="text-[10px] font-black text-indigo-400">${x.d}</span><span class="text-[10px] font-black text-slate-200 uppercase">${x.e}</span></div><p class="text-[10px] text-slate-500 mt-1">${x.i}</p></div>`).join('');
+    }
 
+    function renderAllocationChart(a) {
+      if (allocChart) allocChart.destroy();
+      allocChart = new Chart(document.getElementById('allocationChart'), { type: 'doughnut', data: { labels: Object.keys(a), datasets: [{ data: Object.values(a).map(x => x.value), backgroundColor: PALETTE, borderColor: '#020617', borderWidth: 3 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { position: 'right', labels: { color: '#94a3b8', font: { weight: 'bold', family: 'JetBrains Mono' } } } } } });
+    }
+
+    function renderHistoryChart(history, a) {
       if (historyChart) historyChart.destroy();
-      const h_pf = r.history['__portfolio__'];
-      const ds = Object.keys(a).map((tk, i) => ({ label: tk, data: r.history[tk]?.values, borderColor: PALETTE[i%PALETTE.length], borderWidth: 1.5, pointRadius: 0, tension: 0.3, borderDash: [2, 2], hidden: true }));
+      const h_pf = history['__portfolio__'];
+      const ds = Object.keys(a).map((tk, i) => ({ label: tk, data: history[tk]?.values, borderColor: PALETTE[i%PALETTE.length], borderWidth: 1.5, pointRadius: 0, tension: 0.3, borderDash: [2, 2], hidden: true }));
       ds.push({ label: 'CORE PORTFOLIO', data: h_pf.values, borderColor: '#fff', borderWidth: 3, pointRadius: 0, tension: 0.3 });
-      historyChart = new Chart(document.getElementById('historyChart'), { type: 'line', data: { labels: h_pf.dates, datasets: ds }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#64748b', font: { size: 9, weight: 'bold' } } } }, scales: { x: { ticks: { color: '#334155', font: { size: 9 }, maxTicksLimit: 8 } }, y: { ticks: { color: '#334155', font: { size: 9 } }, grid: { color: '#1e293b' } } } } });
+      historyChart = new Chart(document.getElementById('historyChart'), { type: 'line', data: { labels: h_pf.dates, datasets: ds }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { position: 'bottom', labels: { color: '#64748b', font: { size: 9, weight: 'bold' } } } }, scales: { x: { ticks: { color: '#334155', font: { size: 9 }, maxTicksLimit: 8 } }, y: { ticks: { color: '#334155', font: { size: 9 } }, grid: { color: '#1e293b' } } } } });
+    }
 
+    function renderMarketOutlook(mo) {
+      document.getElementById('market-outlook').innerHTML = mo.points.map(x => `<div class="p-4 bg-slate-900/50 rounded-xl border border-slate-800 transition-all group hover:border-indigo-500/30"><div class="flex items-center gap-3 mb-2"><div class="text-xl group-hover:scale-110 transition-transform">${x.i}</div><div><p class="text-[10px] font-bold text-slate-600 uppercase tracking-widest">${x.l}</p><p class="text-xs font-black text-indigo-400 uppercase">${x.v}</p></div></div><p class="text-[10px] leading-relaxed text-slate-500 font-medium">${x.d}</p></div>`).join('') + `<div class="mt-6 space-y-4"><div class="p-4 bg-indigo-950/20 border-l-4 border-indigo-500 rounded-r-xl"><p class="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-2 font-black">Quant Intelligence</p><p class="text-sm text-slate-300 leading-relaxed">${mo.commentary}</p></div><div class="p-4 bg-violet-950/20 border-l-4 border-violet-500 rounded-r-xl"><p class="text-xs font-bold text-violet-400 uppercase tracking-widest mb-2 font-black">Strategic Outlook</p><p class="text-sm text-slate-300 leading-relaxed">${mo.future_outlook}</p></div></div>`;
+    }
+
+    function renderFutureValue(fv, tv, currency) {
       if (futureChart) futureChart.destroy();
       futureChart = new Chart(document.getElementById('futureChart'), { type: 'line', data: { labels: Array.from({length:11}, (_,i)=>`Y${i}`), datasets: [
-        { label: 'Optimistic', data: r.future_value.p90.map(v => Math.round(v * p.total_value)), borderColor: '#22c55e', borderDash: [5, 5], pointRadius: 0, tension: 0.3 },
-        { label: 'Real Value', data: r.future_value.p50.map((v, i) => Math.round(v * p.total_value / Math.pow(1.025, i))), borderColor: '#6366f1', fill: true, backgroundColor: 'rgba(99,102,241,0.1)', borderWidth: 3, tension: 0.3 },
-        { label: 'Stressed', data: r.future_value.p10.map(v => Math.round(v * p.total_value)), borderColor: '#ef4444', borderDash: [5, 5], pointRadius: 0, tension: 0.3 }
-      ] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, labels: { color: '#64748b', font: { size: 9, weight: 'bold' } } } } } });
-      document.getElementById('future-details').innerHTML = `<div class="grid grid-cols-1 md:grid-cols-3 gap-6"><div class="bg-indigo-500/5 p-4 rounded-xl border border-indigo-500/20"><p class="font-black text-indigo-400 uppercase tracking-tighter mb-2">Median Real (2036)</p><p class="text-lg font-black text-slate-200 mb-1">${fmt(r.future_value.p50[10]*p.total_value/Math.pow(1.025, 10), 'currency')}</p></div><div class="bg-emerald-500/5 p-4 rounded-xl border border-emerald-500/20"><p class="font-black text-emerald-400 uppercase tracking-tighter mb-2">Optimistic</p><p class="text-lg font-black text-slate-200 mb-1">${fmt(r.future_value.p90[10]*p.total_value, 'currency')}</p></div><div class="bg-red-500/5 p-4 rounded-xl border border-red-500/20"><p class="font-black text-red-400 uppercase tracking-tighter mb-2">Stressed</p><p class="text-lg font-black text-slate-200 mb-1">${fmt(r.future_value.p10[10]*p.total_value, 'currency')}</p></div></div>`;
+        { label: 'Optimistic', data: fv.p90.map(v => Math.round(v * tv)), borderColor: '#22c55e', borderDash: [5, 5], pointRadius: 0, tension: 0.3 },
+        { label: 'Real Value', data: fv.p50.map((v, i) => Math.round(v * tv / Math.pow(1.025, i))), borderColor: '#6366f1', fill: true, backgroundColor: 'rgba(99,102,241,0.1)', borderWidth: 3, tension: 0.3 },
+        { label: 'Stressed', data: fv.p10.map(v => Math.round(v * tv)), borderColor: '#ef4444', borderDash: [5, 5], pointRadius: 0, tension: 0.3 }
+      ] }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { display: true, labels: { color: '#64748b', font: { size: 9, weight: 'bold' } } } }, scales: { y: { ticks: { color: '#475569', font: { size: 9 }, callback: v => (v/1000).toFixed(0) + 'k' } } } } });
+      document.getElementById('future-details').innerHTML = `<div class="grid grid-cols-1 md:grid-cols-3 gap-6"><div class="bg-indigo-500/5 p-4 rounded-xl border border-indigo-500/20"><p class="font-black text-indigo-400 uppercase tracking-tighter mb-2">Median Real (2036)</p><p class="text-lg font-black text-slate-200 mb-1">${fmt(fv.p50[10]*tv/Math.pow(1.025, 10), 'currency', currency)}</p></div><div class="bg-emerald-500/5 p-4 rounded-xl border border-emerald-500/20"><p class="font-black text-emerald-400 uppercase tracking-tighter mb-2">Optimistic</p><p class="text-lg font-black text-slate-200 mb-1">${fmt(fv.p90[10]*tv, 'currency', currency)}</p></div><div class="bg-red-500/5 p-4 rounded-xl border border-red-500/20"><p class="font-black text-red-400 uppercase tracking-tighter mb-2">Stressed</p><p class="text-lg font-black text-slate-200 mb-1">${fmt(fv.p10[10]*tv, 'currency', currency)}</p></div></div>`;
+    }
 
-      document.getElementById('market-outlook').innerHTML = mo.points.map(x => `<div class="p-4 bg-slate-900/50 rounded-xl border border-slate-800"><div class="flex items-center gap-3 mb-2"><div class="text-xl">${x.i}</div><div><p class="text-[10px] font-bold text-slate-600 uppercase tracking-widest">${x.l}</p><p class="text-xs font-black text-indigo-400 uppercase">${x.v}</p></div></div><p class="text-[10px] leading-relaxed text-slate-500 font-medium">${x.d}</p></div>`).join('') + `<div class="mt-6 space-y-4"><div class="p-4 bg-indigo-950/20 border-l-4 border-indigo-500 rounded-r-xl"><p class="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-2 font-black">Quant Intelligence</p><p class="text-sm text-slate-300 leading-relaxed">${mo.commentary}</p></div><div class="p-4 bg-violet-950/20 border-l-4 border-violet-500 rounded-r-xl"><p class="text-xs font-bold text-violet-400 uppercase tracking-widest mb-2 font-black">Strategic Outlook</p><p class="text-sm text-slate-300 leading-relaxed">${mo.future_outlook}</p></div></div>`;
-      document.getElementById('risk-optimizer').innerHTML = recs.map(r => `<div class="border rounded-xl p-5 border-indigo-900/40 bg-indigo-950/10 space-y-3"><div class="flex justify-between items-start gap-4"><div class="flex gap-3"><div class="text-xl shrink-0 mt-0.5">${r.icon}</div><div><p class="text-[11px] font-black text-slate-100 uppercase tracking-tight leading-tight">${r.title}</p><p class="text-[10px] text-slate-400 font-medium mt-1 uppercase">${r.detail}</p></div></div><span class="px-2 py-0.5 rounded text-[8px] font-black uppercase bg-indigo-500 text-white">${r.action || 'ADVISORY'}</span></div><div class="pt-3 border-t border-slate-800/50"><p class="text-[10px] text-slate-400 leading-relaxed font-medium">${r.rationale}</p></div></div>`).join('') || '<div class="text-center py-10 text-slate-700 text-xs italic font-bold uppercase tracking-widest">Alignment Verified.</div>';
+    function renderRiskOptimizer(recs) {
+      document.getElementById('risk-optimizer').innerHTML = recs.map(r => `<div class="border rounded-xl p-5 border-indigo-900/40 bg-indigo-950/10 space-y-3 transition-all hover:scale-[1.01]"><div class="flex justify-between items-start gap-4"><div class="flex gap-3"><div class="text-xl shrink-0 mt-0.5">${r.icon}</div><div><p class="text-[11px] font-black text-slate-100 uppercase tracking-tight leading-tight">${r.title}</p><p class="text-[10px] text-slate-400 font-medium mt-1 uppercase">${r.detail}</p></div></div><span class="px-2 py-0.5 rounded text-[8px] font-black uppercase bg-indigo-500 text-white">${r.action || 'ADVISORY'}</span></div><div class="pt-3 border-t border-slate-800/50"><p class="text-[10px] text-slate-400 leading-relaxed font-medium">${r.rationale}</p></div></div>`).join('') || '<div class="text-center py-10"><p class="text-slate-700 text-xs font-bold uppercase tracking-widest italic">Alignment Verified.</p></div>';
+    }
+
+    function renderSentimentSummary(a) {
       document.getElementById('sentiment-summary-panel').innerHTML = Object.entries(a).map(([tk, asset]) => {
         const s = asset.sentiment || {}, b = Math.round((s.bullish || 0)*100), r_pct = Math.round((s.bearish || 0)*100), badge = sentimentBadge(s.label), delta = s.sentiment_delta || 0, exhaustion = s.exhaustion_alert ? '<span class="text-[7px] bg-red-600 text-white px-1 rounded animate-bounce">EXHAUSTION</span>' : '';
         return `<div class="p-4 bg-slate-900/30 rounded-xl border border-slate-800"><div class="flex items-center justify-between mb-2"><span class="font-black text-sm text-slate-200">${tk}</span><div class="flex items-center gap-2">${exhaustion}<span class="text-[9px] font-black px-2 py-0.5 rounded border ${badge.cls}">${badge.text}</span></div></div><div class="sentiment-bar mb-2"><div style="width:${b}%; background:#22c55e;"></div><div style="width:${Math.max(0, 100-b-r_pct)}%; background:#334155;"></div><div style="width:${r_pct}%; background:#ef4444;"></div></div><div class="flex justify-between text-[8px] font-black uppercase tracking-tighter"><span>Bull ${b}%</span><span class="${retClr(delta)}">D: ${delta > 0 ? '+' : ''}${delta}</span><span>Bear ${r_pct}%</span></div></div>`;
       }).join('');
+    }
+
+    function renderAssetCards(a, ev, asset_risk, ai, p) {
       document.getElementById('asset-cards').innerHTML = Object.entries(a).map(([tk, asset], i) => {
         const c = PALETTE[i % PALETTE.length], b = sentimentBadge(asset.sentiment?.label), safety = ai.div_safety[tk] || 0, safetyColor = safety > 70 ? 'text-emerald-400' : safety > 40 ? 'text-amber-400' : 'text-red-400';
         const evts = ev[tk] || {}, evtItems = Object.entries(evts).filter(([k,v]) => v).map(([k,v]) => `<div class="flex justify-between text-[9px] py-0.5 border-b border-slate-800/30 last:border-0"><span class="text-slate-500 font-black uppercase tracking-tighter">${k.replace(/_/g,' ')}</span><span class="text-slate-300 font-black font-mono">${v}</span></div>`).join('');
         const headlines = (asset.sentiment?.headlines || []).slice(0,5).map(h => `<li class="text-[9px] text-slate-500 leading-tight mb-2 flex gap-2 font-medium"><span>•</span><span class="line-clamp-2">${typeof h === 'object' ? h.title : h}</span></li>`).join('') || '<li class="text-[9px] text-slate-700 italic font-bold uppercase tracking-widest text-center py-2">No signals detected.</li>';
-        return `<div class="glass p-5 border-t-2 transition-all hover:shadow-2xl" style="border-top-color: ${c}"><div class="flex justify-between mb-4"><div><div class="flex items-center gap-2 mb-1.5"><span class="text-[10px] font-black px-2 py-0.5 rounded shadow-sm" style="background:${c}22;color:${c}">${tk}</span><span class="text-[9px] font-black px-2 py-0.5 rounded border shadow-sm ${b.cls}">${b.text}</span></div><div class="font-bold text-sm text-slate-200 line-clamp-2 leading-tight">${asset.name}</div></div><div class="text-right"><div class="text-lg font-black tnum text-slate-100">${fmt(asset.price, 'currency', asset.currency)}</div><p class="text-[8px] font-black ${safetyColor} uppercase tracking-tighter flex items-center justify-end gap-1">Safety: ${safety} <button onclick="showTooltip('Safety Score', 'Sustainability index.')" class="hover:text-white transition-colors">ⓘ</button></p></div></div><div class="grid grid-cols-2 gap-2 text-xs"><div class="bg-slate-900/50 p-2 rounded border border-slate-800"><p class="text-slate-600 text-[9px] font-black uppercase">Risk Contrib</p><p class="text-xs font-black text-slate-200">${asset.risk_contribution_pct}%</p></div><div class="bg-slate-900/50 p-2 rounded border border-slate-800"><p class="text-slate-600 text-[9px] font-black uppercase">Inst. Flow</p><p class="text-indigo-400 font-black text-xs">${asset.institutional_flow_score}</p></div></div><div class="border-t border-slate-800/50 mt-4 pt-3"><p class="text-[9px] font-black text-slate-600 uppercase tracking-widest mb-2">Upcoming Events</p>${evtItems || '<p class="text-[9px] text-slate-700 italic font-bold">No upcoming signals.</p>'}</div><div class="border-t border-slate-800/50 mt-4 pt-3"><p class="text-[9px] font-black text-slate-600 uppercase tracking-widest mb-2">${asset.sentiment?.headline_count > 0 ? 'Neural News synthesis' : 'Macro Factor Synthesis'}</p><ul class="list-none m-0 p-0">${headlines}</ul></div></div>`;
+        return `<div class="glass p-5 border-t-2 transition-all hover:shadow-2xl" style="border-top-color: ${c}"><div class="flex justify-between mb-4"><div><div class="flex items-center gap-2 mb-1.5"><span class="text-[10px] font-black px-2 py-0.5 rounded shadow-sm" style="background:${c}22;color:${c}">${tk}</span><span class="text-[9px] font-black px-2 py-0.5 rounded border shadow-sm ${b.cls}">${b.text}</span></div><div class="font-bold text-sm text-slate-200 line-clamp-2 leading-tight">${asset.name}</div></div><div class="text-right"><div class="text-lg font-black tnum text-slate-100">${fmt(asset.price, 'currency', asset.currency)}</div><p class="text-[8px] font-black ${safetyColor} uppercase tracking-tighter flex items-center justify-end gap-1">Safety: ${safety} <button onclick="showTooltip('Safety Score', 'Sustainability index.')" class="hover:text-white transition-colors">ⓘ</button></p></div></div><div class="grid grid-cols-2 gap-2 text-xs"><div class="bg-slate-900/50 p-2 rounded border border-slate-800"><p class="text-slate-600 text-[9px] font-black uppercase">Holding Qty</p><p class="text-xs font-black text-slate-200">${asset.quantity}</p></div><div class="bg-slate-900/50 p-2 rounded border border-slate-800"><p class="text-slate-600 text-[9px] font-black uppercase">Current Value</p><p class="text-xs font-black text-indigo-400">${fmt(asset.value, 'currency', p.currency)}</p></div><div class="bg-slate-900/50 p-2 rounded border border-slate-800"><p class="text-slate-600 text-[9px] font-black uppercase">Risk Contrib</p><p class="text-xs font-black text-slate-200">${asset.risk_contribution_pct}%</p></div><div class="bg-slate-900/50 p-2 rounded border border-slate-800"><p class="text-slate-600 text-[9px] font-black uppercase">Inst. Flow</p><p class="text-indigo-400 font-black text-xs">${asset.institutional_flow_score}</p></div></div><div class="border-t border-slate-800/50 mt-4 pt-3"><p class="text-[9px] font-black text-slate-600 uppercase tracking-widest mb-2">Upcoming Events</p>${evtItems || '<p class="text-[9px] text-slate-700 italic font-bold">No upcoming signals.</p>'}</div><div class="border-t border-slate-800/50 mt-4 pt-3"><p class="text-[9px] font-black text-slate-600 uppercase tracking-widest mb-2">${asset.sentiment?.headline_count > 0 ? 'Neural News synthesis' : 'Macro Factor Synthesis'}</p><ul class="list-none m-0 p-0">${headlines}</ul></div></div>`;
       }).join('');
+    }
+
+    function renderBlueprint(blueprint) {
+      const cats = ["Growth", "Core", "Defensive"];
+      const colors = { Growth: "indigo-500", Core: "emerald-500", Defensive: "amber-500" };
+      
+      document.getElementById('blueprint-content').innerHTML = cats.map(cat => {
+        const target = blueprint.target[cat];
+        const current = blueprint.current[cat];
+        const tickers = blueprint.segments[cat] || [];
+        const c = colors[cat];
+        return `
+          <div class="space-y-3">
+            <div class="flex justify-between items-end">
+              <div>
+                <span class="text-sm font-black text-slate-200 uppercase">${cat}</span>
+                <p class="text-[9px] text-slate-500 font-bold uppercase mt-0.5">${tickers.join(', ') || 'None held'}</p>
+              </div>
+              <span class="text-[10px] font-bold text-slate-500 uppercase">Target: ${Math.round(target*100)}% | <span class="text-slate-300">Current: ${Math.round(current*100)}%</span></span>
+            </div>
+            <div class="h-3 w-full bg-slate-900 rounded-full overflow-hidden border border-slate-800">
+              <div class="h-full bg-${c} shadow-[0_0_10px_rgba(99,102,241,0.3)]" style="width: ${current*100}%"></div>
+            </div>
+          </div>`;
+      }).join('');
+
+      document.getElementById('blueprint-actions').innerHTML = blueprint.actions.length > 0 ? 
+        blueprint.actions.map(act => `
+          <div class="flex gap-4 p-4 bg-slate-900/30 rounded-xl border border-slate-800 hover:border-slate-700 transition-colors">
+            <div class="w-8 h-8 rounded-full bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center shrink-0">
+              <span class="text-indigo-400 font-black text-xs">${act.action === 'Increase' ? '↑' : '↓'}</span>
+            </div>
+            <div>
+              <p class="text-[11px] font-black text-slate-200 uppercase tracking-widest">${act.action} ${act.category}</p>
+              <p class="text-[10px] text-slate-500 font-medium italic mt-0.5">${act.impact}. Affects: ${act.tickers.join(', ') || 'Segment Proxy'}.</p>
+            </div>
+          </div>`).join('') : 
+        '<div class="text-center py-10"><p class="text-slate-700 text-xs font-bold uppercase tracking-widest italic">Blueprint Fully Realized.</p></div>';
     }
 
     function pollHealth() {
@@ -312,7 +471,7 @@
       }).catch(() => setTimeout(pollHealth, 5000));
     }
 
-    window.addEventListener('DOMContentLoaded', () => { pollHealth(); });
+    window.addEventListener('DOMContentLoaded', () => { initFirebase(); pollHealth(); });
   </script>
 </body>
 </html>
