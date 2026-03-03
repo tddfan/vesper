@@ -23,7 +23,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, field_validator
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
 
 HF_TOKEN = os.getenv("HF_TOKEN")
 FINBERT_API_URL = "https://api-inference.huggingface.co/models/ProsusAI/finbert"
@@ -32,7 +32,45 @@ _sentiment_cache: Dict[str, Dict[str, Any]] = {}
 _executor = ThreadPoolExecutor(max_workers=15)
 
 CACHE_TTL = 3600
-RISK_FREE_RATE = 0.05
+RISK_FREE_RATE = 0.04   # UK 10-yr gilt proxy
+
+# Ticker base-name taxonomy (strip exchange suffix before matching)
+_GROWTH_BASES    = {"EQQQ","AINF","DAGB","QQQ","ARKK","SMH","SOXX","MAGS","SCHG","VUG","QQQM","IGM","IIND","WTEC","LGQG","ROBO"}
+_DEFENSIVE_BASES = {"SGLN","GLD","IAU","GLDM","PHAU","TLT","BND","AGG","IGLT","VGLT","IGLS","HMSO","TN28","XGSD"}
+_GOLD_BASES      = {"GLD","SGLN","IAU","GLDM","PHAU","HMSO","IGLN","SGLP"}
+
+# Known fund TERs (annual ongoing charge) for common ETFs — used when yfinance doesn't return it
+_KNOWN_TER: Dict[str, float] = {
+    "EQQQ":0.003,"CNDX":0.003,"QQQ":0.002,"QQQM":0.0015,
+    "AINF":0.004,"IIND":0.0019,"DAGB":0.0025,"WTEC":0.004,"LGQG":0.0029,
+    "ROBO":0.008,"MAGS":0.002,
+    "SGLN":0.0012,"GLD":0.004,"IAU":0.0025,"GLDM":0.001,"PHAU":0.0015,
+    "HMSO":0.0015,"IGLN":0.0012,"SGLP":0.0012,
+    "TN28":0.0007,"IGLT":0.0007,"VGLT":0.001,"TLT":0.0015,"XGSD":0.0007,
+    "BND":0.0003,"AGG":0.0003,
+    "VWRP":0.0022,"VWRL":0.0022,"IWDA":0.002,"SWDA":0.002,
+    "SPY":0.0009,"CSPX":0.0007,"VUAG":0.0007,"ISF":0.0007,
+    "SCHD":0.0006,"WQDV":0.0025,"VIG":0.0006,"DGRW":0.0028,
+    "SMH":0.0035,"SOXX":0.0035,"ARKK":0.0068,
+    "XGLD":0.0012,"RBTX":0.008,
+}
+
+# Fraction of each ETF's NAV denominated in non-GBP currencies.
+# LSE-listed ETFs trade in GBP but often track USD-denominated indices.
+# Used to compute meaningful FX sensitivity when base_currency == "GBP".
+_UNDERLYING_FX: Dict[str, float] = {
+    "EQQQ":0.98,"CNDX":0.98,"QQQ":0.98,"QQQM":0.98,
+    "AINF":0.90,"DAGB":0.80,"WTEC":0.90,"LGQG":0.90,"ROBO":0.80,"MAGS":0.98,
+    "IIND":0.98,"SMH":0.98,"SOXX":0.98,"ARKK":0.98,
+    "SGLN":0.98,"GLD":0.98,"IAU":0.98,"GLDM":0.98,"PHAU":0.98,
+    "HMSO":0.98,"IGLN":0.98,"SGLP":0.98,"XGLD":0.98,
+    "CSPX":0.98,"SPY":0.98,"IVV":0.98,"VOO":0.98,"VTI":0.98,"VUAG":0.98,
+    "VWRP":0.60,"VWRL":0.60,"IWDA":0.60,"SWDA":0.60,   # ~60% USD in world funds
+    "SCHD":0.98,"VIG":0.98,"DGRW":0.98,"WQDV":0.40,
+    # GBP-underlying (UK-only) — zero USD exposure
+    "IGLT":0.00,"TN28":0.00,"ISF":0.00,"VMID":0.00,"XGSD":0.00,
+    "BND":0.98,"AGG":0.98,"TLT":0.98,"VGLT":0.98,
+}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -47,6 +85,7 @@ class PortfolioRequest(BaseModel):
     risk_level: str = "Balanced"
     base_currency: str = "GBP"
     fallback_prices: Dict[str, float] = {}
+    account_mapping: Dict[str, str] = {}   # e.g. {"EQQQ.L": "ISA", "SDIP.L": "GIA"}
 
     @field_validator("holdings")
     @classmethod
@@ -87,7 +126,7 @@ async def _fetch_full_history(tickers: List[str]) -> pd.DataFrame:
     async def fetch_one(ticker: str):
         try:
             t = yf.Ticker(ticker)
-            h = await _in_thread(lambda: t.history(period="2y", auto_adjust=True))
+            h = await _in_thread(lambda: t.history(period="max", auto_adjust=True))
             if not h.empty:
                 if h.index.tz is not None: h.index = h.index.tz_localize(None)
                 return ticker, h["Close"]
@@ -135,7 +174,8 @@ def _compute_risk_history_from_prices(prices: pd.DataFrame, tickers: List[str], 
             if not p_1y.empty:
                 normed = (p_1y / p_1y.iloc[0] * 100).round(2)
                 history[t] = {"dates": [d.strftime("%Y-%m-%d") for d in normed.index[::5]], "values": normed.values[::5].tolist()}
-            vol = round(float(p_1y.pct_change().std()*np.sqrt(252)), 4) if len(p_1y) > 5 else 0.20
+            p_1y_rets = p_1y.pct_change().dropna().clip(-0.20, 0.20)
+            vol = round(float(p_1y_rets.std()*np.sqrt(252)), 4) if len(p_1y_rets) > 5 else 0.20
             asset_vols[t] = vol
             years_total = max((p.index[-1]-p.index[0]).days/365.25, 0.1)
             asset_risk[t] = {"cagr_inception": calc_cagr(p, years_total), "volatility": vol}
@@ -149,12 +189,24 @@ def _compute_risk_history_from_prices(prices: pd.DataFrame, tickers: List[str], 
         
         rets = filled[valid].pct_change().dropna()
         if rets.empty: return empty
-        
+        # Winsorize daily returns to remove IPO-day spikes and GBp/GBP unit-switch artefacts.
+        # A genuine daily move > ±20% is essentially impossible for a diversified ETF.
+        rets = rets.clip(-0.20, 0.20)
+
         cov_matrix = rets.cov() * 252
         port_var = np.dot(w.T, np.dot(cov_matrix, w))
         port_vol = np.sqrt(max(port_var, 1e-9))
-        marginal_contribution = np.dot(cov_matrix, w) / port_vol
-        risk_contributions = {tk: round(float((w[i] * marginal_contribution[i]) / port_vol), 4) for i, tk in enumerate(valid)}
+        # Sanity cap: >100% annualised vol is a sign of bad data even after clipping.
+        # Fall back to weighted-average individual vols (more stable).
+        if port_vol > 1.0:
+            port_vol = min(sum(w[i] * asset_vols.get(valid[i], 0.15) for i in range(len(valid))), 0.60)
+        # Standalone vol-weighted contribution — w_i×σ_i / Σ(w_j×σ_j)
+        # Defensive assets (low σ) naturally contribute less; growth ETFs (high σ) contribute more.
+        total_wv = sum(w[j] * asset_vols.get(valid[j], 0.2) for j in range(len(valid)))
+        risk_contributions = {
+            tk: round(float(w[i] * asset_vols.get(tk, 0.2) / max(total_wv, 1e-9)), 4)
+            for i, tk in enumerate(valid)
+        }
         
         asset_betas = {}
         if "SPY" in filled.columns:
@@ -176,7 +228,19 @@ def _compute_risk_history_from_prices(prices: pd.DataFrame, tickers: List[str], 
         p_1y_cum = (1 + port_series[port_series.index >= (filled.index[-1] - pd.Timedelta(days=365.25))]).cumprod()
         history["__portfolio__"] = {"dates": [d.strftime("%Y-%m-%d") for d in p_1y_cum.index[::5]], "values": (p_1y_cum[::5] * 100).round(2).tolist()}
 
-        cagr_p = calc_cagr((1+port_series).cumprod(), max(len(port_series)/252, 0.1)) or 0
+        # Annualised portfolio CAGR from winsorized cumulative returns.
+        # When shared history is < 1 year (new ETF limits joint data),
+        # fall back to the weighted average of per-asset CAGRs — far more stable.
+        port_cum = (1 + port_series).cumprod()
+        y_p = max(len(port_series) / 252, 0.1)
+        weighted_asset_cagr = float(sum(w[i] * asset_risk.get(valid[i], {}).get("cagr_inception", 0.0) for i in range(len(valid))))
+        if y_p >= 1.0 and len(port_cum) > 0 and port_cum.iloc[-1] > 0:
+            raw_cagr = float(port_cum.iloc[-1] ** (1 / y_p) - 1)
+            # Sanity: any annualised CAGR outside [-50%, +100%] means bad data survived clipping
+            cagr_p = round(raw_cagr if -0.50 <= raw_cagr <= 1.00 else weighted_asset_cagr, 4)
+        else:
+            # Short joint history → per-asset weighted average is more reliable
+            cagr_p = round(weighted_asset_cagr, 4)
         portfolio_risk = {"cagr_inception": cagr_p, "volatility": round(float(port_vol), 4), "sharpe_ratio": round((cagr_p-RISK_FREE_RATE)/port_vol, 2) if port_vol > 0 else 0, "var_95_daily": round(float(1.645 * (port_vol / np.sqrt(252))), 4)}
         
         n_sims, n_years, n_days = 2000, 10, 252
@@ -202,14 +266,30 @@ def _get_advanced_intelligence(assets, portfolio, risk_level, risk_data, base_cu
     weighted_vol_sum = sum(assets[tk]["weight"] * asset_vols.get(tk, 0.2) for tk in assets)
     div_ratio = round(weighted_vol_sum / portfolio.get("volatility", 0.15), 3) if portfolio.get("volatility", 0) > 0 else 1.0
 
-    non_base_val = sum(a["value"] for a in assets.values() if a["currency"] != base_currency)
+    # FX exposure: LSE ETFs report trading currency = GBP even when underlying is USD-heavy.
+    # Use _UNDERLYING_FX lookup to estimate the real non-base-currency fraction.
+    if base_currency == "GBP":
+        non_base_frac = sum(
+            a["weight"] * _UNDERLYING_FX.get(tk.split('.')[0].upper(),
+                0.0 if a.get("currency") == base_currency else 1.0)
+            for tk, a in assets.items()
+        )
+        non_base_val = total_val * non_base_frac
+    else:
+        non_base_val = sum(a["value"] for a in assets.values() if a.get("currency") != base_currency)
     real_cagr = round(portfolio.get("cagr_inception", 0.08) - 0.025, 4)
 
     targets = {"Conservative": 0.20, "Balanced": 0.40, "Aggressive": 0.70}
     target_g_w = targets.get(risk_level, 0.40)
-    # Segment Identification (v5.0 Hardened)
-    growth_tks = [tk for tk, a in assets.items() if a["sector"] in ("Technology", "Communication Services") or (_to_float(a.get("pe_ratio")) or 0) > 30]
-    defensive_tks = [tk for tk, a in assets.items() if "Treasury" in a["name"] or "Gold" in a["name"] or tk in ("SGLN.L", "TN28.L", "GLD")]
+    # Segment Identification — ticker-base matching takes priority over sector/PE heuristics
+    growth_tks = [tk for tk, a in assets.items() if
+        tk.split('.')[0].upper() in _GROWTH_BASES or
+        a["sector"] in ("Technology", "Communication Services") or
+        (_to_float(a.get("pe_ratio")) or 0) > 30]
+    defensive_tks = [tk for tk, a in assets.items() if
+        tk.split('.')[0].upper() in _DEFENSIVE_BASES or
+        "Treasury" in a["name"] or "Gold" in a["name"] or "Bond" in a["name"] or
+        tk in ("TN28.L",)]
     core_tks = [tk for tk in assets if tk not in growth_tks and tk not in defensive_tks]
     
     targets = {"Conservative": 0.20, "Balanced": 0.40, "Aggressive": 0.70}
@@ -266,13 +346,22 @@ def _get_advanced_intelligence(assets, portfolio, risk_level, risk_data, base_cu
                 "tickers": segments[cat]
             })
 
+    # Hedge optimizer — check existing gold/defensive before recommending more GLD
+    existing_gold_w = sum(a["weight"] for tk, a in assets.items() if tk.split('.')[0].upper() in _GOLD_BASES)
+    if existing_gold_w >= 0.10:
+        hedge_opt = {"optimal_gld_weight": 0.0, "hedge_efficiency": "SUFFICIENT",
+                     "note": f"Gold at {existing_gold_w*100:.0f}% — adequate. Consider IGLT.L for duration hedge."}
+    else:
+        needed = max(0.0, round(0.12 - existing_gold_w, 2))
+        hedge_opt = {"optimal_gld_weight": needed, "hedge_efficiency": "HIGH" if beta > 1.1 else "LOW", "note": None}
+
     return {
         "scenarios": {"nasdaq_10": round(total_val*beta*-0.1, 2), "fx_5pct_shock": round(non_base_val*0.05, 2)},
         "rebalancing": {"current": round(curr_g_w, 4), "drift": round(drift, 4), "trade": trade_suggestion, "projected_beta": round(beta - (drift*0.2), 2), "projected_sharpe": round(portfolio.get("sharpe_ratio", 0.5)*1.2, 2), "transaction_cost_estimate": cost},
         "attribution": {"factor": "Growth Dominant" if curr_g_w > 0.5 else "Core/Value", "div_ratio": div_ratio, "fx_exposure_risk": "HIGH" if non_base_val/total_val > 0.7 else "LOW"},
         "div_safety": div_safety,
         "kill_switch": kill_switch,
-        "hedge_optimizer": {"optimal_gld_weight": 0.12, "hedge_efficiency": "HIGH" if beta > 1.1 else "LOW"},
+        "hedge_optimizer": hedge_opt,
         "real_cagr": real_cagr,
         "outlook_score": sum((2 if a.get("sentiment", {}).get("label") == "positive" else -2 if a.get("sentiment", {}).get("label") == "negative" else 0) for a in assets.values()),
         "ideal_blueprint": {"target": blueprint, "current": current_structure, "actions": blueprint_actions, "segments": segments}
@@ -325,8 +414,9 @@ def _get_global_events():
         {"d": (now + pd.Timedelta(days=25)).strftime("%Y-%m-%d"), "e": "BoE Meeting", "i": "GBP driver."}
     ]
 
-def _generate_recommendations(assets, portfolio, risk_level):
+def _generate_recommendations(assets, portfolio, risk_level, base_currency="GBP"):
     recs = []
+    is_ucits = base_currency in ("GBP", "EUR") or any(tk.endswith('.L') or tk.endswith('.AS') or tk.endswith('.DE') for tk in assets)
     pb = portfolio.get("portfolio_beta", 1.0)
     sharpe = portfolio.get("sharpe_ratio", 0.0)
     yld = portfolio.get("weighted_dividend_yield", 0.0)
@@ -365,7 +455,8 @@ def _generate_recommendations(assets, portfolio, risk_level):
 
     # Income & Diversification
     if yld < 0.02:
-        recs.append({"type": "suggestion", "icon": "💸", "title": "Income Floor", "detail": "Yield < 2%.", "rationale": "Dividends act as a structural shock absorber during flat market regimes.", "action": "Add SCHD"})
+        income_etf = "WQDV.L" if is_ucits else "SCHD"
+        recs.append({"type": "suggestion", "icon": "💸", "title": "Income Floor", "detail": "Yield < 2%.", "rationale": "Dividends act as a structural shock absorber during flat market regimes. UCITS-compliant dividend ETF preferred for UK/EU domicile.", "action": f"Add {income_etf}"})
     
     if len(assets) < 4:
         recs.append({"type": "warning", "icon": "🏗️", "title": "Factor Concentration", "detail": "Low ticker breadth.", "rationale": "Exposure to idiosyncratic company-specific risk is too high.", "action": "Add 2+ Assets"})
@@ -486,8 +577,10 @@ async def analyze_portfolio(request: PortfolioRequest):
                 "dividend_yield": _round(info.get("dividendYield")), 
                 "pe_ratio": _round(info.get("trailingPE")), 
                 "beta": _round(info.get("beta")), 
-                "sector": safe_fetch(info, "sector", "N/A"), 
-                "institutional_flow_score": round(_to_float(info.get("heldPercentInstitutions", 0.5))*100, 1)
+                "sector": safe_fetch(info, "sector", "N/A"),
+                "institutional_flow_score": round(_to_float(info.get("heldPercentInstitutions", 0.5))*100, 1),
+                "ter": _round(_to_float(info.get("annualReportExpenseRatio") or info.get("totalExpenseRatio"))
+                              or _KNOWN_TER.get(tk.split('.')[0].upper())),
             }
         
         total_val = sum(a["value"] for a in assets.values())
@@ -502,12 +595,14 @@ async def analyze_portfolio(request: PortfolioRequest):
             assets[tk]["sentiment"] = s
             assets[tk]["risk_contribution_pct"] = round(risk_data.get("risk_contributions", {}).get(tk, 0) * 100, 2)
         
-        p_summary = {**risk_data["portfolio_risk"], "total_value": round(total_val, 2), "weighted_dividend_yield": round(sum((_to_float(a["dividend_yield"]) or 0)*a["weight"] for a in assets.values()), 4), "portfolio_beta": round(sum((_to_float(a["beta"]) or 1)*a["weight"] for a in assets.values()), 2), "asset_count": len(tickers), "currency": base_curr}
+        blended_ter = sum((_to_float(a.get("ter")) or _KNOWN_TER.get(tk.split('.')[0].upper(), 0.002)) * a["weight"]
+                          for tk, a in assets.items())
+        p_summary = {**risk_data["portfolio_risk"], "total_value": round(total_val, 2), "weighted_dividend_yield": round(sum((_to_float(a["dividend_yield"]) or 0)*a["weight"] for a in assets.values()), 4), "portfolio_beta": round(sum((_to_float(a["beta"]) or 1)*a["weight"] for a in assets.values()), 2), "asset_count": len(tickers), "currency": base_curr, "blended_ter": round(blended_ter, 4)}
         advanced = _get_advanced_intelligence(assets, p_summary, request.risk_level, risk_data, base_curr)
         
         return {
             "portfolio": p_summary, "assets": assets, "risk": risk_data, "advanced_intel": advanced, 
-            "recommendations": _generate_recommendations(assets, p_summary, request.risk_level), 
+            "recommendations": _generate_recommendations(assets, p_summary, request.risk_level, base_curr),
             "events": {tk: _extract_events(infos.get(tk, {})) for tk in tickers}, 
             "global_macro_events": _get_global_events(),
             "market_outlook": _get_market_outlook(assets, p_summary)
