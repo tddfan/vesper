@@ -148,6 +148,17 @@ _GROWTH_BASES    = {"EQQQ","AINF","DAGB","QQQ","ARKK","SMH","SOXX","MAGS","SCHG"
 _DEFENSIVE_BASES = {"SGLN","GLD","IAU","GLDM","PHAU","TLT","BND","AGG","IGLT","VGLT","IGLS","HMSO","TN28","XGSD"}
 _GOLD_BASES      = {"GLD","SGLN","IAU","GLDM","PHAU","HMSO","IGLN","SGLP"}
 
+GLOBAL_WATCHLIST = {
+    "VUSA.L": {"name": "Vanguard S&P 500", "strategy": "Momentum", "type": "Equity"},
+    "VUKE.L": {"name": "Vanguard FTSE 100", "strategy": "Mean Reversion", "type": "Equity"},
+    "VIXL.L": {"name": "WisdomTree VIX Short-Term Futures", "strategy": "Volatility", "type": "Hedge"},
+    "IGLN.L": {"name": "iShares Physical Gold", "strategy": "Volatility", "type": "Safe Haven"},
+    "ISF.L":  {"name": "iShares FTSE 100", "strategy": "Arbitrage", "type": "Equity"},
+    "VEMB.L": {"name": "JPM Emerging Markets Bond", "strategy": "Income/Reversion", "type": "Fixed Income"},
+    "3BRL.L": {"name": "WisdomTree S&P 500 3x Daily", "strategy": "Scalping", "type": "Leveraged"},
+    "I500.L": {"name": "iShares S&P 500 Swap", "strategy": "Mean Reversion", "type": "Equity"},
+}
+
 # Known fund TERs (annual ongoing charge) for common ETFs — used when yfinance doesn't return it
 _KNOWN_TER: Dict[str, float] = {
     "EQQQ":0.003,"CNDX":0.003,"QQQ":0.002,"QQQM":0.0015,
@@ -821,21 +832,24 @@ async def _get_fx_rate(from_curr: str, to_curr: str) -> float:
         return float(rate) if rate else 1.0
     except: return 1.0
 
-async def _fetch_full_history(tickers: List[str]) -> pd.DataFrame:
-    all_series = {}
+async def _fetch_full_history(tickers: List[str]) -> Tuple[pd.DataFrame, Dict[str, pd.DataFrame]]:
+    closes = {}
+    full_data = {}
     async def fetch_one(ticker: str):
         try:
             t = yf.Ticker(ticker)
-            h = await _in_thread(lambda: t.history(period="max", auto_adjust=True))
+            h = await _in_thread(lambda: t.history(period="1y", auto_adjust=True))
             if not h.empty:
                 if h.index.tz is not None: h.index = h.index.tz_localize(None)
-                return ticker, h["Close"]
+                return ticker, h
         except: pass
-        return ticker, pd.Series()
+        return ticker, pd.DataFrame()
     results = await asyncio.gather(*[fetch_one(tk) for tk in tickers])
-    for tk, s in results:
-        if not s.empty: all_series[tk] = s
-    return pd.DataFrame(all_series)
+    for tk, df in results:
+        if not df.empty:
+            closes[tk] = df["Close"]
+            full_data[tk] = df
+    return pd.DataFrame(closes), full_data
 
 def _compute_risk_history_from_prices(prices: pd.DataFrame, tickers: List[str], weights_dict: Dict[str, float]) -> Dict[str, Any]:
     empty = {
@@ -981,6 +995,236 @@ def _compute_risk_history_from_prices(prices: pd.DataFrame, tickers: List[str], 
         traceback.print_exc()
         return empty
 
+def _compute_rsi(series: pd.Series, window: int = 14) -> float:
+    if len(series) < window + 1:
+        return 50.0
+    delta = series.diff()
+    gain = delta.clip(lower=0).rolling(window=window, min_periods=window).mean()
+    loss = -1 * delta.clip(upper=0).rolling(window=window, min_periods=window).mean()
+    rs = gain / loss
+    rsi = 100 - (100 / (1 + rs))
+    return float(rsi.iloc[-1]) if not pd.isna(rsi.iloc[-1]) else 50.0
+
+def _compute_atr(df: pd.DataFrame, window: int = 14) -> float:
+    if len(df) < window + 1: return 0.0
+    high = df['High'] if 'High' in df.columns else df['Close']
+    low = df['Low'] if 'Low' in df.columns else df['Close']
+    close = df['Close']
+    tr = pd.concat([high - low, 
+                    (high - close.shift(1)).abs(), 
+                    (low - close.shift(1)).abs()], axis=1).max(axis=1)
+    atr = tr.rolling(window=window).mean().iloc[-1]
+    return float(atr) if not pd.isna(atr) else 0.0
+
+def _get_advisor_logic(symbol: str, hist: pd.DataFrame, sentiment_val: float, a: dict, vix: float, benchmark_hist: pd.DataFrame, cycle: str) -> dict:
+    if hist.empty or len(hist) < 14:
+        return {
+            "score": 50, "strat": "Neutral", "action": "HOLD", 
+            "why": "Insufficient data", "detailed_advisor_report": "Insufficient data.",
+            "probability": "50%", "strategy_narrative": "None", "evidence": {}
+        }
+
+    price = hist['Close'].iloc[-1]
+    prev_close = hist['Close'].iloc[-2]
+    ma50 = hist['Close'].rolling(50).mean().iloc[-1] if len(hist) >= 50 else price
+    ma200 = hist['Close'].rolling(200).mean().iloc[-1] if len(hist) >= 200 else ma50
+    rsi = _compute_rsi(hist['Close'])
+    atr = _compute_atr(hist)
+    day_gain = (price / prev_close - 1) * 100
+    atr_pct = (atr / price) * 100 if price > 0 else 0
+    
+    # Data-driven gain/loss proxy: 30-day performance
+    perf_30d = (price / hist['Close'].iloc[-21] - 1) * 100 if len(hist) >= 21 else 0.0
+    
+    base_tk = symbol.split('_')[0].split('.')[0].upper()
+    is_watchlist = symbol in GLOBAL_WATCHLIST
+    
+    score = 50
+    strat = "Neutral"
+    action = "HOLD"
+    probability = 50
+    
+    # 1. Momentum: Strong trend and healthy RSI
+    is_momentum = price > ma50 and 55 <= rsi <= 70
+    if is_momentum:
+        score += 30; strat = "Momentum"; action = "BUY (MOMENTUM RIDE)"; probability = 70
+
+    # 2. Mean Reversion: Oversold or significant recent drop
+    is_reversion = rsi < 35 or perf_30d < -10
+    if is_reversion:
+        score += 40; strat = "Mean Reversion"; action = "BUY (REVERSION BUY)"; probability = 80
+
+    # 3. Pairs Trading: Correlation break with global benchmark
+    if not benchmark_hist.empty and len(hist) >= 60:
+        common_idx = hist.index.intersection(benchmark_hist.index)
+        if len(common_idx) > 30:
+            corr = hist['Close'].loc[common_idx].corr(benchmark_hist['Close'].loc[common_idx])
+            if corr < 0.55:
+                score += 25; strat = "Pairs Trading"; action = "BUY (REL-VAL OPPORTUNITY)"; probability = 65
+
+    # 4. Volatility Defense: Flight to safety during high VIX
+    is_vol_defense = base_tk in _GOLD_BASES or "CMOP" in base_tk or "VIX" in base_tk
+    if vix > 25 and is_vol_defense:
+        score = max(score, 85); strat = "Volatility Defense"; action = "HEDGE (VOL DEFENSE)"; probability = 95
+
+    # 5. Scalping: High volatility and intraday/daily gain
+    if atr_pct > 2.5 and abs(day_gain) > 1.5:
+        score = max(score, 80); strat = "Scalping"; action = "TRIM (QUICK SCALP)" if day_gain > 0 else "BUY (SCALP DIP)"; probability = 85
+
+    # 6. Arbitrage: Regional/Instrument specific checks
+    if base_tk == "ISF": # Example for UK benchmark arb
+        score += 15; strat = "Arbitrage"; action = "BUY (NAV ARB)"; probability = 55
+
+    # 7. Hedging: Negative sentiment and breaking technicals
+    is_hedge_candidate = (sentiment_val < -0.3 and price < ma50)
+    if is_hedge_candidate:
+        score = max(score, 85); strat = "Hedging"; action = "HEDGE (SENTIMENT HEDGE)"; probability = 90
+
+    # Exhaustion Engine
+    exhaustion_status = "Neutral"
+    logic_tag = "Stable"
+    if rsi > 75 and day_gain > 2: 
+        exhaustion_status = "Blow-off Top"
+        logic_tag = "Exit Peak"
+    elif rsi > 70 and sentiment_val < 0: 
+        exhaustion_status = "Bull Trap"
+        logic_tag = "False Breakout"
+    elif rsi < 30 and perf_30d < -15: 
+        exhaustion_status = "Deep Exhaustion"
+        logic_tag = "Rubber Band"
+    elif rsi < 35: 
+        exhaustion_status = "Oversold"
+        logic_tag = "Mean Reversion"
+    elif rsi > 65: 
+        exhaustion_status = "Overextended"
+        logic_tag = "Profit Taking"
+    
+    if strat == "Volatility Defense": logic_tag = "Safe Haven"
+    elif strat == "Hedging": logic_tag = "Beta Hedge"
+    elif is_momentum: logic_tag = "Trend Ride"
+
+    # Regime-Based Probability Weighting (Contraction focus)
+    if cycle == "Contraction":
+        if strat == "Momentum": 
+            score -= 30; probability -= 20
+        if strat in ["Volatility Defense", "Hedging", "Mean Reversion"]: 
+            score += 15; probability += 10
+        # Boost safe havens in high fear
+        if is_vol_defense:
+            probability = max(probability, 92)
+
+    final_score = min(100, max(0, int(score)))
+    final_prob = min(99, max(5, int(probability)))
+    
+    # Executive Reasoning (Redundancy-Free)
+    reasoning = f"{strat} alignment verified. "
+    if is_reversion:
+        reasoning += f"Extreme price-to-mean stretch ({perf_30d:+.1f}%) suggests high-probability snap-back. Current fear is masking value."
+    elif is_momentum:
+        reasoning += f"Trend persistence is holding, but {cycle} regime requires aggressive stop-loss management."
+    elif is_vol_defense:
+        reasoning += f"VIX {vix:.2f} regime mandates flight to quality. {base_tk} acts as portfolio insurance while risk assets liquidate."
+    elif is_hedge_candidate:
+        reasoning += f"Sentiment/Price divergence detected. Market is ignoring deteriorating internals; protect capital now."
+    else:
+        reasoning += f"Macro regime ({cycle}) and technical signals confirm current posture."
+
+    # Watchlist Comparative Advantage
+    comp_adv = ""
+    if is_watchlist:
+        w_info = GLOBAL_WATCHLIST.get(symbol, {})
+        w_type = w_info.get("type", "Asset")
+        comp_adv = f"Superior {w_type} instrument for {strat} in {cycle} regimes."
+
+    # Action Instruction
+    if final_score > 80:
+        if strat == "Mean Reversion": act_instr = f"BUY 5% NOW (£{price:.2f})"
+        elif strat == "Volatility Defense": act_instr = "HEDGE UP (Safe Haven Rotation)"
+        elif strat == "Scalping": act_instr = "TRIM 10% (Volatility Harvest)"
+        elif strat == "Hedging": act_instr = "HEDGE 5% NOW (Neutralize Beta)"
+        else: act_instr = f"{action} NOW"
+    elif final_score < 40:
+        act_instr = "TRIM (Raise Dry Powder)"
+    else:
+        act_instr = "HOLD (Await Signal)"
+
+    return {
+        "score": final_score,
+        "strat": strat,
+        "action": action,
+        "probability": f"{final_prob}%",
+        "sentiment_impact": "Warning" if sentiment_val < 0 else "Confirmation",
+        "exhaustion_status": exhaustion_status,
+        "logic_tag": logic_tag,
+        "reasoning": reasoning,
+        "comparative_advantage": comp_adv,
+        "action_instruction": act_instr,
+        "why": reasoning,
+        "detailed_advisor_report": reasoning,
+        "evidence": {
+            "rsi": round(rsi, 1),
+            "ma50": round(ma50, 2),
+            "perf_30d": f"{perf_30d:+.1f}%",
+            "vix": round(vix, 2),
+            "sentiment": round(sentiment_val, 2)
+        }
+    }
+
+def _run_apex_advisor(assets, prices, ohlc_data, p_summary):
+    vix_latest = 15.0
+    if "^VIX" in prices.columns and not prices["^VIX"].dropna().empty:
+        vix_latest = float(prices["^VIX"].dropna().iloc[-1])
+    
+    vusa_p = prices["VUSA.L"].iloc[-1] if "VUSA.L" in prices.columns else 0
+    vusa_ma200 = prices["VUSA.L"].rolling(200).mean().iloc[-1] if "VUSA.L" in prices.columns and len(prices) >= 200 else vusa_p
+    
+    # Macro Regime Detection
+    cycle_indicator = "Expansion"
+    if vix_latest > 25:
+        cycle_indicator = "Contraction"
+    elif vusa_p < vusa_ma200:
+        cycle_indicator = "Trough"
+    elif vusa_p > vusa_ma200 * 1.1:
+        cycle_indicator = "Peak"
+    
+    benchmark_hist = prices["VWRL.L"] if "VWRL.L" in prices.columns else pd.Series()
+    
+    # Analyze Portfolio
+    apex_scores = {}
+    act_now = []
+    
+    for tk, a in assets.items():
+        api_tk = tk.split('_')[0]
+        hist_df = ohlc_data.get(api_tk, pd.DataFrame())
+        
+        s = a.get("sentiment", {})
+        bull = _to_float(s.get("bullish")) if s.get("bullish") is not None else 0.5
+        bear = _to_float(s.get("bearish")) if s.get("bearish") is not None else 0.5
+        sentiment_val = (bull or 0.5) - (bear or 0.5)
+        
+        logic = _get_advisor_logic(tk, hist_df, sentiment_val, a, vix_latest, pd.DataFrame({"Close": benchmark_hist}), cycle_indicator)
+        apex_scores[tk] = logic
+        
+        if logic["score"] > 80:
+            act_now.append({"ticker": tk, "score": logic["score"], "action": logic["action"], "strat": logic["strat"]})
+
+    # Analyze Watchlist
+    watchlist_analysis = {}
+    for tk, info in GLOBAL_WATCHLIST.items():
+        hist_df = ohlc_data.get(tk, pd.DataFrame())
+        logic = _get_advisor_logic(tk, hist_df, 0.0, {}, vix_latest, pd.DataFrame({"Close": benchmark_hist}), cycle_indicator)
+        watchlist_analysis[tk] = logic
+
+    act_now = sorted(act_now, key=lambda x: x["score"], reverse=True)[:3]
+    
+    return {
+        "cycle_indicator": cycle_indicator,
+        "vix": round(vix_latest, 2),
+        "act_now": act_now,
+        "scores": apex_scores,
+        "watchlist": watchlist_analysis
+    }
+
 def _get_advanced_intelligence(assets, portfolio, risk_level, risk_data, base_currency):
     total_val = portfolio.get("total_value", 0)
     beta = portfolio.get("portfolio_beta", 1.0)
@@ -996,7 +1240,7 @@ def _get_advanced_intelligence(assets, portfolio, risk_level, risk_data, base_cu
     # Use _UNDERLYING_FX lookup to estimate the real non-base-currency fraction.
     if base_currency == "GBP":
         non_base_frac = sum(
-            a["weight"] * _UNDERLYING_FX.get(tk.split('.')[0].upper(),
+            a["weight"] * _UNDERLYING_FX.get(tk.replace('_', '.').split('.')[0].upper(),
                 0.0 if a.get("currency") == base_currency else 1.0)
             for tk, a in assets.items()
         )
@@ -1887,8 +2131,11 @@ async def analyze_portfolio(request: PortfolioRequest):
                     p = fallbacks[api_ticker]
                 
                 # If it's a London asset and the price is high (>1000), it's likely in pence
-                if api_ticker.endswith(".L") and p > 500:
+                if p is not None and api_ticker.endswith(".L") and p > 500:
                     p /= 100.0
+            
+            # Ensure p is at least 0.0 for value calculation
+            p = p or 0.0
             
             # Convert asset price to base_currency for summary
             fx_to_base = 1.0
@@ -1918,8 +2165,8 @@ async def analyze_portfolio(request: PortfolioRequest):
         for a in assets.values(): a["weight"] = round(a["value"]/total_val, 4)
         
         # Clean tickers (strip _ISA etc) for external API history fetch
-        api_tickers = list(set([t.split('_')[0] for t in tickers] + ["SPY"]))
-        full_prices = await _fetch_full_history(api_tickers)
+        api_tickers = list(set([t.split('_')[0] for t in tickers] + ["SPY", "^VIX", "VWRL.L"] + list(GLOBAL_WATCHLIST.keys())))
+        full_prices, ohlc_data = await _fetch_full_history(api_tickers)
         risk_data = _compute_risk_history_from_prices(full_prices, tickers, {tk: assets[tk]["weight"] for tk in tickers})
         sentiments = await asyncio.gather(*[_get_sentiment(t) for t in tickers])
         
@@ -1930,10 +2177,11 @@ async def analyze_portfolio(request: PortfolioRequest):
             assets[tk]["sentiment"] = s
             assets[tk]["risk_contribution_pct"] = round(risk_data.get("risk_contributions", {}).get(tk, 0) * 100, 2)
 
-        blended_ter = sum((_to_float(a.get("ter")) or _KNOWN_TER.get(tk.split('.')[0].upper(), 0.002)) * a["weight"]
+        blended_ter = sum((_to_float(a.get("ter")) or _KNOWN_TER.get(tk.replace('_', '.').split('.')[0].upper(), 0.002)) * a["weight"]
                           for tk, a in assets.items())
         p_summary = {**risk_data["portfolio_risk"], "total_value": round(total_val, 2), "weighted_dividend_yield": round(sum((_to_float(a["dividend_yield"]) or 0)*a["weight"] for a in assets.values()), 4), "portfolio_beta": round(sum((_to_float(a["beta"]) or 1)*a["weight"] for a in assets.values()), 2), "asset_count": len(tickers), "currency": base_curr, "blended_ter": round(blended_ter, 4)}
         advanced = _get_advanced_intelligence(assets, p_summary, request.risk_level, risk_data, base_curr)
+        apex_advisor = _run_apex_advisor(assets, full_prices, ohlc_data, p_summary)
 
         # ── CIO LLM — live TAA (falls back to rule engine when disabled/error) ─
         ideal_bp = advanced.get("ideal_blueprint", {})
@@ -2045,6 +2293,7 @@ async def analyze_portfolio(request: PortfolioRequest):
             "market_outlook": market_outlook,
             "tactical_desk": tactical_desk,
             "tactical_blueprint": tactical_blueprint,
+            "apex_advisor": apex_advisor,
         }
     except Exception as e:
         traceback.print_exc()

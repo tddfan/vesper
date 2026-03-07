@@ -182,6 +182,55 @@
     </div>
   </div>
 
+  <!-- Advisor Tooltip Modal -->
+  <div id="advisor-modal" class="hidden fixed z-[100] left-0 top-0 w-full h-full bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="modal-content !max-w-2xl w-full border-fuchsia-500/50">
+      <div class="flex justify-between items-center mb-6">
+        <div class="flex items-center gap-3">
+          <span id="advisor-modal-icon" class="text-3xl">🧠</span>
+          <div>
+            <h2 id="advisor-modal-title" class="text-xl font-black text-fuchsia-400 uppercase tracking-tight">Strategy Analysis</h2>
+            <p id="advisor-modal-subtitle" class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Technical Breakdown & Advice</p>
+          </div>
+        </div>
+        <button onclick="document.getElementById('advisor-modal').classList.add('hidden')" class="text-slate-500 hover:text-white text-2xl">×</button>
+      </div>
+      
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="space-y-4">
+          <div class="p-4 bg-slate-900/50 rounded-xl border border-slate-800">
+            <p class="text-[10px] font-black text-slate-500 uppercase mb-2">The 'Why'</p>
+            <p id="advisor-modal-why" class="text-sm text-slate-200 font-medium leading-relaxed italic"></p>
+          </div>
+          <div class="p-4 bg-fuchsia-950/20 rounded-xl border border-fuchsia-500/30">
+            <p class="text-[10px] font-black text-fuchsia-400 uppercase mb-2">Recommended Action</p>
+            <p id="advisor-modal-action" class="text-lg font-black text-white uppercase tracking-tighter"></p>
+          </div>
+        </div>
+        
+        <div class="space-y-4">
+          <div class="p-4 bg-slate-900/50 rounded-xl border border-slate-800">
+            <p class="text-[10px] font-black text-slate-500 uppercase mb-3">Evidence Matrix</p>
+            <div id="advisor-modal-evidence" class="grid grid-cols-2 gap-3"></div>
+          </div>
+          <div id="advisor-modal-suggestion-box" class="p-4 bg-indigo-950/20 rounded-xl border border-indigo-500/30">
+            <p class="text-[10px] font-black text-indigo-400 uppercase mb-2">Strategic Pivot</p>
+            <p id="advisor-modal-suggestion" class="text-xs text-slate-300 font-bold"></p>
+          </div>
+        </div>
+      </div>
+      
+      <div class="mt-6 p-4 bg-fuchsia-950/10 rounded-xl border border-fuchsia-500/20">
+        <p class="text-[10px] font-black text-fuchsia-400 uppercase mb-2">Executive Reasoning Report</p>
+        <p id="advisor-modal-report" class="text-sm text-slate-300 leading-relaxed font-medium"></p>
+      </div>
+      
+      <div class="mt-8 pt-6 border-t border-slate-800 flex justify-end">
+        <button onclick="document.getElementById('advisor-modal').classList.add('hidden')" class="px-6 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-black uppercase rounded-lg transition-all">Understood</button>
+      </div>
+    </div>
+  </div>
+
   <header class="sticky top-0 z-20 border-b border-slate-800/70 backdrop-blur bg-slate-950/80 px-4 sm:px-6 py-3 sm:py-4">
     <div class="max-w-6xl mx-auto flex items-center justify-between">
       <div class="flex items-center gap-3 cursor-pointer" onclick="location.reload()">
@@ -378,7 +427,7 @@
         <div style="min-width:660px">
 
         <!-- Column header row (sortable) -->
-        <div class="grid grid-cols-[1fr_75px_58px_78px_68px_72px_84px_90px_28px] px-2 pb-1 border-b border-slate-800 mb-1">
+        <div class="grid grid-cols-[1fr_75px_58px_78px_68px_72px_84px_90px_120px_28px] px-2 pb-1 border-b border-slate-800 mb-1">
           <span onclick="sortRows('ticker')" class="text-[10px] font-black text-slate-500 uppercase tracking-widest cursor-pointer hover:text-slate-300 select-none flex items-center gap-1">Ticker <span id="sort-ind-ticker" class="text-slate-700 text-[9px]">↕</span></span>
           <span onclick="sortRows('qty')" class="text-[10px] font-black text-slate-500 uppercase tracking-widest text-right pr-2 cursor-pointer hover:text-slate-300 select-none flex items-center justify-end gap-1">Qty <span id="sort-ind-qty" class="text-slate-700 text-[9px]">↕</span></span>
           <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1">Wrap</span>
@@ -387,6 +436,7 @@
           <span onclick="sortRows('chg-val')" class="text-[10px] font-black text-slate-600 uppercase tracking-widest text-right pr-2 cursor-pointer hover:text-slate-300 select-none flex items-center justify-end gap-1">Chg£ <span id="sort-ind-chg-val" class="text-slate-700 text-[9px]">↕</span></span>
           <span onclick="sortRows('day-pnl')" class="text-[10px] font-black text-slate-600 uppercase tracking-widest text-right pr-2 cursor-pointer hover:text-slate-300 select-none flex items-center justify-end gap-1">Day P&amp;L <span id="sort-ind-day-pnl" class="text-slate-700 text-[9px]">↕</span></span>
           <span onclick="sortRows('total')" class="text-[10px] font-black text-slate-600 uppercase tracking-widest text-right pr-2 cursor-pointer hover:text-slate-300 select-none flex items-center justify-end gap-1">Total <span id="sort-ind-total" class="text-slate-700 text-[9px]">↕</span></span>
+          <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Advisor</span>
           <span></span>
         </div>
 
@@ -394,13 +444,13 @@
         <div id="ticker-rows"></div>
 
         <!-- Totals row — shown after prices are loaded -->
-        <div id="totals-row" class="hidden grid grid-cols-[1fr_75px_58px_78px_68px_72px_84px_90px_28px] px-2 py-1.5 mb-2 border-t-2 border-slate-700/60 bg-slate-900/30">
+        <div id="totals-row" class="hidden grid grid-cols-[1fr_75px_58px_78px_68px_72px_84px_90px_120px_28px] px-2 py-1.5 mb-2 border-t-2 border-slate-700/60 bg-slate-900/30">
           <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Portfolio</span>
           <span></span><span></span><span></span><span></span>
           <span class="text-[10px] font-black font-mono text-right pr-2 text-slate-500">—</span>
           <span id="totals-day-pnl" class="text-[10px] font-black font-mono text-right pr-2 text-slate-500">—</span>
           <span id="totals-total"   class="text-[10px] font-black font-mono text-right pr-2 text-slate-400">—</span>
-          <span></span>
+          <span></span><span></span>
         </div>
         </div></div><!-- /min-width inner · /overflow-x-auto outer -->
 
@@ -499,6 +549,25 @@
           <div class="glass p-8 border-l-4 border-indigo-500"><p class="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-6">Strategic Blueprint</p><div id="blueprint-content" class="space-y-6"></div></div>
           <div class="glass p-8 border-l-4 border-emerald-500"><p class="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-6">Suggested Execution Path</p><div id="blueprint-actions" class="space-y-4"></div></div>
         </div>
+      </section>
+
+      <!-- High-Conviction Execution Report Section -->
+      <section id="quant-execution-report" class="border-t-2 border-emerald-500/30 pt-10 mt-10">
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <h2 class="text-3xl font-black mb-2 text-transparent bg-clip-text bg-gradient-to-r from-white to-emerald-400 uppercase tracking-tight">Institutional Quant Execution Report</h2>
+            <p class="text-slate-500 text-sm italic">High-conviction roadmap derived from cross-factor regime analysis.</p>
+          </div>
+          <span class="text-[8px] font-black px-2 py-0.5 rounded bg-emerald-950/50 text-emerald-400 border border-emerald-900/50 uppercase">Top Tier Data</span>
+        </div>
+        <div id="quant-execution-content" class="space-y-8"></div>
+      </section>
+
+      <!-- Apex Advisor Section -->
+      <section id="apex-advisor-section" class="border-t-2 border-fuchsia-500/30 pt-10">
+        <h2 class="text-3xl font-black mb-2 text-transparent bg-clip-text bg-gradient-to-r from-white to-fuchsia-400 uppercase tracking-tight">Senior Portfolio Quant Advisor</h2>
+        <p class="text-slate-500 text-sm mb-6 italic">High-Conviction Seven-Strategy Matrix & Macro Regime Intelligence.</p>
+        <div id="apex-advisor-content" class="grid grid-cols-1 lg:grid-cols-3 gap-6"></div>
       </section>
 
       <!-- Scenario Analysis — Historical Stress Test -->
@@ -621,6 +690,89 @@
       </section>
 
     </section>
+
+      </section>
+
+      <!-- Methodology Section -->
+      <section id="methodology-section" class="border-t-2 border-slate-800/50 pt-10 mt-20">
+        <h2 class="text-2xl font-black mb-6 text-slate-400 uppercase tracking-tight">System Methodology</h2>
+        
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
+          <div>
+            <h3 class="text-xs font-black text-indigo-400 uppercase tracking-[0.2em] mb-4">I. The Macro Cycle</h3>
+            <div class="space-y-4">
+              <div class="p-4 bg-slate-900/30 rounded-xl border border-slate-800">
+                <p class="text-xs font-black text-slate-200 uppercase mb-1">Expansion</p>
+                <p class="text-[10px] text-slate-500 leading-relaxed">Markets trending up, low volatility. Primary focus on <span class="text-indigo-400 font-bold">Momentum</span> strategies to capture the ride.</p>
+              </div>
+              <div class="p-4 bg-slate-900/30 rounded-xl border border-slate-800">
+                <p class="text-xs font-black text-slate-200 uppercase mb-1">Peak</p>
+                <p class="text-[10px] text-slate-500 leading-relaxed">High optimism, prices overextended. Primary focus on <span class="text-orange-400 font-bold">Scalping / Profit Taking</span> to lock in gains.</p>
+              </div>
+              <div class="p-4 bg-fuchsia-950/10 rounded-xl border border-fuchsia-900/30">
+                <p class="text-xs font-black text-fuchsia-400 uppercase mb-1">Contraction (High Fear: VIX > 25)</p>
+                <p class="text-[10px] text-slate-500 leading-relaxed">High fear regime detected. Secondary strategies like <span class="text-fuchsia-400 font-bold">Volatility Defense & Mean Reversion</span> are prioritized to protect capital while harvesting snap-back alpha.</p>
+              </div>
+              <div class="p-4 bg-slate-900/30 rounded-xl border border-slate-800">
+                <p class="text-xs font-black text-slate-200 uppercase mb-1">Trough</p>
+                <p class="text-[10px] text-slate-500 leading-relaxed">Maximum pessimism. Primary focus on <span class="text-emerald-400 font-bold">Aggressive Accumulation</span> of high-quality laggards.</p>
+              </div>
+            </div>
+          </div>
+          
+          <div>
+            <h3 class="text-xs font-black text-indigo-400 uppercase tracking-[0.2em] mb-4">II. The 7-Strategy Dictionary</h3>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-[10px]">
+                <thead>
+                  <tr class="text-slate-600 border-b border-slate-800">
+                    <th class="pb-2 font-black uppercase">Strategy</th>
+                    <th class="pb-2 font-black uppercase">Layman's Explanation</th>
+                    <th class="pb-2 font-black uppercase">Signal Evidence</th>
+                  </tr>
+                </thead>
+                <tbody class="text-slate-400 divide-y divide-slate-800/50">
+                  <tr>
+                    <td class="py-3 font-black text-slate-200">Momentum</td>
+                    <td class="py-3 italic">"The Trend is your Friend."</td>
+                    <td class="py-3">Price consistently staying above its 50-day average.</td>
+                  </tr>
+                  <tr>
+                    <td class="py-3 font-black text-slate-200">Mean Reversion</td>
+                    <td class="py-3 italic">"Buying a deep dip for a snap-back."</td>
+                    <td class="py-3">Triggered when a price is "stretched" too far down; RSI < 35 or 30-day perf < -10%.</td>
+                  </tr>
+                  <tr>
+                    <td class="py-3 font-black text-slate-200">Pairs Trading</td>
+                    <td class="py-3 italic">"The Relative Value play."</td>
+                    <td class="py-3">If Tech is up but AI is down, we buy the AI "lagger" expecting it to catch up.</td>
+                  </tr>
+                  <tr>
+                    <td class="py-3 font-black text-slate-200">Volatility</td>
+                    <td class="py-3 italic">"Insurance during Storms."</td>
+                    <td class="py-3">Triggered when the VIX (Fear Gauge) spikes. It moves money into Gold/Cash.</td>
+                  </tr>
+                  <tr>
+                    <td class="py-3 font-black text-slate-200">Scalping</td>
+                    <td class="py-3 italic">"Short-term volatility trading."</td>
+                    <td class="py-3">Using high daily price swings (ATR) to lock in 1-2% gains within hours.</td>
+                  </tr>
+                  <tr>
+                    <td class="py-3 font-black text-slate-200">Arbitrage</td>
+                    <td class="py-3 italic">"The Market Mismatch."</td>
+                    <td class="py-3">Spotting when a UK ETF is priced cheaper than the actual stocks it holds.</td>
+                  </tr>
+                  <tr>
+                    <td class="py-3 font-black text-slate-200">Hedging</td>
+                    <td class="py-3 italic">"Betting against the fall."</td>
+                    <td class="py-3">Using Inverse ETFs or defensive assets to protect capital while sentiment is cold.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
 
     </div><!-- /intelligence-view -->
   </main>
@@ -939,7 +1091,7 @@
 
     function addRow(t = '', q = '', acctType = 'ISA') {
       rowIndex++; const id = `row-${rowIndex}`, div = document.createElement('div');
-      div.id = id; div.className = 'grid grid-cols-[1fr_75px_58px_78px_68px_72px_84px_90px_28px] items-center border-b border-slate-800/40 group hover:bg-slate-900/20 transition-colors';
+      div.id = id; div.className = 'grid grid-cols-[1fr_75px_58px_78px_68px_72px_84px_90px_120px_28px] items-center border-b border-slate-800/40 group hover:bg-slate-900/20 transition-colors';
       div.innerHTML = `
         <div class="ticker-ac-wrap relative w-full min-w-0">
           <input type="text" value="${t}" placeholder="e.g. EQQQ.L" class="ticker-input bg-transparent px-2 py-1.5 text-sm font-bold uppercase focus:outline-none focus:bg-slate-900/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 rounded transition-colors w-full" autocomplete="off">
@@ -952,6 +1104,9 @@
         <span data-col="chg-val" data-value="0" class="text-[10px] font-black font-mono text-right pr-2 text-slate-700 select-none">—</span>
         <span data-col="day-pnl" data-value="0" class="text-[10px] font-black font-mono text-right pr-2 text-slate-700 select-none">—</span>
         <span data-col="total"   data-value="0" class="text-[10px] font-black font-mono text-right pr-2 text-slate-700 select-none">—</span>
+        <div data-col="advisor" class="flex justify-center items-center">
+          <span class="text-[8px] font-black px-1.5 py-0.5 rounded bg-slate-800 text-slate-600 border border-slate-700 uppercase">AWAITING</span>
+        </div>
         <button onclick="document.getElementById('${id}').remove()" class="text-slate-800 hover:text-red-500 font-bold text-base transition-colors text-center opacity-0 group-hover:opacity-100">×</button>`;
       const sel = div.querySelector('.account-type-select');
       sel.value = acctType;
@@ -1237,6 +1392,63 @@
       renderAssetCards(a, ev, r.asset_risk, ai, p);
       renderXRayCharts(a);
       renderBlueprint(ai.ideal_blueprint, a, tb);
+      if (data.apex_advisor) {
+        renderApexAdvisor(data.apex_advisor);
+        renderQuantExecutionReport(data.apex_advisor);
+      }
+      
+      // Populate Advisor Intelligence badges in the builder rows
+      if (data.apex_advisor && data.apex_advisor.scores) {
+        Object.entries(data.apex_advisor.scores).forEach(([tk, logic]) => {
+          // Find matching row(s) in the builder
+          document.querySelectorAll('#ticker-rows > div').forEach(row => {
+            const tInput = row.querySelector('.ticker-input');
+            const acctSel = row.querySelector('.account-type-select');
+            const rowKey = `${tInput.value.trim().toUpperCase()}_${acctSel.value}`;
+            
+            if (rowKey === tk) {
+              const advisorCell = row.querySelector('[data-col="advisor"]');
+              if (advisorCell) {
+                const score = logic.score;
+                const strat = logic.strat;
+                const act = logic.action;
+                const why = logic.why;
+                const prob = logic.probability;
+                const report = logic.detailed_advisor_report;
+                const ev = logic.evidence;
+                const evidence = JSON.stringify(ev).replace(/"/g, '&quot;');
+                
+                let badgeClr = 'bg-slate-800 text-slate-300 border-slate-600';
+                let actionClr = 'text-slate-400';
+                if (score > 80) {
+                  badgeClr = 'bg-fuchsia-600 text-white border-fuchsia-400 shadow-[0_0_8px_rgba(192,38,211,0.4)]';
+                  actionClr = 'text-fuchsia-400';
+                } else if (score > 60) {
+                  badgeClr = 'bg-indigo-600 text-white border-indigo-400';
+                  actionClr = 'text-indigo-400';
+                }
+                
+                advisorCell.innerHTML = `
+                  <div class="flex flex-col items-center gap-1.5 py-1">
+                    <span onclick="showAdvisorTooltip('${tk}', '${strat}', ${score}, '${act}', '${why.replace(/'/g, "\\'")}', '${evidence}', '${report.replace(/'/g, "\\'")}')" 
+                          class="text-[9px] font-black px-2 py-0.5 rounded ${badgeClr} border uppercase cursor-help hover:scale-105 transition-all select-none">
+                      ${strat} ${score}
+                    </span>
+                    <div class="flex flex-col items-center leading-tight">
+                      <span class="text-[8px] font-black ${actionClr} uppercase tracking-tighter">${act}</span>
+                      <span class="text-[7px] text-slate-400 font-bold uppercase mt-0.5">Conviction: ${prob}</span>
+                      <div class="flex gap-1.5 mt-0.5">
+                        <span class="text-[6px] text-slate-500 font-mono">RSI:${ev.rsi}</span>
+                        <span class="text-[6px] text-slate-500 font-mono">ATR:${ev.atr_pct}%</span>
+                        <span class="text-[6px] text-slate-500 font-mono">30D:${ev.perf_30d}</span>
+                      </div>
+                    </div>
+                  </div>`;
+              }
+            }
+          });
+        });
+      }
       
       document.getElementById('results-section').classList.remove('hidden');
       document.getElementById('sub-nav').classList.remove('hidden'); updateStickyTops();
@@ -2032,6 +2244,218 @@
         : '';
 
       document.getElementById('blueprint-actions').innerHTML = actionCards + exportBtn;
+    }
+
+    function showAdvisorTooltip(tk, strat, score, action, why, evidenceStr, report) {
+      const evidence = JSON.parse(evidenceStr);
+      document.getElementById('advisor-modal-title').textContent = `${tk} Analysis`;
+      document.getElementById('advisor-modal-action').textContent = action;
+      document.getElementById('advisor-modal-why').textContent = why;
+      document.getElementById('advisor-modal-report').textContent = report;
+      
+      const evidenceEl = document.getElementById('advisor-modal-evidence');
+      evidenceEl.innerHTML = Object.entries(evidence).map(([k, v]) => `
+        <div class="bg-slate-950/50 p-2 rounded-lg border border-slate-800/50">
+          <p class="text-[7px] text-slate-600 font-black uppercase mb-0.5">${k.replace('_', ' ')}</p>
+          <p class="text-[10px] font-black text-slate-300 font-mono">${v}</p>
+        </div>
+      `).join('');
+      
+      // Pivot suggestion logic
+      const suggestBox = document.getElementById('advisor-modal-suggestion-box');
+      const suggestEl = document.getElementById('advisor-modal-suggestion');
+      
+      if (score < 60) {
+        suggestBox.classList.remove('hidden');
+        if (strat === 'Volatility') suggestEl.textContent = "Current position is weak in this regime. Consider rotating to VIXL.L (VIX Futures) for volatility-linked gains.";
+        else if (strat === 'Mean Reversion') suggestEl.textContent = "Current position lacks snap-back momentum. I500.L (S&P 500 Swap) offers a cleaner play on mean reversion.";
+        else suggestEl.textContent = "Strategy score is low. Rotate to IGLN.L (Physical Gold) to preserve capital during high-VIX Contraction.";
+      } else {
+        suggestBox.classList.add('hidden');
+      }
+      
+      document.getElementById('advisor-modal').classList.remove('hidden');
+    }
+
+    function renderQuantExecutionReport(advisorData) {
+      if (!advisorData) return;
+      const { cycle_indicator, vix, act_now, scores } = advisorData;
+      
+      // 1. Macro Check
+      const priorityStrategy = cycle_indicator === 'Contraction' ? 'Volatility Defense & Mean Reversion' : 'Momentum & Trend Following';
+      const regimeHtml = `
+        <div class="glass p-6 border-l-4 border-emerald-500">
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-full bg-emerald-950/50 border border-emerald-500/30 flex items-center justify-center text-xl">🛡️</div>
+            <div>
+              <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Regime Check</p>
+              <p class="text-lg font-black text-white uppercase">${cycle_indicator} (VIX: ${vix})</p>
+              <p class="text-xs font-bold text-emerald-400 mt-1">Priority Strategy: ${priorityStrategy}</p>
+            </div>
+          </div>
+        </div>
+      `;
+
+      // 2. Unified Matrix Table
+      const rows = Object.entries(scores).map(([tk, logic]) => {
+        const ev = logic.evidence;
+        const sentClr = ev.sentiment > 0.3 ? 'text-emerald-400' : ev.sentiment < -0.3 ? 'text-red-400' : 'text-slate-400';
+        const exStatus = logic.exhaustion_status || 'Neutral';
+        const exClr = exStatus === 'Bull Trap' || exStatus === 'Blow-off Top' ? 'text-red-500' : exStatus === 'Deep Exhaustion' ? 'text-emerald-500' : 'text-slate-500';
+        
+        return `
+          <tr class="border-b border-slate-800/50 hover:bg-slate-900/20 transition-colors text-[11px]">
+            <td class="py-3 font-mono font-bold text-slate-200">${tk.split('_')[0]}</td>
+            <td class="py-3"><span class="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-[9px] font-black border border-slate-700 uppercase">${logic.action}</span></td>
+            <td class="py-3 text-right font-mono text-slate-400">${ev.rsi}</td>
+            <td class="py-3 text-right font-mono ${sentClr}">${ev.sentiment > 0 ? '+' : ''}${ev.sentiment}</td>
+            <td class="py-3 text-right"><span class="font-black text-[9px] uppercase ${exClr}">${exStatus}</span></td>
+            <td class="py-3 text-right font-black text-emerald-500 uppercase">${logic.logic_tag || 'Standard'}</td>
+          </tr>
+        `;
+      }).join('');
+
+      const tableHtml = `
+        <div class="glass overflow-hidden border-t-2 border-slate-800">
+          <p class="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-800">Unified Execution Matrix</p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead>
+                <tr class="text-slate-600 bg-slate-900/40">
+                  <th class="p-4 font-black uppercase">Asset</th>
+                  <th class="p-4 font-black uppercase">Signal</th>
+                  <th class="p-4 font-black uppercase text-right">RSI</th>
+                  <th class="p-4 font-black uppercase text-right">Sentiment</th>
+                  <th class="p-4 font-black uppercase text-right">Exhaustion</th>
+                  <th class="p-4 font-black uppercase text-right text-emerald-400">Logic</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-800/30">
+                ${rows}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+
+      // 3. Roadmap (Act Now - 72 Hours)
+      const top3 = act_now.slice(0, 3);
+      const roadmapHtml = `
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div class="p-6 bg-indigo-950/20 rounded-2xl border border-indigo-500/30 relative overflow-hidden">
+            <span class="absolute -right-4 -bottom-4 text-6xl opacity-10 font-black">01</span>
+            <p class="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-2">Act Now (72h)</p>
+            <p class="text-sm font-black text-white uppercase mb-2">${top3[0]?.action || 'Preserve Capital'}</p>
+            <p class="text-[10px] text-slate-400 leading-relaxed">${top3[0] ? scores[top3[0].ticker].detailed_advisor_report : 'Maintain 20% cash buffer.'}</p>
+          </div>
+          <div class="p-6 bg-indigo-950/20 rounded-2xl border border-indigo-500/30 relative overflow-hidden">
+            <span class="absolute -right-4 -bottom-4 text-6xl opacity-10 font-black">02</span>
+            <p class="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-2">Act Now (72h)</p>
+            <p class="text-sm font-black text-white uppercase mb-2">${top3[1]?.action || 'Benchmark Check'}</p>
+            <p class="text-[10px] text-slate-400 leading-relaxed">${top3[1] ? scores[top3[1].ticker].detailed_advisor_report : 'Monitor global benchmark decoupling.'}</p>
+          </div>
+          <div class="p-6 bg-indigo-950/20 rounded-2xl border border-indigo-500/30 relative overflow-hidden">
+            <span class="absolute -right-4 -bottom-4 text-6xl opacity-10 font-black">03</span>
+            <p class="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-2">Act Now (72h)</p>
+            <p class="text-sm font-black text-white uppercase mb-2">${top3[2]?.action || 'Neutralize Beta'}</p>
+            <p class="text-[10px] text-slate-400 leading-relaxed">${top3[2] ? scores[top3[2].ticker].detailed_advisor_report : 'Calibrate inverse trackers to beta.'}</p>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('quant-execution-content').innerHTML = regimeHtml + tableHtml + roadmapHtml;
+    }
+
+    function renderApexAdvisor(advisorData) {
+      if (!advisorData) return;
+      
+      const { cycle_indicator, vix, act_now, scores, watchlist } = advisorData;
+      
+      const cycleColors = {
+        "Contraction": "text-red-500",
+        "Trough": "text-orange-500",
+        "Expansion": "text-emerald-500",
+        "Peak": "text-amber-500"
+      };
+      const cycleClr = cycleColors[cycle_indicator] || "text-slate-300";
+      
+      // Cycle Indicator UI
+      let cycleHtml = `
+        <div class="glass p-6 border-t-2 border-fuchsia-500/40 hover:bg-slate-900/20 transition-colors h-full">
+          <p class="text-xs font-bold text-slate-500 uppercase mb-1">Macro Regime Cycle</p>
+          <p class="text-[10px] text-slate-600 mb-4">Based on SPY 200MA and ^VIX (${vix})</p>
+          <div class="flex flex-col items-center justify-center mt-6">
+            <div class="text-3xl font-black ${cycleClr} uppercase tracking-widest animate-pulse">${cycle_indicator}</div>
+            <p class="text-[10px] font-bold text-slate-500 mt-2 uppercase tracking-widest">Current Status: High Fear (VIX > 25)</p>
+            <div class="mt-6 p-3 bg-slate-950/50 rounded-lg border border-slate-800 text-[10px] text-slate-400 leading-relaxed italic">
+              Strategy Focus: Volatility Defense & Mean Reversion. Prioritizing capital preservation over momentum ride.
+            </div>
+          </div>
+        </div>
+      `;
+      
+      // Act Now List
+      let actNowCards = act_now.map(item => {
+        const fullLogic = scores[item.ticker];
+        return `
+        <div class="p-4 bg-fuchsia-950/10 rounded-xl border border-fuchsia-500/20 mb-4 hover:border-fuchsia-500/40 transition-all">
+          <div class="flex justify-between items-start mb-2">
+            <div>
+              <span class="text-sm font-black text-slate-200">${item.ticker}</span>
+              <p class="text-[9px] text-slate-500 uppercase font-bold mt-0.5">${item.strat} · <span class="text-emerald-400">${fullLogic.probability} Prob.</span></p>
+            </div>
+            <span class="text-[10px] font-black text-fuchsia-400 bg-fuchsia-900/20 px-2 py-1 rounded border border-fuchsia-900/50 uppercase">${fullLogic.score}/100</span>
+          </div>
+          <p class="text-[10px] text-slate-400 leading-relaxed mb-3">${fullLogic.reasoning}</p>
+          <div class="p-2 bg-fuchsia-500/10 rounded border border-fuchsia-500/30 text-center">
+            <span class="text-[10px] font-black text-white uppercase">${fullLogic.action_instruction}</span>
+          </div>
+        </div>`;
+      }).join('');
+      
+      if (!act_now.length) {
+        actNowCards = '<p class="text-xs text-slate-500 italic mt-4 text-center">No high-conviction signals at this time.</p>';
+      }
+      
+      let actNowHtml = `
+        <div class="glass p-6 border-l-4 border-fuchsia-500 h-full">
+          <p class="text-xs font-bold text-slate-500 uppercase mb-1">"Act Now" Opportunities</p>
+          <p class="text-[10px] text-slate-600 mb-4">High Conviction Trades Triggered</p>
+          <div class="mt-4">
+            ${actNowCards}
+          </div>
+        </div>
+      `;
+      
+      // Global Watchlist Suggestions
+      const highWatchlist = Object.entries(watchlist)
+        .filter(([tk, data]) => data.score > 70)
+        .sort((a, b) => b[1].score - a[1].score)
+        .slice(0, 3);
+        
+      let watchlistHtml = `
+        <div class="glass p-6 border-t-2 border-indigo-500/40 h-full">
+          <p class="text-xs font-bold text-slate-500 uppercase mb-1">External Suggestion Pivot</p>
+          <p class="text-[10px] text-slate-600 mb-4">Alpha generation beyond current holdings</p>
+          <div class="mt-4 space-y-4">
+            ${highWatchlist.map(([tk, data]) => `
+              <div class="p-3 bg-indigo-950/10 rounded-lg border border-indigo-500/20 hover:border-indigo-500/40 transition-all">
+                <div class="flex justify-between items-center mb-2">
+                  <p class="text-xs font-black text-slate-200">${tk}</p>
+                  <span class="text-[9px] font-black text-indigo-400">${data.probability} Prob.</span>
+                </div>
+                <p class="text-[9px] text-slate-500 leading-relaxed mb-2">${data.reasoning}</p>
+                <p class="text-[9px] text-indigo-300 font-bold mb-2 italic">Advantage: ${data.comparative_advantage}</p>
+                <div class="p-1.5 bg-indigo-500/10 rounded border border-indigo-500/30 text-center">
+                  <span class="text-[9px] font-black text-white uppercase">${data.action_instruction}</span>
+                </div>
+              </div>
+            `).join('') || '<p class="text-[10px] text-slate-700 italic">Scanning global markets...</p>'}
+          </div>
+        </div>
+      `;
+
+      document.getElementById('apex-advisor-content').innerHTML = cycleHtml + actNowHtml + watchlistHtml;
     }
 
     // ── Dividend Calendar ───────────────────────────────────────────────────
