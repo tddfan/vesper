@@ -1163,10 +1163,12 @@ def _get_advisor_logic(symbol: str, hist: pd.DataFrame, sentiment_val: float, a:
         "detailed_advisor_report": reasoning,
         "evidence": {
             "rsi": round(rsi, 1),
+            "atr_pct": round(atr_pct, 2),
             "ma50": round(ma50, 2),
             "perf_30d": f"{perf_30d:+.1f}%",
             "vix": round(vix, 2),
-            "sentiment": round(sentiment_val, 2)
+            "sentiment": round(sentiment_val, 2),
+            "exhaustion": exhaustion_status,
         }
     }
 

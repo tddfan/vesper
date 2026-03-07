@@ -1389,6 +1389,8 @@
       renderTacticalDesk(td || [], p.total_value);
       renderRiskOptimizer(recs || [], p.total_value);
       renderSentimentSummary(a);
+      // Store apex scores before rendering cards so action badges are available
+      window._lastApexScores = data.apex_advisor?.scores || {};
       renderAssetCards(a, ev, r.asset_risk, ai, p);
       renderXRayCharts(a);
       renderBlueprint(ai.ideal_blueprint, a, tb);
@@ -2029,6 +2031,8 @@
     }
 
     function renderAssetCards(a, ev, asset_risk, ai, p) {
+      // Pre-fetch apex advisor data for action badges
+      const apexScores = window._lastApexScores || {};
       document.getElementById('asset-cards').innerHTML = Object.entries(a).map(([tk, asset], i) => {
         const c = PALETTE[i % PALETTE.length], b = sentimentBadge(asset.sentiment?.label);
         const safety = ai.div_safety[tk] || 0;
@@ -2040,6 +2044,15 @@
         const betaV = parseFloat(asset.beta); const betaClr = isNaN(betaV) ? 'text-slate-500' : (betaV >= 0.8 && betaV <= 1.2) ? 'text-emerald-400' : betaV > 1.2 ? 'text-amber-400' : 'text-indigo-400';
         const betaHint = isNaN(betaV) ? 'N/A' : betaV > 1.2 ? 'Aggressive' : betaV < 0.8 ? 'Defensive' : 'Neutral';
         const evts = ev[tk] || {}, evtItems = Object.entries(evts).filter(([k,v]) => v).map(([k,v]) => `<div class="flex justify-between text-[9px] py-0.5 border-b border-slate-800/30 last:border-0"><span class="text-slate-500 font-black uppercase tracking-tighter">${k.replace(/_/g,' ')}</span><span class="text-slate-300 font-black font-mono">${v}</span></div>`).join('');
+        // Account type extraction from composite key
+        const displayTicker = tk.split('_')[0];
+        const acctType = tk.includes('_') ? tk.split('_').slice(1).join('_') : '';
+        const acctBadgeColors = { ISA: 'text-emerald-400 bg-emerald-950/30 border-emerald-800', GIA: 'text-amber-400 bg-amber-950/30 border-amber-800', SIPP: 'text-indigo-400 bg-indigo-950/30 border-indigo-800' };
+        const acctBadgeCls = acctBadgeColors[acctType] || '';
+        // Apex action badge
+        const apexLogic = apexScores[tk];
+        const actInstr = apexLogic?.action_instruction || '';
+        const actBadgeCls = actInstr.startsWith('BUY') ? 'text-emerald-400 bg-emerald-950/40 border-emerald-700' : actInstr.startsWith('HEDGE') || actInstr.startsWith('TRIM') ? 'text-red-400 bg-red-950/40 border-red-700' : 'text-slate-400 bg-slate-900/40 border-slate-700';
         const headlines = (asset.sentiment?.headlines || []).slice(0,5).map(h => `<li class="text-[9px] text-slate-500 leading-tight mb-2 flex gap-2 font-medium"><span>•</span><span class="line-clamp-2">${typeof h === 'object' ? h.title : h}</span></li>`).join('') || '<li class="text-[9px] text-slate-700 italic font-bold uppercase tracking-widest text-center py-2">No signals detected.</li>';
         const cardId = `card-details-${tk.replace(/\W/g,'_')}`;
         const _base = tk.split('.')[0].toUpperCase();
@@ -2048,7 +2061,12 @@
         return `<div class="glass p-5 border-t-2 transition-all hover:shadow-2xl" data-sector="${cardSector}" data-region="${cardRegion}" style="border-top-color: ${c}">
           <div class="flex justify-between mb-3">
             <div>
-              <div class="flex items-center gap-2 mb-1.5"><span class="text-[10px] font-black px-2 py-0.5 rounded shadow-sm" style="background:${c}22;color:${c}">${tk}</span><span class="text-[9px] font-black px-2 py-0.5 rounded border shadow-sm ${b.cls}">${b.text}</span></div>
+              <div class="flex items-center gap-2 mb-1.5 flex-wrap">
+                <span class="text-[10px] font-black px-2 py-0.5 rounded shadow-sm" style="background:${c}22;color:${c}">${displayTicker}</span>
+                ${acctType ? `<span class="text-[8px] font-black px-1.5 py-0.5 rounded border ${acctBadgeCls} uppercase">${acctType}</span>` : ''}
+                <span class="text-[9px] font-black px-2 py-0.5 rounded border shadow-sm ${b.cls}">${b.text}</span>
+                ${actInstr ? `<span class="text-[8px] font-black px-2 py-0.5 rounded border ${actBadgeCls} uppercase whitespace-nowrap">${actInstr}</span>` : ''}
+              </div>
               <div class="font-bold text-sm text-slate-200 line-clamp-2 leading-tight">${asset.name}</div>
               <p class="text-[9px] text-slate-600 font-black uppercase mt-0.5">${asset.sector !== 'N/A' ? asset.sector : ''} · ${asset.currency}</p>
             </div>
@@ -2056,16 +2074,6 @@
               <div class="text-lg font-black tnum text-slate-100">${fmt(asset.price, 'currency', asset.currency)}</div>
               <p class="text-[8px] font-black ${safetyClr} uppercase tracking-tighter mt-0.5">Safety ${safety}/100</p>
               <p class="text-[8px] ${safetyClr} font-bold">${safetyHint}</p>
-            </div>
-          </div>
-          <div class="grid grid-cols-2 gap-1.5 text-xs mb-2">
-            <div class="bg-slate-900/50 p-2 rounded border border-slate-800">
-              <p class="text-slate-600 text-[8px] font-black uppercase">Qty / Value</p>
-              <p class="text-[10px] font-black text-slate-200">${asset.quantity} · ${fmt(asset.value, 'currency', p.currency)}</p>
-            </div>
-            <div class="bg-slate-900/50 p-2 rounded border border-slate-800">
-              <p class="text-slate-600 text-[8px] font-black uppercase">Risk Contrib</p>
-              <p class="text-[10px] font-black text-slate-200">${asset.risk_contribution_pct}% of vol</p>
             </div>
           </div>
           <button onclick="const d=document.getElementById('${cardId}');const open=!d.classList.contains('hidden');d.classList.toggle('hidden');this.innerHTML=open?'▼ <span>Show Details</span>':'▲ <span>Hide Details</span>'" class="w-full flex items-center justify-center gap-1 py-1.5 text-[8px] font-black uppercase tracking-widest text-slate-600 hover:text-indigo-400 border border-slate-800 hover:border-indigo-500/40 rounded-lg transition-all mb-1">▼ <span>Show Details</span></button>
@@ -2299,18 +2307,32 @@
       // 2. Unified Matrix Table
       const rows = Object.entries(scores).map(([tk, logic]) => {
         const ev = logic.evidence;
+        const ticker = tk.split('_')[0];
+        const acct = tk.includes('_') ? tk.split('_').slice(1).join('_') : '';
+        const acctColors = { ISA: 'text-emerald-400 bg-emerald-950/30 border-emerald-800', GIA: 'text-amber-400 bg-amber-950/30 border-amber-800', SIPP: 'text-indigo-400 bg-indigo-950/30 border-indigo-800' };
+        const acctCls = acctColors[acct] || 'text-slate-500 bg-slate-900/30 border-slate-800';
         const sentClr = ev.sentiment > 0.3 ? 'text-emerald-400' : ev.sentiment < -0.3 ? 'text-red-400' : 'text-slate-400';
-        const exStatus = logic.exhaustion_status || 'Neutral';
-        const exClr = exStatus === 'Bull Trap' || exStatus === 'Blow-off Top' ? 'text-red-500' : exStatus === 'Deep Exhaustion' ? 'text-emerald-500' : 'text-slate-500';
-        
+        const exStatus = logic.exhaustion_status || ev.exhaustion || 'Neutral';
+        const exClr = exStatus === 'Bull Trap' || exStatus === 'Blow-off Top' ? 'text-red-500' : exStatus === 'Deep Exhaustion' || exStatus === 'Oversold' ? 'text-emerald-500' : exStatus === 'Overextended' ? 'text-amber-400' : 'text-slate-500';
+        const actInstr = logic.action_instruction || 'HOLD';
+        const actClr = actInstr.startsWith('BUY') ? 'text-emerald-400 bg-emerald-950/40 border-emerald-700' : actInstr.startsWith('HEDGE') || actInstr.startsWith('TRIM') ? 'text-red-400 bg-red-950/40 border-red-700' : 'text-slate-400 bg-slate-900/40 border-slate-700';
+        const prob = logic.probability || '50%';
+        const probNum = parseInt(prob);
+        const probClr = probNum >= 80 ? 'text-emerald-400 font-black' : probNum >= 60 ? 'text-amber-400' : 'text-slate-500';
+        const atrPct = ev.atr_pct != null ? ev.atr_pct.toFixed(2) + '%' : '—';
+        const rowBorder = actInstr.startsWith('BUY') ? 'border-l-2 border-l-emerald-500' : actInstr.startsWith('HEDGE') || actInstr.startsWith('TRIM') ? 'border-l-2 border-l-red-500' : 'border-l-2 border-l-slate-700';
+
         return `
-          <tr class="border-b border-slate-800/50 hover:bg-slate-900/20 transition-colors text-[11px]">
-            <td class="py-3 font-mono font-bold text-slate-200">${tk.split('_')[0]}</td>
-            <td class="py-3"><span class="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-[9px] font-black border border-slate-700 uppercase">${logic.action}</span></td>
+          <tr class="${rowBorder} hover:bg-slate-900/20 transition-colors text-[11px]">
+            <td class="py-3 pl-3 font-mono font-bold text-slate-200">${ticker}</td>
+            <td class="py-3">${acct ? `<span class="text-[8px] font-black px-1.5 py-0.5 rounded border ${acctCls} uppercase">${acct}</span>` : ''}</td>
+            <td class="py-3"><span class="px-2 py-0.5 rounded text-[8px] font-black border uppercase whitespace-nowrap ${actClr}">${actInstr}</span></td>
             <td class="py-3 text-right font-mono text-slate-400">${ev.rsi}</td>
+            <td class="py-3 text-right font-mono text-slate-500">${atrPct}</td>
             <td class="py-3 text-right font-mono ${sentClr}">${ev.sentiment > 0 ? '+' : ''}${ev.sentiment}</td>
             <td class="py-3 text-right"><span class="font-black text-[9px] uppercase ${exClr}">${exStatus}</span></td>
-            <td class="py-3 text-right font-black text-emerald-500 uppercase">${logic.logic_tag || 'Standard'}</td>
+            <td class="py-3 text-right font-mono ${probClr}">${prob}</td>
+            <td class="py-3 text-right pr-3 font-black text-emerald-500 uppercase text-[9px]">${logic.logic_tag || 'Standard'}</td>
           </tr>
         `;
       }).join('');
@@ -2321,13 +2343,16 @@
           <div class="overflow-x-auto">
             <table class="w-full text-left text-xs">
               <thead>
-                <tr class="text-slate-600 bg-slate-900/40">
-                  <th class="p-4 font-black uppercase">Asset</th>
-                  <th class="p-4 font-black uppercase">Signal</th>
-                  <th class="p-4 font-black uppercase text-right">RSI</th>
-                  <th class="p-4 font-black uppercase text-right">Sentiment</th>
-                  <th class="p-4 font-black uppercase text-right">Exhaustion</th>
-                  <th class="p-4 font-black uppercase text-right text-emerald-400">Logic</th>
+                <tr class="text-slate-600 bg-slate-900/40 text-[9px]">
+                  <th class="py-3 pl-3 font-black uppercase">Asset</th>
+                  <th class="py-3 font-black uppercase">Acct</th>
+                  <th class="py-3 font-black uppercase">Action</th>
+                  <th class="py-3 font-black uppercase text-right">RSI</th>
+                  <th class="py-3 font-black uppercase text-right">ATR</th>
+                  <th class="py-3 font-black uppercase text-right">Sent.</th>
+                  <th class="py-3 font-black uppercase text-right">Exhaustion</th>
+                  <th class="py-3 font-black uppercase text-right">Conv.</th>
+                  <th class="py-3 font-black uppercase text-right pr-3 text-emerald-400">Logic</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-800/30">
