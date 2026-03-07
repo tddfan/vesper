@@ -40,6 +40,23 @@
     .tnum { font-feature-settings: "tnum"; font-variant-numeric: tabular-nums; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .spinner { animation: spin 1s linear infinite; }
+    .sub-nav-link { display:inline-flex; align-items:center; padding:0.1rem 0.7rem; font-size:9px; font-weight:900; text-transform:uppercase; letter-spacing:0.1em; color:#475569; border-radius:0.375rem; transition:color 0.15s, background 0.15s; text-decoration:none; white-space:nowrap; }
+    .sub-nav-link:hover { color:#818cf8; background:rgba(99,102,241,0.1); }
+    /* Cross-filter: clickable chart slices */
+    #sectorChart, #regionChart { cursor: pointer; }
+    /* Mobile: compact ticker chips — hide lower-priority data on narrow screens */
+    @media (max-width: 639px) {
+      .ticker-chip { padding: 0 8px; }
+      .ticker-chip-abs   { display: none !important; }
+      .ticker-chip-total { display: none !important; }
+    }
+    /* Autocomplete dropdown item highlight */
+    .ac-item.ac-active { background: rgba(99,102,241,0.2); }
+    .tb-spin  { animation: spin 0.6s linear infinite; display: inline-block; }
+    .ticker-chip { border-right: 1px solid #1e293b; padding: 0 14px; display: flex; align-items: center; gap: 7px; height: 100%; white-space: nowrap; transition: background 0.15s; cursor: default; }
+    .ticker-chip:hover { background: rgba(99,102,241,0.06); }
+    .ticker-chip:first-child { padding-left: 0; }
+    #ticker-strip::-webkit-scrollbar { display: none; }
     .sentiment-bar { height: 8px; border-radius: 9999px; overflow: hidden; display: flex; }
     #tooltip-modal, #auth-modal, #csv-account-modal { display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; background: rgba(2, 6, 23, 0.9); backdrop-filter: blur(8px); }
     .modal-content { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 90%; max-width: 450px; background: #0f172a; border: 1px solid #312e81; padding: 2.5rem; border-radius: 1.5rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); transition: background-color 0.25s ease; }
@@ -86,6 +103,22 @@
 
     /* Scrollbar */
     html[data-theme="light"] ::-webkit-scrollbar-thumb { background: #94a3b8 !important; }
+
+    /* Ledger account tabs */
+    .ledger-tab { color: #64748b; border-color: #334155; background: transparent; }
+    .ledger-tab.active { color: #6ee7b7; border-color: #059669; background: rgb(6 78 59 / 0.3); }
+    .ledger-tab:hover:not(.active) { color: #94a3b8; border-color: #475569; }
+    /* Master desk tabs */
+    .desk-tab { color: #64748b; border: 1px solid #1e293b; background: transparent;
+      padding: 0.375rem 1rem; font-size: 0.75rem; font-weight: 700; border-radius: 9999px; transition: all 0.15s; cursor: pointer; }
+    .desk-tab.active { color: #a5b4fc; border-color: #4f46e5; background: rgb(30 27 75 / 0.4); }
+    .desk-tab:hover:not(.active) { color: #94a3b8; border-color: #334155; }
+    /* Intelligence Desk account filter pills */
+    .intel-acct-pill { color: #64748b; border: 1px solid #1e293b; background: transparent;
+      padding: 0.25rem 0.875rem; font-size: 0.7rem; font-weight: 700; border-radius: 9999px;
+      transition: all 0.15s; cursor: pointer; }
+    .intel-acct-pill.active { color: #a5b4fc; border-color: #4f46e5; background: rgb(30 27 75 / 0.4); }
+    .intel-acct-pill:hover:not(.active) { color: #94a3b8; border-color: #334155; }
   </style>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen antialiased">
@@ -149,18 +182,18 @@
     </div>
   </div>
 
-  <header class="sticky top-0 z-20 border-b border-slate-800/70 backdrop-blur bg-slate-950/80 px-6 py-4">
+  <header class="sticky top-0 z-20 border-b border-slate-800/70 backdrop-blur bg-slate-950/80 px-4 sm:px-6 py-3 sm:py-4">
     <div class="max-w-6xl mx-auto flex items-center justify-between">
       <div class="flex items-center gap-3 cursor-pointer" onclick="location.reload()">
-        <span class="text-xl font-black text-indigo-500">VESPER v5.0</span>
+        <span class="text-lg sm:text-xl font-black text-indigo-500">VESPER v5.0</span>
       </div>
-      <div class="flex items-center gap-6">
-        <div id="health-dot" class="flex items-center gap-3 text-[10px] text-slate-600 font-black tracking-widest uppercase">
-          <span class="w-2 h-2 rounded-full bg-slate-700" id="health-indicator"></span>
-          <span id="health-label">System Init...</span>
+      <div class="flex items-center gap-2 sm:gap-6">
+        <div id="health-dot" class="flex items-center gap-1.5 sm:gap-3 text-[10px] text-slate-600 font-black tracking-widest uppercase">
+          <span class="w-2 h-2 rounded-full bg-slate-700 shrink-0" id="health-indicator"></span>
+          <span id="health-label" class="hidden sm:inline">System Init...</span>
         </div>
         <button id="theme-toggle" onclick="toggleTheme()" title="Toggle light / dark mode"
-          class="w-8 h-8 flex items-center justify-center rounded-full border border-slate-800 hover:border-indigo-500/60 text-slate-500 hover:text-indigo-400 transition-all text-sm select-none">
+          class="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-full border border-slate-800 hover:border-indigo-500/60 text-slate-500 hover:text-indigo-400 transition-all text-sm select-none">
           <span id="theme-icon">☀️</span>
         </button>
         <button id="logout-btn" onclick="firebase.auth().signOut()" class="hidden text-[10px] text-slate-500 hover:text-red-400 font-black uppercase tracking-widest transition-colors">Logout</button>
@@ -168,28 +201,217 @@
     </div>
   </header>
 
+  <!-- ── Live Ticker Bar ─────────────────────────────────────────────────── -->
+  <div id="ticker-bar" class="hidden sticky z-10 bg-slate-950 border-b border-slate-800/70" style="will-change:auto;top:60px">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 flex items-center gap-0 h-10">
+      <!-- scrollable strip — native scroll, no backdrop-filter -->
+      <div id="ticker-strip" class="flex-1 flex items-stretch gap-0 min-w-0 h-full" style="overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none"></div>
+      <!-- right controls -->
+      <div class="flex items-center gap-2 pl-3 shrink-0 border-l border-slate-800 h-full">
+        <span id="ticker-bar-time" class="text-[9px] font-black text-slate-600 uppercase tracking-wider font-mono whitespace-nowrap"></span>
+        <button onclick="refreshTickerBar(true)" id="ticker-refresh-btn"
+          title="Refresh live prices"
+          class="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-indigo-400 hover:bg-slate-800/60 rounded transition-all text-sm font-black select-none">⟳</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Master Desk Tab Bar ───────────────────────────────────────────── -->
+  <div id="desk-tabs" class="hidden sticky z-[9] bg-slate-950/90 border-b border-slate-800/60" style="backdrop-filter:blur(12px);top:100px">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 flex items-center gap-3 h-11">
+      <button id="desk-tab-intelligence" onclick="switchDesk('intelligence')" class="desk-tab active">🧠 Intelligence Desk</button>
+      <button id="desk-tab-ledger"       onclick="switchDesk('ledger')"       class="desk-tab">🏛️ Ledger &amp; Tax Desk</button>
+    </div>
+  </div>
+
+  <!-- ── Section Sub-Navigation ─────────────────────────────────────────── -->
+  <nav id="sub-nav" class="hidden sticky z-[8] border-b border-slate-800/50" style="background:rgba(2,6,23,0.90);backdrop-filter:blur(12px);top:100px">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 flex items-center gap-1 h-9 overflow-x-auto" style="scrollbar-width:none;-ms-overflow-style:none">
+      <a href="#builder-section"        class="sub-nav-link">Builder & Summary</a>
+      <span class="text-slate-800 text-[8px] font-black select-none shrink-0">·</span>
+      <a href="#execution-section"      class="sub-nav-link">Execution Path</a>
+      <span class="text-slate-800 text-[8px] font-black select-none shrink-0">·</span>
+      <a href="#stress-test-card"       class="sub-nav-link">Risk & Scenarios</a>
+      <span class="text-slate-800 text-[8px] font-black select-none shrink-0">·</span>
+      <a href="#market-outlook-section" class="sub-nav-link">Macro Intelligence</a>
+      <span class="text-slate-800 text-[8px] font-black select-none shrink-0">·</span>
+      <a href="#asset-cards"            class="sub-nav-link">Asset Breakdown</a>
+    </div>
+  </nav>
+
   <main id="main-content" class="hidden max-w-6xl mx-auto px-4 sm:px-6 py-10">
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+         LEDGER & TAX DESK (hidden by default, toggled by switchDesk())
+         ══════════════════════════════════════════════════════════════════════ -->
+    <div id="ledger-view" class="hidden">
+
+      <!-- Ledger Desk header: title + account filter -->
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <div class="flex items-center gap-3">
+          <h2 class="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-emerald-400 uppercase tracking-tight">Ledger &amp; Tax Desk</h2>
+          <span id="ledger-desk-tx-badge" class="text-[8px] font-black px-2 py-0.5 rounded bg-emerald-950/50 text-emerald-400 border border-emerald-900/50 uppercase">—</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <select id="clear-account-select"
+                  class="bg-slate-800 border border-slate-700 text-slate-400 text-[10px] rounded-lg px-2 py-1 focus:outline-none">
+            <option value="">All Accounts</option>
+            <option value="ISA">ISA only</option>
+            <option value="GIA">GIA only</option>
+            <option value="SIPP">SIPP only</option>
+          </select>
+          <button onclick="clearLedger()"
+                  class="text-[10px] font-bold px-3 py-1 rounded-lg bg-red-950/40 border border-red-800/40 text-red-400 hover:bg-red-900/40 transition-all">
+            🗑 Clear
+          </button>
+        </div>
+      </div>
+
+      <!-- 3 live summary cards: Paid In / Realized Gains / Unrealized Gains -->
+      <div id="ledger-summary-cards" class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6 hidden"></div>
+
+      <!-- ── CSV Upload Zone (moved from Intelligence Desk) ───────────────── -->
+      <div id="ledger-upload-zone"
+           class="border-2 border-dashed border-slate-700/70 rounded-xl p-5 mb-6 text-center group hover:border-indigo-500/60 hover:bg-indigo-950/20 transition-all duration-200"
+           ondragover="event.preventDefault(); this.classList.add('border-indigo-500','bg-indigo-950/20')"
+           ondragleave="this.classList.remove('border-indigo-500','bg-indigo-950/20')"
+           ondrop="event.preventDefault(); this.classList.remove('border-indigo-500','bg-indigo-950/20'); handleTransactionUpload(event.dataTransfer.files[0])">
+        <p class="text-xl mb-1" id="ledger-upload-icon">📂</p>
+        <p class="text-xs font-bold text-slate-400 group-hover:text-indigo-400 transition-colors" id="ledger-upload-label">Drop broker transaction CSV to unlock P&amp;L</p>
+        <p class="text-[10px] text-slate-600 mt-0.5">Supports: Interactive Investor (II), iWeb, HL, AJ Bell, Freetrade</p>
+        <div class="flex items-center justify-center gap-3 mt-3" onclick="event.stopPropagation()">
+          <label class="text-[10px] font-bold text-slate-500 uppercase">Account</label>
+          <select id="ledger-account-select"
+                  class="bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+            <option value="ISA">ISA (Tax-Free)</option>
+            <option value="GIA">GIA (Taxable)</option>
+            <option value="SIPP">SIPP (Pension)</option>
+          </select>
+          <button onclick="document.getElementById('ledger-file-input').click()"
+                  class="text-xs font-bold px-3 py-1.5 rounded-lg bg-indigo-900/50 border border-indigo-700/50 text-indigo-400 hover:bg-indigo-800/50 transition-all">
+            Browse
+          </button>
+        </div>
+        <input type="file" id="ledger-file-input" class="hidden" accept=".csv"
+               onchange="handleTransactionUpload(this.files[0])">
+      </div>
+
+      <!-- ── Open Positions: Cost Basis Pool ─────────────────────────────── -->
+      <section id="ledger-panel" class="mb-8 hidden">
+        <div class="flex items-center gap-3 mb-4">
+          <h2 class="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-emerald-400 uppercase tracking-tight">Open Positions</h2>
+          <span class="text-[8px] font-black px-2 py-0.5 rounded bg-emerald-950/50 text-emerald-400 border border-emerald-900/50 uppercase" id="ledger-tx-badge">—</span>
+        </div>
+        <!-- Open positions cost basis table -->
+        <div class="glass p-5 border-t-2 border-indigo-500/30">
+          <p class="text-xs font-bold text-slate-500 uppercase mb-3">Cost Basis · Live Unrealized P&amp;L</p>
+          <div id="ledger-positions" class="overflow-x-auto"></div>
+        </div>
+      </section>
+
+      <!-- Funding Timeline -->
+      <div id="funding-timeline-section" class="hidden mb-6">
+        <div class="glass p-4 rounded-xl">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-xs font-black text-slate-400 uppercase tracking-widest">Funding Timeline</h3>
+            <span id="funding-total-contrib" class="hidden text-[10px] font-black text-emerald-400 font-mono"></span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+              <thead>
+                <tr class="border-b border-slate-800">
+                  <th class="text-left py-2 text-slate-500 font-bold uppercase">Date</th>
+                  <th class="text-left py-2 text-slate-500 font-bold uppercase">Type</th>
+                  <th class="text-right py-2 text-slate-500 font-bold uppercase">Amount</th>
+                </tr>
+              </thead>
+              <tbody id="funding-timeline-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Performance Analytics Dashboard ─────────────────────────────── -->
+      <section id="performance-metrics" class="mb-8 hidden">
+        <!-- Section header -->
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center gap-3">
+            <h2 class="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-emerald-400 uppercase tracking-tight">Performance Analytics</h2>
+            <span id="perf-tx-badge" class="text-[8px] font-black px-2 py-0.5 rounded bg-emerald-950/50 text-emerald-400 border border-emerald-900/50 uppercase">—</span>
+          </div>
+        </div>
+        <!-- Account tabs -->
+        <div class="flex gap-2 mb-5 flex-wrap" id="ledger-tabs">
+          <button onclick="switchLedgerTab('all')" data-tab="all"
+                  class="ledger-tab active px-4 py-1.5 rounded-full text-xs font-bold border transition-all">All Accounts</button>
+          <button onclick="switchLedgerTab('ISA')" data-tab="ISA"
+                  class="ledger-tab px-4 py-1.5 rounded-full text-xs font-bold border transition-all">ISA</button>
+          <button onclick="switchLedgerTab('GIA')" data-tab="GIA"
+                  class="ledger-tab px-4 py-1.5 rounded-full text-xs font-bold border transition-all">GIA</button>
+          <button onclick="switchLedgerTab('SIPP')" data-tab="SIPP"
+                  class="ledger-tab px-4 py-1.5 rounded-full text-xs font-bold border transition-all">SIPP</button>
+        </div>
+        <!-- Top-line metric cards -->
+        <div id="perf-top-cards" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4"></div>
+        <!-- Realized vs Unrealized summary row -->
+        <div id="perf-realunreal" class="glass p-5 mb-4 hidden"></div>
+        <!-- Earnings breakdown bar -->
+        <div id="perf-breakdown" class="glass p-5 mb-4 hidden"></div>
+        <!-- Year-by-year table -->
+        <div id="perf-year-section" class="glass p-5 hidden">
+          <p class="text-xs font-bold text-slate-500 uppercase mb-3">Year-by-Year Performance</p>
+          <div id="perf-year-table" class="overflow-x-auto"></div>
+        </div>
+      </section>
+
+    </div><!-- /ledger-view -->
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+         INTELLIGENCE DESK (visible by default)
+         ══════════════════════════════════════════════════════════════════════ -->
+    <div id="intelligence-view">
+
     <section id="builder-section" class="mb-10">
       <div class="glass p-5 shadow-2xl">
 
-        <!-- Column header row -->
-        <div class="grid grid-cols-[1fr_90px_70px_28px] px-2 pb-1 border-b border-slate-800 mb-1">
-          <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Ticker</span>
-          <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest text-right pr-2">Quantity</span>
-          <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1">Wrapper</span>
+        <!-- Scrollable grid wrapper — allows horizontal scroll on mobile without breaking layout -->
+        <div class="overflow-x-auto -mx-1 px-1" style="scrollbar-width:thin;scrollbar-color:#1e293b transparent">
+        <div style="min-width:660px">
+
+        <!-- Column header row (sortable) -->
+        <div class="grid grid-cols-[1fr_75px_58px_78px_68px_72px_84px_90px_28px] px-2 pb-1 border-b border-slate-800 mb-1">
+          <span onclick="sortRows('ticker')" class="text-[10px] font-black text-slate-500 uppercase tracking-widest cursor-pointer hover:text-slate-300 select-none flex items-center gap-1">Ticker <span id="sort-ind-ticker" class="text-slate-700 text-[9px]">↕</span></span>
+          <span onclick="sortRows('qty')" class="text-[10px] font-black text-slate-500 uppercase tracking-widest text-right pr-2 cursor-pointer hover:text-slate-300 select-none flex items-center justify-end gap-1">Qty <span id="sort-ind-qty" class="text-slate-700 text-[9px]">↕</span></span>
+          <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1">Wrap</span>
+          <span onclick="sortRows('price')" class="text-[10px] font-black text-slate-600 uppercase tracking-widest text-right pr-2 cursor-pointer hover:text-slate-300 select-none flex items-center justify-end gap-1">Price <span id="sort-ind-price" class="text-slate-700 text-[9px]">↕</span></span>
+          <span onclick="sortRows('chg-pct')" class="text-[10px] font-black text-slate-600 uppercase tracking-widest text-right pr-2 cursor-pointer hover:text-slate-300 select-none flex items-center justify-end gap-1">Chg% <span id="sort-ind-chg-pct" class="text-slate-700 text-[9px]">↕</span></span>
+          <span onclick="sortRows('chg-val')" class="text-[10px] font-black text-slate-600 uppercase tracking-widest text-right pr-2 cursor-pointer hover:text-slate-300 select-none flex items-center justify-end gap-1">Chg£ <span id="sort-ind-chg-val" class="text-slate-700 text-[9px]">↕</span></span>
+          <span onclick="sortRows('day-pnl')" class="text-[10px] font-black text-slate-600 uppercase tracking-widest text-right pr-2 cursor-pointer hover:text-slate-300 select-none flex items-center justify-end gap-1">Day P&amp;L <span id="sort-ind-day-pnl" class="text-slate-700 text-[9px]">↕</span></span>
+          <span onclick="sortRows('total')" class="text-[10px] font-black text-slate-600 uppercase tracking-widest text-right pr-2 cursor-pointer hover:text-slate-300 select-none flex items-center justify-end gap-1">Total <span id="sort-ind-total" class="text-slate-700 text-[9px]">↕</span></span>
           <span></span>
         </div>
 
         <!-- Holdings rows -->
-        <div id="ticker-rows" class="mb-2"></div>
+        <div id="ticker-rows"></div>
+
+        <!-- Totals row — shown after prices are loaded -->
+        <div id="totals-row" class="hidden grid grid-cols-[1fr_75px_58px_78px_68px_72px_84px_90px_28px] px-2 py-1.5 mb-2 border-t-2 border-slate-700/60 bg-slate-900/30">
+          <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Portfolio</span>
+          <span></span><span></span><span></span><span></span>
+          <span class="text-[10px] font-black font-mono text-right pr-2 text-slate-500">—</span>
+          <span id="totals-day-pnl" class="text-[10px] font-black font-mono text-right pr-2 text-slate-500">—</span>
+          <span id="totals-total"   class="text-[10px] font-black font-mono text-right pr-2 text-slate-400">—</span>
+          <span></span>
+        </div>
+        </div></div><!-- /min-width inner · /overflow-x-auto outer -->
 
         <!-- Action row: add / import / live prices -->
         <div class="flex gap-2 pt-1 border-t border-slate-800/40 mt-1 mb-4">
-          <button id="add-btn" onclick="addRow()" class="py-1.5 px-3 border border-dashed border-slate-700 text-slate-500 text-xs font-black uppercase hover:text-slate-300 transition-colors rounded">+ Add</button>
-          <button onclick="openCsvModal()" class="py-1.5 px-3 border border-dashed border-indigo-500/40 text-indigo-400 text-xs font-black uppercase hover:bg-indigo-500/10 transition-all rounded">Import CSV</button>
-          <button id="fetch-prices-btn" onclick="fetchLivePrices()" class="py-1.5 px-3 border border-dashed border-violet-500/40 text-violet-400 text-xs font-black uppercase hover:bg-violet-500/10 transition-all rounded">⟳ Prices</button>
+          <button id="add-btn" onclick="addRow()" class="py-1.5 px-3 border border-dashed border-slate-700 text-slate-500 text-xs font-black uppercase hover:text-slate-300 transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500">+ Add</button>
+          <button onclick="openCsvModal()" class="py-1.5 px-3 border border-dashed border-indigo-500/40 text-indigo-400 text-xs font-black uppercase hover:bg-indigo-500/10 transition-all rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500">Import CSV</button>
+          <button id="fetch-prices-btn" onclick="fetchLivePrices()" class="py-1.5 px-3 border border-dashed border-violet-500/40 text-violet-400 text-xs font-black uppercase hover:bg-violet-500/10 transition-all rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500">⟳ Prices</button>
           <input type="file" id="csv-upload" class="hidden" accept=".csv" onchange="handleCSV(this.files[0])">
-          <button onclick="clearPortfolio()" class="py-1.5 px-3 border border-dashed border-red-800/50 text-red-700 text-xs font-black uppercase hover:bg-red-500/10 hover:text-red-500 transition-all rounded ml-auto">✕ Clear</button>
+          <button onclick="clearPortfolio()" class="py-1.5 px-3 border border-dashed border-red-800/50 text-red-700 text-xs font-black uppercase hover:bg-red-500/10 hover:text-red-500 transition-all rounded ml-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-red-500">✕ Clear</button>
         </div>
 
         <!-- Uninvested Cash Strip -->
@@ -199,17 +421,17 @@
             <div class="flex items-center gap-1 bg-slate-900/60 border border-emerald-900/40 rounded px-2 py-1 flex-1 min-w-0">
               <span class="text-[10px] font-black text-emerald-600 shrink-0">ISA</span>
               <span class="text-[10px] text-slate-600 shrink-0">£</span>
-              <input id="cash-isa" type="number" value="0" min="0" class="bg-transparent text-xs font-bold text-slate-300 outline-none w-full min-w-0">
+              <input id="cash-isa" type="number" value="0" min="0" oninput="renderAccountValueBanners()" class="bg-transparent text-xs font-bold text-slate-300 outline-none w-full min-w-0">
             </div>
             <div class="flex items-center gap-1 bg-slate-900/60 border border-indigo-900/40 rounded px-2 py-1 flex-1 min-w-0">
               <span class="text-[10px] font-black text-indigo-500 shrink-0">SIPP</span>
               <span class="text-[10px] text-slate-600 shrink-0">£</span>
-              <input id="cash-sipp" type="number" value="0" min="0" class="bg-transparent text-xs font-bold text-slate-300 outline-none w-full min-w-0">
+              <input id="cash-sipp" type="number" value="0" min="0" oninput="renderAccountValueBanners()" class="bg-transparent text-xs font-bold text-slate-300 outline-none w-full min-w-0">
             </div>
             <div class="flex items-center gap-1 bg-slate-900/60 border border-amber-900/40 rounded px-2 py-1 flex-1 min-w-0">
               <span class="text-[10px] font-black text-amber-600 shrink-0">GIA</span>
               <span class="text-[10px] text-slate-600 shrink-0">£</span>
-              <input id="cash-gia" type="number" value="0" min="0" class="bg-transparent text-xs font-bold text-slate-300 outline-none w-full min-w-0">
+              <input id="cash-gia" type="number" value="0" min="0" oninput="renderAccountValueBanners()" class="bg-transparent text-xs font-bold text-slate-300 outline-none w-full min-w-0">
             </div>
           </div>
         </div>
@@ -224,14 +446,41 @@
           </div>
         </div>
 
+        <!-- CIO LLM Toggle -->
+        <div class="flex items-center justify-between gap-4 px-3 py-2.5 rounded-xl border border-slate-700/60 bg-slate-800/40">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <span class="text-base shrink-0">🧠</span>
+            <div class="min-w-0">
+              <p class="text-xs font-black text-slate-200 uppercase tracking-wide">CIO Intelligence Engine</p>
+              <p class="text-[10px] text-slate-500 truncate">Claude Opus 4.6 · ~5¢ per analysis · prompt-cached</p>
+            </div>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer shrink-0">
+            <input type="checkbox" id="cio-llm-toggle" class="sr-only peer">
+            <div class="w-10 h-5 bg-slate-700 rounded-full peer peer-checked:bg-indigo-600
+                        after:content-[''] after:absolute after:top-0.5 after:left-0.5
+                        after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all
+                        peer-checked:after:translate-x-5"></div>
+          </label>
+        </div>
+
         <!-- Execute + Save -->
-        <div class="flex gap-3">
-          <button id="save-btn" onclick="savePortfolioManual()" class="px-5 py-3 border border-dashed border-emerald-700/50 text-emerald-500 text-xs font-black uppercase hover:bg-emerald-500/10 transition-all rounded-xl shrink-0">💾 Save</button>
-          <button id="analyse-btn" onclick="analyzePortfolio()" class="flex-1 py-3 bg-indigo-600 rounded-xl font-black text-sm uppercase tracking-wider hover:bg-indigo-500 transition-all shadow-lg">Execute Quant Suite</button>
+        <div class="flex gap-3 mt-3">
+          <button id="save-btn" onclick="savePortfolioManual()" class="px-5 py-3 border border-dashed border-emerald-700/50 text-emerald-500 text-xs font-black uppercase hover:bg-emerald-500/10 transition-all rounded-xl shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500">💾 Save</button>
+          <button id="analyse-btn" onclick="analyzePortfolio()" class="flex-1 py-3 bg-indigo-600 rounded-xl font-black text-sm uppercase tracking-wider hover:bg-indigo-500 transition-all shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white">Execute Quant Suite</button>
         </div>
 
       </div>
     </section>
+
+    <!-- Account filter pills — shown after first Analyse run -->
+    <div id="intel-acct-bar" class="hidden max-w-6xl mx-auto px-4 sm:px-6 pb-4 flex items-center gap-2">
+      <span class="text-[10px] font-black text-slate-600 uppercase tracking-widest mr-1">View:</span>
+      <button onclick="setIntelFilter('all')"  class="intel-acct-pill active">All Portfolio</button>
+      <button onclick="setIntelFilter('ISA')"  class="intel-acct-pill">ISA</button>
+      <button onclick="setIntelFilter('GIA')"  class="intel-acct-pill">GIA</button>
+      <button onclick="setIntelFilter('SIPP')" class="intel-acct-pill">SIPP</button>
+    </div>
 
     <div id="loading-state" class="hidden text-center py-24">
       <div class="inline-block w-12 h-12 border-4 border-slate-800 border-t-indigo-500 rounded-full spinner mb-4"></div>
@@ -239,7 +488,19 @@
     </div>
 
     <section id="results-section" class="hidden space-y-6">
+      <div id="intel-account-banners" class="hidden"></div>
+      <div id="intel-acct-holdings" class="hidden mb-2"></div>
       <div id="summary-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4"></div>
+
+      <!-- Ideal Portfolio & Execution Path -->
+      <section id="execution-section" class="border-t-2 border-indigo-500/30 pt-10">
+        <h2 class="text-3xl font-black mb-2 text-transparent bg-clip-text bg-gradient-to-r from-white to-indigo-400 uppercase tracking-tight">Ideal Portfolio & Execution Path</h2>
+        <p class="text-slate-500 text-sm mb-6 italic">The v5.0 Quantitative Blueprint for your chosen mandate.</p>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div class="glass p-8 border-l-4 border-indigo-500"><p class="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-6">Strategic Blueprint</p><div id="blueprint-content" class="space-y-6"></div></div>
+          <div class="glass p-8 border-l-4 border-emerald-500"><p class="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-6">Suggested Execution Path</p><div id="blueprint-actions" class="space-y-4"></div></div>
+        </div>
+      </section>
 
       <!-- Scenario Analysis — Historical Stress Test -->
       <div id="stress-test-card" class="glass p-6 border-t-2 border-red-500/40">
@@ -255,16 +516,16 @@
       </div>
 
       <div class="glass p-6 border-l-4 border-indigo-500">
-        <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Risk Profile Analysis</p>
+        <p class="text-xs font-bold text-slate-500 uppercase mb-1">Risk Profile Analysis</p>
         <p class="text-[9px] text-slate-700 mb-4">How efficiently your portfolio earns return per unit of risk, vs your mandate target</p>
         <div id="risk-profile-content" class="grid grid-cols-1 md:grid-cols-3 gap-6"></div>
       </div>
 
       <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        <div class="glass p-6 border-t-2 border-indigo-500/50"><p class="text-[10px] font-black text-slate-500 uppercase mb-1">Hedge Optimizer (GLD)</p><p class="text-[9px] text-slate-700 mb-4">GLD weight needed to cut VaR by 20%</p><div id="hedge-content" class="space-y-2"></div></div>
-        <div class="glass p-6 border-t-2 border-emerald-500/50"><p class="text-[10px] font-black text-slate-500 uppercase mb-1">Post-Trade Efficiency</p><p class="text-[9px] text-slate-700 mb-4">Projected Sharpe &amp; beta after rebalance</p><div id="rebalance-content" class="space-y-2"></div></div>
-        <div class="glass p-6 border-t-2 border-amber-500/50"><p class="text-[10px] font-black text-slate-500 uppercase mb-1">Factor Breadth (DR)</p><p class="text-[9px] text-slate-700 mb-4">Weighted vol ÷ portfolio vol — &gt;1.2 means assets are diversifying</p><div id="factor-content" class="space-y-2"></div></div>
-        <div class="glass p-6 border-t-2 border-red-500/50"><p class="text-[10px] font-black text-slate-500 uppercase mb-1">FX Sensitivity (5%)</p><p class="text-[9px] text-slate-700 mb-4">Estimated loss if non-base currencies move 5% adverse</p><div id="fx-panel" class="space-y-2"></div></div>
+        <div class="glass p-6 border-t-2 border-indigo-500/50"><p class="text-xs font-bold text-slate-500 uppercase mb-1">Hedge Optimizer (GLD)</p><p class="text-[9px] text-slate-700 mb-4">GLD weight needed to cut VaR by 20%</p><div id="hedge-content" class="space-y-2"></div></div>
+        <div class="glass p-6 border-t-2 border-emerald-500/50"><p class="text-xs font-bold text-slate-500 uppercase mb-1">Post-Trade Efficiency</p><p class="text-[9px] text-slate-700 mb-4">Projected Sharpe &amp; beta after rebalance</p><div id="rebalance-content" class="space-y-2"></div></div>
+        <div class="glass p-6 border-t-2 border-amber-500/50"><p class="text-xs font-bold text-slate-500 uppercase mb-1">Factor Breadth (DR)</p><p class="text-[9px] text-slate-700 mb-4">Weighted vol ÷ portfolio vol — &gt;1.2 means assets are diversifying</p><div id="factor-content" class="space-y-2"></div></div>
+        <div class="glass p-6 border-t-2 border-red-500/50"><p class="text-xs font-bold text-slate-500 uppercase mb-1">FX Sensitivity (5%)</p><p class="text-[9px] text-slate-700 mb-4">Estimated loss if non-base currencies move 5% adverse</p><div id="fx-panel" class="space-y-2"></div></div>
       </div>
 
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -306,12 +567,24 @@
         <div style="height:340px;" class="mt-4"><canvas id="historyChart"></canvas></div>
       </div>
 
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div id="market-outlook-section" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div class="glass p-6 flex flex-col"><p class="text-xs font-bold text-slate-500 uppercase mb-1">Vesper 5-Point Intelligence</p><p class="text-[10px] text-slate-600 mb-4">Macro regime · Sector rotation · Regional alpha · Valuation pivot · Strategic hedge</p><div id="market-outlook" class="space-y-4"></div></div>
         <div class="glass p-6 flex flex-col"><p class="text-xs font-bold text-slate-500 uppercase mb-1">Real Value Projection (Inflation Adj.)</p><p class="text-[10px] text-slate-600 mb-4">Bootstrap Monte Carlo · 2,000 paths · Full historical returns since inception. P50 real value adjusted for 2.5% inflation.</p><div class="flex-1" style="min-height:240px;"><canvas id="futureChart"></canvas></div><div id="future-details" class="mt-4"></div></div>
       </div>
 
       <div class="glass p-6 flex flex-col"><p class="text-xs font-bold text-slate-500 uppercase mb-4">Sentiment Trend & Exhaustion Engine</p><div id="sentiment-summary-panel" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div></div>
+
+      <!-- Tactical Action Desk -->
+      <div id="tactical-desk-section" style="display:none">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <p class="text-xs font-bold text-red-400 uppercase tracking-widest">Tactical Action Desk — 72-Hour Horizon</p>
+            <p class="text-[10px] text-slate-600 mt-0.5">Event-driven catalyst signals matched against your live portfolio</p>
+          </div>
+          <span class="text-[8px] font-black px-2 py-0.5 rounded bg-red-950/60 text-red-400 border border-red-900/60 uppercase animate-pulse">Live Catalyst</span>
+        </div>
+        <div id="tactical-desk-cards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+      </div>
 
       <div>
         <p class="text-xs font-bold text-slate-500 uppercase mb-4">Advisory Optimizer</p>
@@ -321,13 +594,18 @@
       <div id="asset-cards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
 
       <!-- Portfolio X-Ray: Look-Through Exposure -->
-      <section id="xray-section" class="border-t-2 border-slate-800/60 pt-10">
+      <section id="xray-section" class="border-t-2 border-violet-500/30 pt-10">
         <div class="flex items-start justify-between mb-6">
           <div>
-            <h3 class="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-slate-100 to-violet-400 uppercase tracking-tight mb-1">Portfolio X-Ray: Look-Through Exposure</h3>
-            <p class="text-[10px] text-slate-600">Sector &amp; regional decomposition derived from your holdings and fund mandates</p>
+            <h2 class="text-3xl font-black mb-2 text-transparent bg-clip-text bg-gradient-to-r from-white to-violet-400 uppercase tracking-tight">Portfolio X-Ray: Look-Through Exposure</h2>
+            <p class="text-[10px] text-slate-600">Sector &amp; regional decomposition · Click a chart slice to filter the Asset Breakdown below</p>
           </div>
-          <span class="text-[8px] font-black px-2 py-0.5 rounded bg-violet-950/50 text-violet-400 border border-violet-900/50 uppercase shrink-0 ml-4 mt-1">Look-Through</span>
+          <div class="flex items-center gap-2 ml-4 mt-1 shrink-0">
+            <button id="xray-clear-filter" onclick="clearAssetFilter()" class="hidden flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-violet-600/40 bg-violet-950/40 text-violet-400 text-[8px] font-black uppercase hover:bg-violet-500/20 transition-all focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:outline-none">
+              <span>✕ Clear:</span> <span class="filter-label font-mono"></span>
+            </button>
+            <span class="text-[8px] font-black px-2 py-0.5 rounded bg-violet-950/50 text-violet-400 border border-violet-900/50 uppercase">Look-Through</span>
+          </div>
         </div>
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div class="glass p-6 flex flex-col">
@@ -343,16 +621,9 @@
         </div>
       </section>
 
-      <!-- Ideal Portfolio Section -->
-      <section class="mt-12 border-t-2 border-indigo-500/30 pt-12">
-        <h2 class="text-3xl font-black mb-2 text-transparent bg-clip-text bg-gradient-to-r from-white to-indigo-400 uppercase tracking-tight">Ideal Portfolio & Execution Path</h2>
-        <p class="text-slate-500 text-sm mb-8 italic">The v5.0 Quantitative Blueprint for your chosen mandate.</p>
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div class="glass p-8 border-l-4 border-indigo-500"><p class="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-6">Strategic Blueprint</p><div id="blueprint-content" class="space-y-6"></div></div>
-          <div class="glass p-8 border-l-4 border-emerald-500"><p class="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-6">Suggested Execution Path</p><div id="blueprint-actions" class="space-y-4"></div></div>
-        </div>
-      </section>
     </section>
+
+    </div><!-- /intelligence-view -->
   </main>
 
   <footer class="mt-20 border-t border-slate-900 py-10 text-center text-slate-700 text-xs font-mono tracking-widest uppercase">Vesper Intelligence Engine • Senior Quant Suite v5.0</footer>
@@ -365,6 +636,10 @@
     let rowIndex = 0, allocChart = null, historyChart = null, futureChart = null, divChart = null;
     let sectorChart = null, regionChart = null;
     let currentImportType = 'ISA';
+    let _lastQuotes = {}; // ticker → live price, updated by ticker bar
+    let _intelAcctFilter = 'all'; // 'all' | 'ISA' | 'GIA' | 'SIPP'
+    let _activeLedgerTab = 'all'; // tracks active Ledger tab (replaces removed dropdown)
+    window.vesperState = { ISA: null, GIA: null, SIPP: null }; // accumulates per-account uploads (amnesia fix)
     const PALETTE = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6','#f97316','#14b8a6','#ef4444','#a855f7'];
 
     // ── X-Ray look-through tables ──────────────────────────────────────────
@@ -395,48 +670,93 @@
     }
 
     async function fetchLivePrices() {
-      const btn = document.getElementById('fetch-prices-btn');
-      const orig = btn.innerHTML;
-      btn.innerHTML = '<span class="inline-block w-3 h-3 border-2 border-slate-700 border-t-violet-400 rounded-full spinner"></span> Fetching...';
-      btn.disabled = true;
+      const btn  = document.getElementById('fetch-prices-btn');
+      btn.innerHTML = '<span class="inline-block w-3 h-3 border-2 border-slate-700 border-t-violet-400 rounded-full spinner"></span>';
+      btn.disabled  = true;
 
-      // Simulated price feed with realistic ±1.5% intraday movement
-      await new Promise(r => setTimeout(r, 1500));
-
-      let updated = 0;
+      // Collect rows — keyed by rowId to support same ticker in multiple accounts
+      const rowMap = {}; // rowId → { row, tInput, ticker }
+      const tickerSet = new Set();
       document.querySelectorAll('#ticker-rows > div').forEach(row => {
         const tInput = row.querySelector('.ticker-input');
-        const ticker = tInput.value.trim().toUpperCase();
-        if (!ticker) return;
-        const base = parseFloat(tInput.dataset.fallbackPrice) || (ticker.endsWith('.L') ? 850 : 180);
-        // Deterministic noise seeded by ticker char codes so it's stable within session
-        const seed = ticker.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
-        const drift = ((seed % 17) - 8) / 800; // ±1% range, ticker-specific
-        const price = parseFloat((base * (1 + drift + (Math.random() - 0.5) * 0.008)).toFixed(2));
-        tInput.dataset.fallbackPrice = price;
-        let tag = row.querySelector('.live-price-tag');
-        if (!tag) {
-          tag = document.createElement('span');
-          tag.className = 'live-price-tag text-[8px] font-black text-emerald-500 font-mono ml-2';
-          row.querySelector('.ticker-input').after(tag);
-        }
-        tag.textContent = `£${price}`;
-        updated++;
+        const ticker = tInput?.value.trim().toUpperCase();
+        if (ticker) { rowMap[row.id] = { row, tInput, ticker }; tickerSet.add(ticker); }
       });
 
-      btn.innerHTML = `✓ ${updated} Updated`;
-      btn.classList.replace('text-violet-400', 'text-emerald-400');
-      setTimeout(() => {
-        btn.innerHTML = orig;
-        btn.classList.replace('text-emerald-400', 'text-violet-400');
-        btn.disabled = false;
-        document.querySelectorAll('.live-price-tag').forEach(t => t.remove());
-      }, 4000);
+      const tickers = [...tickerSet];
+      if (!tickers.length) { btn.innerHTML = '⟳ Prices'; btn.disabled = false; return; }
+
+      try {
+        const res  = await fetch(`/api/quotes?tickers=${tickers.join(',')}`);
+        const data = await res.json();
+        let updated = 0;
+
+        for (const q of data.quotes) {
+          // Distribute price to ALL rows that have this ticker (handles multi-account duplicates)
+          for (const [, entry] of Object.entries(rowMap)) {
+            if (entry.ticker !== q.ticker) continue;
+            const { row, tInput } = entry;
+            const qty     = parseFloat(row.querySelector('.qty-input')?.value) || 0;
+            const sym     = q.currency === 'GBP' ? '£' : (q.currency === 'USD' ? '$' : q.currency + ' ');
+            const up      = q.change_pct >= 0;
+            const chgClr  = up ? 'text-emerald-400' : 'text-red-400';
+            const baseClr = 'text-[10px] font-black font-mono text-right pr-2 select-none';
+
+            const setCell = (col, text, cls, val = 0) => {
+              const el = row.querySelector(`[data-col="${col}"]`);
+              if (!el) return;
+              el.textContent   = text;
+              el.className     = `${baseClr} ${cls}`;
+              el.dataset.value = val;
+            };
+
+            if (q.price > 0) {
+              tInput.dataset.fallbackPrice = q.price;
+              tInput.dataset.priceSym      = sym;
+              tInput.dataset.priceChg      = q.change;
+
+              const total  = q.price * qty;
+              const dayPnl = q.change * qty;
+
+              setCell('price',   `${sym}${q.price.toLocaleString('en-GB', {minimumFractionDigits:2, maximumFractionDigits:2})}`, 'text-slate-200', q.price);
+              setCell('chg-pct', `${up ? '▲' : '▼'} ${Math.abs(q.change_pct).toFixed(2)}%`, chgClr, q.change_pct);
+              setCell('chg-val', `${up ? '+' : ''}${sym}${q.change.toFixed(2)}`, chgClr, q.change);
+              setCell('day-pnl', qty > 0 ? `${dayPnl >= 0 ? '+' : ''}${sym}${Math.abs(dayPnl).toFixed(2)}` : '—', qty > 0 ? chgClr : 'text-slate-700', dayPnl);
+              setCell('total',   total > 0 ? `${sym}${Math.round(total).toLocaleString('en-GB')}` : '—', total > 0 ? 'text-slate-200' : 'text-slate-700', total);
+              updated++;
+            } else {
+              ['price','chg-pct','chg-val','day-pnl','total'].forEach(col => setCell(col, 'N/A', 'text-slate-700', 0));
+            }
+          } // end inner for (entry)
+        } // end outer for (quote)
+        _updateTotalsRow();
+
+        btn.innerHTML = `✓ ${updated} live`;
+        btn.className = btn.className.replace('text-violet-400','text-emerald-400');
+        setTimeout(() => {
+          btn.innerHTML = '⟳ Prices';
+          btn.className = btn.className.replace('text-emerald-400','text-violet-400');
+          btn.disabled  = false;
+        }, 2500);
+
+        // Sync the top ticker bar too
+        refreshTickerBar(false);
+
+      } catch {
+        btn.innerHTML = '✗ Error';
+        btn.className = btn.className.replace('text-violet-400','text-red-400');
+        setTimeout(() => {
+          btn.innerHTML = '⟳ Prices';
+          btn.className = btn.className.replace('text-red-400','text-violet-400');
+          btn.disabled  = false;
+        }, 3000);
+      }
     }
 
     function showDemoPreview() {
       const rs = document.getElementById('results-section');
       rs.classList.remove('hidden');
+      document.getElementById('sub-nav').classList.remove('hidden'); updateStickyTops();
       // Demo banner
       if (!document.getElementById('demo-banner')) {
         const b = document.createElement('div');
@@ -486,16 +806,40 @@
         if (user) {
           document.getElementById('auth-modal').style.display = 'none';
           document.getElementById('main-content').classList.remove('hidden');
+          document.getElementById('desk-tabs').classList.remove('hidden');
           document.getElementById('logout-btn').classList.remove('hidden');
           showDemoPreview();
           loadPortfolio();
+          loadLedgerFromFirestore();
         } else {
           document.getElementById('auth-modal').style.display = 'flex';
           document.getElementById('main-content').classList.add('hidden');
+          document.getElementById('desk-tabs').classList.add('hidden');
           document.getElementById('logout-btn').classList.add('hidden');
           document.getElementById('ticker-rows').innerHTML = '';
+          // Reset intel account filter on logout
+          _intelAcctFilter = 'all';
+          document.getElementById('intel-acct-bar')?.classList.add('hidden');
+          document.querySelectorAll('.intel-acct-pill').forEach((b, i) =>
+            b.classList.toggle('active', i === 0));
         }
       });
+    }
+
+    async function loadLedgerFromFirestore() {
+      try {
+        const user = auth?.currentUser;
+        if (!user) return;
+        const token = await user.getIdToken();
+        const resp = await fetch('/api/load-ledger', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if ((data.by_account?.all?.transaction_count || 0) > 0) {
+          renderPerformanceDashboard(data);
+        }
+      } catch(e) { console.warn('[Ledger load]', e); }
     }
 
     async function handleAuth(type) {
@@ -535,8 +879,11 @@
           if (Object.keys(h).length > 0) {
             document.getElementById('ticker-rows').innerHTML = '';
             rowIndex = 0;
-            Object.entries(h).forEach(([t, q]) => {
-              const acctType = (saved.account_mapping && saved.account_mapping[t]) || 'ISA';
+            const ACCT_SUFFIX = /_(ISA|GIA|SIPP)$/;
+            Object.entries(h).forEach(([key, q]) => {
+              const m = key.match(ACCT_SUFFIX);
+              const t = m ? key.slice(0, key.length - m[0].length) : key;
+              const acctType = m ? m[1] : ((saved.account_mapping && saved.account_mapping[key]) || 'ISA');
               addRow(t, q, acctType);
             });
             const cb = saved.cash_balances || {};
@@ -562,21 +909,21 @@
 
     async function savePortfolioManual() {
       const btn = document.getElementById('save-btn');
-      const holdings = {}, account_mapping = {}, cash_balances = {};
+      const holdings = {}, cash_balances = {};
       document.querySelectorAll('#ticker-rows > div').forEach(row => {
         const tInput = row.querySelector('.ticker-input');
         const t = tInput.value.trim().toUpperCase();
         const q = parseFloat(row.querySelector('.qty-input').value);
         if (t && !isNaN(q) && q > 0) {
-          holdings[t] = q;
           const acctSel = row.querySelector('.account-type-select');
-          account_mapping[t] = acctSel ? acctSel.value : 'ISA';
+          const key = `${t}_${acctSel ? acctSel.value : 'ISA'}`;
+          holdings[key] = q;
         }
       });
       cash_balances.ISA  = parseFloat(document.getElementById('cash-isa').value)  || 0;
       cash_balances.SIPP = parseFloat(document.getElementById('cash-sipp').value) || 0;
       cash_balances.GIA  = parseFloat(document.getElementById('cash-gia').value)  || 0;
-      const ok = await savePortfolio(holdings, account_mapping, cash_balances);
+      const ok = await savePortfolio(holdings, {}, cash_balances);
       const orig = btn.innerHTML;
       if (ok) {
         btn.innerHTML = '✓ Saved!';
@@ -589,18 +936,123 @@
       }
     }
 
+    const TICKER_SUGGESTIONS = [
+      'AAPL - Apple Inc.', 'MSFT - Microsoft Corp.', 'AMZN - Amazon.com Inc.', 'GOOGL - Alphabet Inc.',
+      'META - Meta Platforms', 'NVDA - NVIDIA Corp.', 'TSLA - Tesla Inc.', 'JPM - JPMorgan Chase',
+      'SPY - SPDR S&P 500 ETF', 'QQQ - Invesco NASDAQ-100 ETF', 'BND - Vanguard Total Bond Market ETF',
+      'AGG - iShares Core US Aggregate Bond ETF', 'GLD - SPDR Gold Shares', 'TLT - iShares 20+ Year Treasury Bond ETF',
+      'EQQQ.L - Invesco NASDAQ-100 UCITS ETF', 'VWRP.L - Vanguard FTSE All-World UCITS ETF',
+      'CSPX.L - iShares Core S&P 500 UCITS ETF', 'ISF.L - iShares Core FTSE 100 UCITS ETF',
+      'VUSA.L - Vanguard S&P 500 UCITS ETF', 'SWRD.L - SPDR MSCI World UCITS ETF',
+      'EMIM.L - iShares Core MSCI EM IMI UCITS ETF', 'VFEM.L - Vanguard FTSE Emerging Markets UCITS ETF',
+      'SGLN.L - iShares Physical Gold ETC', 'PHGP.L - Invesco Physical Gold ETC',
+      'VAGP.L - Vanguard Global Aggregate Bond UCITS ETF', 'VGOV.L - Vanguard UK Government Bond UCITS ETF',
+      'IGLH.L - iShares USD Corp Bond UCITS ETF GBP Hedged', 'IITU.L - iShares MSCI World Info Tech Sector UCITS ETF',
+      'NRGG.L - iShares Oil & Gas E&P UCITS ETF', 'HSBA.L - HSBC Holdings plc',
+      'BATS.L - British American Tobacco plc', 'SHEL.L - Shell plc', 'BP.L - BP plc',
+      'AZN.L - AstraZeneca plc', 'VOD.L - Vodafone Group plc', 'ULVR.L - Unilever plc',
+      'GLEN.L - Glencore plc', 'LGEN.L - Legal & General Group', 'LLOY.L - Lloyds Banking Group',
+    ];
+
     function addRow(t = '', q = '', acctType = 'ISA') {
       rowIndex++; const id = `row-${rowIndex}`, div = document.createElement('div');
-      div.id = id; div.className = 'grid grid-cols-[1fr_90px_70px_28px] items-center border-b border-slate-800/40 group hover:bg-slate-900/20 transition-colors';
+      div.id = id; div.className = 'grid grid-cols-[1fr_75px_58px_78px_68px_72px_84px_90px_28px] items-center border-b border-slate-800/40 group hover:bg-slate-900/20 transition-colors';
       div.innerHTML = `
-        <input type="text" value="${t}" placeholder="e.g. EQQQ.L" class="ticker-input bg-transparent px-2 py-1.5 text-sm font-bold uppercase focus:outline-none focus:bg-slate-900/40 rounded transition-colors w-full">
-        <input type="number" value="${q}" placeholder="0" class="qty-input bg-transparent px-2 py-1.5 text-sm font-bold text-right focus:outline-none focus:bg-slate-900/40 rounded transition-colors w-full">
-        <select class="account-type-select bg-transparent px-1 py-1.5 text-xs font-bold focus:outline-none cursor-pointer w-full appearance-none"><option value="ISA">ISA</option><option value="SIPP">SIPP</option><option value="GIA">GIA</option></select>
+        <div class="ticker-ac-wrap relative w-full min-w-0">
+          <input type="text" value="${t}" placeholder="e.g. EQQQ.L" class="ticker-input bg-transparent px-2 py-1.5 text-sm font-bold uppercase focus:outline-none focus:bg-slate-900/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 rounded transition-colors w-full" autocomplete="off">
+          <div class="ticker-ac-drop hidden absolute left-0 top-full mt-0.5 w-60 bg-slate-950 border border-indigo-500/30 rounded-xl shadow-2xl z-50 overflow-hidden py-1"></div>
+        </div>
+        <input type="number" value="${q}" placeholder="0" class="qty-input bg-transparent px-2 py-1.5 text-sm font-bold text-right focus:outline-none focus:bg-slate-900/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 rounded transition-colors w-full">
+        <select class="account-type-select bg-transparent px-1 py-1.5 text-xs font-bold focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 cursor-pointer w-full appearance-none"><option value="ISA">ISA</option><option value="SIPP">SIPP</option><option value="GIA">GIA</option></select>
+        <span data-col="price"   data-value="0" class="text-[10px] font-black font-mono text-right pr-2 text-slate-700 select-none">—</span>
+        <span data-col="chg-pct" data-value="0" class="text-[10px] font-black font-mono text-right pr-2 text-slate-700 select-none">—</span>
+        <span data-col="chg-val" data-value="0" class="text-[10px] font-black font-mono text-right pr-2 text-slate-700 select-none">—</span>
+        <span data-col="day-pnl" data-value="0" class="text-[10px] font-black font-mono text-right pr-2 text-slate-700 select-none">—</span>
+        <span data-col="total"   data-value="0" class="text-[10px] font-black font-mono text-right pr-2 text-slate-700 select-none">—</span>
         <button onclick="document.getElementById('${id}').remove()" class="text-slate-800 hover:text-red-500 font-bold text-base transition-colors text-center opacity-0 group-hover:opacity-100">×</button>`;
       const sel = div.querySelector('.account-type-select');
       sel.value = acctType;
       sel.addEventListener('change', () => tintAccountSelect(sel));
       tintAccountSelect(sel);
+
+      // Recalculate Total + Day P&L live when qty changes (if price is already loaded)
+      div.querySelector('.qty-input').addEventListener('input', () => {
+        const tInput  = div.querySelector('.ticker-input');
+        const price   = parseFloat(tInput.dataset.fallbackPrice);
+        const chgAbs  = parseFloat(tInput.dataset.priceChg);
+        if (!price) return;
+        const qty     = parseFloat(div.querySelector('.qty-input').value) || 0;
+        const sym     = tInput.dataset.priceSym || '£';
+        const up      = chgAbs >= 0;
+        const baseClr = 'text-[10px] font-black font-mono text-right pr-2 select-none';
+        const chgClr  = up ? 'text-emerald-400' : 'text-red-400';
+
+        const total   = price * qty;
+        const dayPnl  = chgAbs * qty;
+        const totalCell  = div.querySelector('[data-col="total"]');
+        const dayPnlCell = div.querySelector('[data-col="day-pnl"]');
+
+        if (totalCell) {
+          totalCell.dataset.value  = total;
+          totalCell.textContent    = total > 0 ? `${sym}${Math.round(total).toLocaleString('en-GB')}` : '—';
+          totalCell.className      = `${baseClr} ${total > 0 ? 'text-slate-200' : 'text-slate-700'}`;
+        }
+        if (dayPnlCell && !isNaN(dayPnl)) {
+          dayPnlCell.dataset.value = dayPnl;
+          dayPnlCell.textContent   = qty > 0 ? `${dayPnl >= 0 ? '+' : ''}${sym}${Math.abs(dayPnl).toFixed(2)}` : '—';
+          dayPnlCell.className     = `${baseClr} ${qty > 0 ? chgClr : 'text-slate-700'}`;
+        }
+        _updateTotalsRow();
+      });
+
+      // ── Ticker Autocomplete ──────────────────────────────────────────────
+      const tInput  = div.querySelector('.ticker-input');
+      const acDrop  = div.querySelector('.ticker-ac-drop');
+      let acIdx = -1;
+
+      function acRender(query) {
+        const q = query.trim().toUpperCase();
+        if (q.length < 1) { acDrop.classList.add('hidden'); return; }
+        const matches = TICKER_SUGGESTIONS.filter(s => s.toUpperCase().includes(q)).slice(0, 7);
+        if (!matches.length) { acDrop.classList.add('hidden'); return; }
+        acIdx = -1;
+        acDrop.innerHTML = matches.map((s, i) => {
+          const dash = s.indexOf(' - ');
+          const sym  = dash > -1 ? s.slice(0, dash) : s;
+          const desc = dash > -1 ? s.slice(dash + 3) : '';
+          return `<div data-sym="${sym}" data-i="${i}" class="ac-item flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-indigo-500/20 transition-colors"><span class="text-[10px] font-black text-indigo-300 shrink-0 font-mono">${sym}</span><span class="text-[9px] text-slate-500 truncate">${desc}</span></div>`;
+        }).join('');
+        acDrop.classList.remove('hidden');
+      }
+
+      function acSelect(sym) { tInput.value = sym; acDrop.classList.add('hidden'); acIdx = -1; }
+
+      tInput.addEventListener('input', () => acRender(tInput.value));
+      tInput.addEventListener('keydown', e => {
+        const items = acDrop.querySelectorAll('.ac-item');
+        if (!items.length) return;
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          acIdx = Math.min(acIdx + 1, items.length - 1);
+          items.forEach((el, i) => el.classList.toggle('ac-active', i === acIdx));
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          acIdx = Math.max(acIdx - 1, 0);
+          items.forEach((el, i) => el.classList.toggle('ac-active', i === acIdx));
+        } else if (e.key === 'Enter' && acIdx >= 0 && items[acIdx]) {
+          e.preventDefault();
+          acSelect(items[acIdx].dataset.sym);
+        } else if (e.key === 'Escape') {
+          acDrop.classList.add('hidden');
+        }
+      });
+      tInput.addEventListener('blur', () => setTimeout(() => acDrop.classList.add('hidden'), 160));
+      acDrop.addEventListener('mousedown', e => {
+        const item = e.target.closest('.ac-item');
+        if (item) { e.preventDefault(); acSelect(item.dataset.sym); }
+      });
+      // ────────────────────────────────────────────────────────────────────
+
       document.getElementById('ticker-rows').appendChild(div);
       return div;
     }
@@ -651,15 +1103,14 @@
             symbol = symbol.toUpperCase();
             let existingRow = null;
             document.querySelectorAll('#ticker-rows > div').forEach(row => {
-              if (row.querySelector('.ticker-input').value.trim().toUpperCase() === symbol) existingRow = row;
+              const rowSymbol = row.querySelector('.ticker-input').value.trim().toUpperCase();
+              const rowAccount = row.querySelector('.account-type-select').value;
+              if (rowSymbol === symbol && rowAccount === currentImportType) existingRow = row;
             });
             if (existingRow) {
               const qtyInput = existingRow.querySelector('.qty-input');
               qtyInput.value = (parseFloat(qtyInput.value) || 0) + qty;
               if (!isNaN(price)) existingRow.querySelector('.ticker-input').dataset.fallbackPrice = price;
-              // Update account type only if explicitly set via the modal
-              const acctSel = existingRow.querySelector('.account-type-select');
-              if (acctSel) { acctSel.value = currentImportType; tintAccountSelect(acctSel); }
             } else {
               const row = addRow(symbol, qty, currentImportType);
               if (row && !isNaN(price)) row.querySelector('.ticker-input').dataset.fallbackPrice = price;
@@ -671,37 +1122,60 @@
       reader.readAsText(file);
     }
 
+    function showToast(message, type = 'error') {
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+      const cfg = {
+        error:   { icon: '⚠️', cls: 'border-red-500/50 bg-red-950/90 text-red-100' },
+        success: { icon: '✓',  cls: 'border-emerald-500/50 bg-emerald-950/90 text-emerald-100' },
+        info:    { icon: 'ℹ',  cls: 'border-indigo-500/50 bg-indigo-950/90 text-indigo-100' },
+      };
+      const { icon, cls } = cfg[type] || cfg.error;
+      const toast = document.createElement('div');
+      toast.className = `pointer-events-auto flex items-start gap-3 px-4 py-3 rounded-xl border backdrop-blur-sm shadow-2xl max-w-xs text-[11px] font-bold leading-snug transition-all duration-300 translate-y-3 opacity-0 ${cls}`;
+      toast.innerHTML = `<span class="shrink-0 mt-0.5">${icon}</span><span class="flex-1">${message}</span><button onclick="this.parentElement.remove()" class="shrink-0 text-current opacity-50 hover:opacity-100 font-black text-base leading-none ml-1" aria-label="Dismiss">×</button>`;
+      container.appendChild(toast);
+      requestAnimationFrame(() => requestAnimationFrame(() => toast.classList.remove('translate-y-3', 'opacity-0')));
+      setTimeout(() => { toast.classList.add('translate-y-3', 'opacity-0'); setTimeout(() => toast.remove(), 300); }, 4000);
+    }
+
     async function analyzePortfolio() {
       const holdings = {}, fallbackPrices = {}, account_mapping = {}, cash_balances = {};
       document.querySelectorAll('#ticker-rows > div').forEach(row => {
+        const acctSel = row.querySelector('.account-type-select');
+        const acct = acctSel ? acctSel.value : 'ISA';
+        // Skip rows that don't match the active account filter
+        if (_intelAcctFilter !== 'all' && acct !== _intelAcctFilter) return;
         const tInput = row.querySelector('.ticker-input');
         const t = tInput.value.trim().toUpperCase();
         const q = parseFloat(row.querySelector('.qty-input').value);
         if (t && !isNaN(q) && q > 0) {
-          holdings[t] = q;
-          if (tInput.dataset.fallbackPrice) fallbackPrices[t] = parseFloat(tInput.dataset.fallbackPrice);
-          const acctSel = row.querySelector('.account-type-select');
-          account_mapping[t] = acctSel ? acctSel.value : 'ISA';
+          const key = `${t}_${acct}`;
+          holdings[key] = (holdings[key] || 0) + q;
+          if (!fallbackPrices[key] && tInput.dataset.fallbackPrice)
+            fallbackPrices[key] = parseFloat(tInput.dataset.fallbackPrice);
+          if (!account_mapping[key])                  account_mapping[key] = acct;
         }
       });
-      cash_balances.ISA  = parseFloat(document.getElementById('cash-isa').value)  || 0;
-      cash_balances.SIPP = parseFloat(document.getElementById('cash-sipp').value) || 0;
-      cash_balances.GIA  = parseFloat(document.getElementById('cash-gia').value)  || 0;
+      // Only include cash for the active account filter
+      cash_balances.ISA  = (_intelAcctFilter === 'all' || _intelAcctFilter === 'ISA')  ? (parseFloat(document.getElementById('cash-isa').value)  || 0) : 0;
+      cash_balances.SIPP = (_intelAcctFilter === 'all' || _intelAcctFilter === 'SIPP') ? (parseFloat(document.getElementById('cash-sipp').value) || 0) : 0;
+      cash_balances.GIA  = (_intelAcctFilter === 'all' || _intelAcctFilter === 'GIA')  ? (parseFloat(document.getElementById('cash-gia').value)  || 0) : 0;
       if (Object.keys(holdings).length === 0) return;
       savePortfolio(holdings, account_mapping, cash_balances);
-      document.getElementById('loading-state').classList.remove('hidden'); document.getElementById('results-section').classList.add('hidden');
+      document.getElementById('loading-state').classList.remove('hidden'); document.getElementById('results-section').classList.add('hidden'); document.getElementById('sub-nav').classList.add('hidden'); updateStickyTops();
       try {
         const riskLevel = document.querySelector('input[name="risk-level"]:checked').value;
         const res = await fetch(API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ holdings, account_mapping, risk_level: riskLevel, base_currency: 'GBP', fallback_prices: fallbackPrices })
+          body: JSON.stringify({ holdings, account_mapping, risk_level: riskLevel, base_currency: 'GBP', fallback_prices: fallbackPrices, enable_cio_llm: document.getElementById('cio-llm-toggle').checked })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || 'Engine execution failed.');
         renderResults(data, riskLevel);
       } catch (e) {
-        console.error(e); alert("CRITICAL ERROR: " + e.message);
+        console.error(e); showToast("CRITICAL ERROR: " + e.message, 'error');
       } finally { document.getElementById('loading-state').classList.add('hidden'); }
     }
 
@@ -736,8 +1210,17 @@
 
     function renderResults(data, riskLevel) {
       if (!data || !data.advanced_intel) return;
-      const { portfolio: p, assets: a, risk: r, advanced_intel: ai, recommendations: recs, market_outlook: mo, events: ev, global_macro_events: gme } = data;
+      const { portfolio: p, assets: a, risk: r, advanced_intel: ai, recommendations: recs, market_outlook: mo, events: ev, global_macro_events: gme, tactical_desk: td, tactical_blueprint: tb } = data;
       document.getElementById('results-section').classList.remove('hidden');
+      document.getElementById('intel-acct-bar').classList.remove('hidden');
+      // Only show sub-nav if currently on Intelligence Desk
+      if (!document.getElementById('intelligence-view').classList.contains('hidden'))
+        document.getElementById('sub-nav').classList.remove('hidden');
+      updateStickyTops();
+      renderAccountValueBanners();
+      renderAccountHoldings();
+      // Refresh ticker bar with live prices after each analysis (holdings are confirmed at this point)
+      refreshTickerBar(true);
       // Remove demo preview banner now that real data is available
       const demoBanner = document.getElementById('demo-banner');
       if (demoBanner) demoBanner.remove();
@@ -765,13 +1248,15 @@
       renderHistoryChart(r.history || {}, a);
       renderMarketOutlook(mo || {}, ai);
       renderFutureValue(r.future_value || {}, p.total_value, p.currency);
+      renderTacticalDesk(td || [], p.total_value);
       renderRiskOptimizer(recs || [], p.total_value);
       renderSentimentSummary(a);
       renderAssetCards(a, ev, r.asset_risk, ai, p);
       renderXRayCharts(a);
-      renderBlueprint(ai.ideal_blueprint, a);
+      renderBlueprint(ai.ideal_blueprint, a, tb);
       
       document.getElementById('results-section').classList.remove('hidden');
+      document.getElementById('sub-nav').classList.remove('hidden'); updateStickyTops();
       document.getElementById('results-section').scrollIntoView({ behavior: 'smooth' });
     }
 
@@ -829,11 +1314,14 @@
       const cagrS   = cagrPct > 5   ? 'good' : cagrPct > 2    ? 'warn' : 'bad';
       const terS    = isNaN(rawTer) ? 'good' : rawTer < 0.003 ? 'good' : rawTer < 0.006 ? 'warn' : 'bad';
 
-      // Drag assets = top-2 risk contributors (for Sharpe CRITICAL hint)
+      // Backend-driven hint strings (Opus-generated when CIO LLM is on, data-driven fallbacks otherwise)
+      const sh = ai?.summary_hints || {};
+
+      // Local fallbacks (used only when backend omits a field)
       const dragAssets = assets
         ? Object.entries(assets).sort((x,y)=>(y[1].risk_contribution_pct||0)-(x[1].risk_contribution_pct||0)).slice(0,2).map(([tk])=>tk)
         : [];
-      const sharpeHint = sharpeS === 'good' ? '✓ Efficient alpha capture'
+      const sharpeFallback = sharpeS === 'good' ? '✓ Efficient alpha capture'
         : sharpeS === 'warn' ? '↓ Noisy — add Quality Factor'
         : `↓ Cut drag: ${dragAssets.join(', ') || 'high-vol positions'}`;
 
@@ -859,34 +1347,34 @@
           v: (varPct).toFixed(2) + '%',
           s: varS, meta: totalCash > 0 ? `Cash-adjusted · invested ${(investedFrac*100).toFixed(0)}%` : 'Inception · 1-day parametric',
           range: 'Range  0% – 1.5% – 2.5%+',
-          hint: varS === 'good' ? '✓ Within target — well hedged'
-              : varS === 'warn' ? '↑ Elevated — add GLD hedge'
-              :                   '↑ Critical — rotate to VIG / GLD'
+          hint: varS === 'good'
+              ? (sh.var || '✓ Within target — well hedged')
+              : (sh.var || (varS === 'warn' ? '↑ Elevated' : '↑ Critical'))
         },
         {
           i: '📊', l: 'Beta (β)', tip: 'Beta (β)',
           v: p.portfolio_beta,
           s: betaS, meta: 'vs SPY · Full available history',
           range: 'Range  0.6 — 0.8–1.1 — 1.3+',
-          hint: betaS === 'good' ? '✓ Neutral market exposure'
-              : beta > 1.1        ? '↑ High beta — add VIG / GLD'
-              :                     '↓ Low beta — add QQQ / SPY'
+          hint: betaS === 'good'
+              ? (sh.beta || '✓ Neutral market exposure')
+              : (sh.beta || (beta > 1.1 ? '↑ High beta' : '↓ Low beta'))
         },
         {
           i: '📈', l: 'Sharpe Ratio', tip: 'Sharpe Ratio',
           v: p.sharpe_ratio,
           s: sharpeS, meta: 'Inception CAGR − RFR(4%) / σ',
           range: 'Range  <0.4 — 0.4–0.8 — >0.8',
-          hint: sharpeHint
+          hint: sh.sharpe || sharpeFallback
         },
         {
           i: '🚀', l: 'Real CAGR', tip: 'Real CAGR',
           v: (cagrPct).toFixed(2) + '%',
           s: cagrS, meta: totalCash > 0 ? `Cash-diluted · invested ${(investedFrac*100).toFixed(0)}%` : 'Inception CAGR − 2.5% inflation',
           range: 'Range  <2% — 2–5% — >5%',
-          hint: cagrS === 'good' ? '✓ Beating inflation'
-              : cagrS === 'warn' ? '↑ Marginal — increase growth'
-              :                    '↑ Critical — restructure needed'
+          hint: cagrS === 'good'
+              ? (sh.cagr || '✓ Beating inflation')
+              : (sh.cagr || (cagrS === 'warn' ? '↑ Marginal' : '↑ Critical'))
         },
         {
           i: '💸', l: 'Blended TER', tip: 'Blended TER',
@@ -1087,6 +1575,22 @@
       document.getElementById('global-events').innerHTML = gme.map(x => `<div class="p-3 bg-slate-900/50 rounded-lg border border-slate-800"><div class="flex justify-between items-center"><span class="text-[10px] font-black text-indigo-400">${x.d}</span><span class="text-[10px] font-black text-slate-200 uppercase">${x.e}</span></div><p class="text-[10px] text-slate-500 mt-1">${x.i}</p></div>`).join('');
     }
 
+    // ── X-Ray Cross-Filtering ──────────────────────────────────────────────
+    function filterAssetCards(label, type) {
+      document.querySelectorAll('#asset-cards > div').forEach(card => {
+        const val = type === 'sector' ? card.dataset.sector : card.dataset.region;
+        card.style.display = (val === label) ? '' : 'none';
+      });
+      const btn = document.getElementById('xray-clear-filter');
+      if (btn) { btn.classList.remove('hidden'); btn.querySelector('.filter-label').textContent = label; }
+    }
+
+    function clearAssetFilter() {
+      document.querySelectorAll('#asset-cards > div').forEach(card => card.style.display = '');
+      const btn = document.getElementById('xray-clear-filter');
+      if (btn) btn.classList.add('hidden');
+    }
+
     // ── Portfolio X-Ray Charts ─────────────────────────────────────────────
     function renderXRayCharts(assets) {
       const sectorWeights = {}, regionWeights = {};
@@ -1114,7 +1618,7 @@
       const regionEntries = toEntries(regionWeights);
 
       // Shared chart options factory
-      const donutCfg = (labels, data) => ({
+      const donutCfg = (labels, data, onSliceClick) => ({
         type: 'doughnut',
         data: {
           labels,
@@ -1130,6 +1634,10 @@
           responsive: true,
           maintainAspectRatio: false,
           cutout: '68%',
+          onClick: (e, elements) => {
+            if (!elements.length) { clearAssetFilter(); return; }
+            onSliceClick(labels[elements[0].index]);
+          },
           plugins: {
             legend: {
               position: 'right',
@@ -1149,7 +1657,7 @@
               }
             },
             tooltip: {
-              callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed.toFixed(1)}%` }
+              callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed.toFixed(1)}% — click to filter` }
             }
           }
         }
@@ -1158,14 +1666,17 @@
       if (sectorChart) sectorChart.destroy();
       sectorChart = new Chart(
         document.getElementById('sectorChart'),
-        donutCfg(sectorEntries.map(e => e[0]), sectorEntries.map(e => e[1]))
+        donutCfg(sectorEntries.map(e => e[0]), sectorEntries.map(e => e[1]),
+          label => filterAssetCards(label, 'sector'))
       );
 
       if (regionChart) regionChart.destroy();
       regionChart = new Chart(
         document.getElementById('regionChart'),
-        donutCfg(regionEntries.map(e => e[0]), regionEntries.map(e => e[1]))
+        donutCfg(regionEntries.map(e => e[0]), regionEntries.map(e => e[1]),
+          label => filterAssetCards(label, 'region'))
       );
+      clearAssetFilter(); // reset any prior filter when charts re-render
     }
 
     function renderAllocationChart(a) {
@@ -1181,18 +1692,14 @@
       historyChart = new Chart(document.getElementById('historyChart'), { type: 'line', data: { labels: h_pf.dates, datasets: ds }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { position: 'bottom', labels: { color: '#64748b', font: { size: 9, weight: 'bold' } } } }, scales: { x: { ticks: { color: '#334155', font: { size: 9 }, maxTicksLimit: 8 } }, y: { ticks: { color: '#334155', font: { size: 9 } }, grid: { color: '#1e293b' } } } } });
     }
 
+    const _FIN_TERMS = /\b(Fiscal Dominance|WACC(?:\s+Sensitivity)?|Terminal Value|Quantitative Tightening|Quantitative Easing|Duration Risk|Credit Spread|Yield Curve Control|Yield Curve|YCC|Basis Points|Sharpe Ratio|Sharpe|Sector Rotation|Risk Premium|Factor Breadth|Max Drawdown|Carry Trade|Liquidity Premium|Earnings Per Share|EPS|GDP|CPI|PCE|EBITDA|FCF|ROE|ROA|VIX|Momentum|Volatility|Annualised|Macro Regime|Duration)\b/g;
+    function boldTerms(t) { return String(t).replace(_FIN_TERMS, '<strong class="text-slate-200 font-black">$1</strong>'); }
+
     function renderMarketOutlook(mo, ai) {
-      // DR-based Quant Intelligence — override any backend commentary that contradicts measured DR
       const dr = parseFloat(ai?.attribution?.div_ratio) || 1.0;
-      let commentary;
-      if (dr >= 1.3) {
-        commentary = `Structural diversification is operational. DR ${dr.toFixed(2)} confirms your assets are cancelling each other's idiosyncratic noise — the hallmark of institutional portfolio construction. Maintain factor weights while monitoring correlation creep during risk-off events.`;
-      } else if (dr >= 1.1) {
-        commentary = `Moderate diversification detected. DR ${dr.toFixed(2)} shows partial factor independence. Adding one low-correlation asset class (Gilts, Real Assets, or EM ex-China) would materially improve portfolio efficiency and reduce tail risk.`;
-      } else {
-        commentary = `Diversification is failing. DR ${dr.toFixed(2)} indicates high factor overlap — your assets respond identically to macro shocks, destroying the benefits of multi-asset allocation. Add structurally uncorrelated assets such as IGLT.L (Gilts), SGLN.L (Gold), or REIT exposure.`;
-      }
-      document.getElementById('market-outlook').innerHTML = mo.points.map(x => `<div class="p-4 bg-slate-900/50 rounded-xl border border-slate-800 transition-all group hover:border-indigo-500/30"><div class="flex items-center gap-3 mb-2"><div class="text-xl group-hover:scale-110 transition-transform">${x.i}</div><div><p class="text-[10px] font-bold text-slate-600 uppercase tracking-widest">${x.l}</p><p class="text-xs font-black text-indigo-400 uppercase">${x.v}</p></div></div><p class="text-[10px] leading-relaxed text-slate-500 font-medium">${x.d}</p></div>`).join('') + `<div class="mt-6 space-y-4"><div class="p-4 bg-indigo-950/20 border-l-4 border-indigo-500 rounded-r-xl"><p class="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-2 font-black">Quant Intelligence · DR ${dr.toFixed(2)}</p><p class="text-sm text-slate-300 leading-relaxed">${commentary}</p></div><div class="p-4 bg-violet-950/20 border-l-4 border-violet-500 rounded-r-xl"><p class="text-xs font-bold text-violet-400 uppercase tracking-widest mb-2 font-black">Strategic Outlook</p><p class="text-sm text-slate-300 leading-relaxed">${mo.future_outlook}</p></div></div>`;
+      // Use backend-generated commentary (Opus CIO when enabled, data-driven fallback otherwise)
+      const commentary = mo.quant_intelligence || 'Awaiting neural synthesis…';
+      document.getElementById('market-outlook').innerHTML = mo.points.map(x => `<div class="p-4 bg-slate-900/50 rounded-xl border border-slate-800 transition-all group hover:border-indigo-500/30"><div class="flex items-center gap-3 mb-2"><div class="text-xl group-hover:scale-110 transition-transform">${x.i}</div><div><p class="text-[10px] font-bold text-slate-600 uppercase tracking-widest">${x.l}</p><p class="text-xs font-black text-indigo-400 uppercase">${x.v}</p></div></div><p class="text-[10px] leading-relaxed text-slate-500 font-medium">${boldTerms(x.d)}</p></div>`).join('') + `<div class="mt-6 space-y-4"><div class="p-4 bg-indigo-950/20 border-l-4 border-indigo-500 rounded-r-xl"><p class="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-2 font-black">Quant Intelligence · DR ${dr.toFixed(2)}</p><p class="text-sm text-slate-300 leading-relaxed">${boldTerms(commentary)}</p></div><div class="p-4 bg-violet-950/20 border-l-4 border-violet-500 rounded-r-xl"><p class="text-xs font-bold text-violet-400 uppercase tracking-widest mb-2 font-black">Strategic Outlook</p><p class="text-sm text-slate-300 leading-relaxed">${boldTerms(mo.future_outlook)}</p></div></div>`;
     }
 
     function renderFutureValue(fv, tv, currency) {
@@ -1203,6 +1710,44 @@
         { label: 'Stressed', data: fv.p10.map(v => Math.round(v * tv)), borderColor: '#ef4444', borderDash: [5, 5], pointRadius: 0, tension: 0.3 }
       ] }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { display: true, labels: { color: '#64748b', font: { size: 9, weight: 'bold' } } } }, scales: { y: { ticks: { color: '#475569', font: { size: 9 }, callback: v => (v/1000).toFixed(0) + 'k' } } } } });
       document.getElementById('future-details').innerHTML = `<div class="grid grid-cols-1 md:grid-cols-3 gap-6"><div class="bg-indigo-500/5 p-4 rounded-xl border border-indigo-500/20"><p class="font-black text-indigo-400 uppercase tracking-tighter mb-2">Median Real (2036)</p><p class="text-lg font-black text-slate-200 mb-1">${fmt(fv.p50[10]*tv/Math.pow(1.025, 10), 'currency', currency)}</p></div><div class="bg-emerald-500/5 p-4 rounded-xl border border-emerald-500/20"><p class="font-black text-emerald-400 uppercase tracking-tighter mb-2">Optimistic (P90)</p><p class="text-lg font-black text-slate-200 mb-1">${fmt(fv.p90[10]*tv, 'currency', currency)}</p></div><div class="bg-red-500/5 p-4 rounded-xl border border-red-500/20"><p class="font-black text-red-400 uppercase tracking-tighter mb-2">Stressed (P10)</p><p class="text-lg font-black text-slate-200 mb-1">${fmt(fv.p10[10]*tv, 'currency', currency)}</p></div></div><p class="text-[9px] text-slate-700 font-black uppercase tracking-widest mt-3">Based on full historical CAGR since inception · Bootstrap resampling · Not a forecast.</p>`;
+    }
+
+    function renderTacticalDesk(desk, totalValue) {
+      const sec = document.getElementById('tactical-desk-section');
+      if (!desk || desk.length === 0) { sec.style.display = 'none'; return; }
+      sec.style.display = '';
+      const SEV = {
+        'GEO-RISK':     { border: 'border-red-600/50',    badge: 'bg-red-600 text-white',      glow: 'shadow-red-900/30' },
+        'MACRO-SHOCK':  { border: 'border-orange-500/50', badge: 'bg-orange-500 text-black',   glow: 'shadow-orange-900/30' },
+        'MOMENTUM':     { border: 'border-emerald-500/50',badge: 'bg-emerald-500 text-black',  glow: 'shadow-emerald-900/30' },
+        'SECTOR-ROTATE':{ border: 'border-indigo-500/50', badge: 'bg-indigo-500 text-white',   glow: 'shadow-indigo-900/30' },
+      };
+      document.getElementById('tactical-desk-cards').innerHTML = desk.map(d => {
+        const cfg = SEV[d.severity] || SEV['MACRO-SHOCK'];
+        const isBuy    = d.action === 'Buy';
+        const actionClr = isBuy ? 'text-emerald-400' : 'text-amber-400';
+        const actionBg  = isBuy ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-amber-500/10 border-amber-500/30';
+        const amtStr   = d.amount > 0 ? ` · £${d.amount.toLocaleString('en-GB')}` : '';
+        return `
+          <div class="glass border ${cfg.border} rounded-xl p-5 space-y-3 hover:scale-[1.01] transition-all shadow-lg ${cfg.glow}">
+            <div class="flex items-start justify-between gap-2">
+              <div class="flex gap-3 min-w-0">
+                <span class="text-2xl shrink-0 mt-0.5">${d.icon}</span>
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-center gap-1.5 mb-1">
+                    <span class="text-[8px] font-black px-1.5 py-0.5 rounded ${cfg.badge} uppercase">${d.severity}</span>
+                    <span class="text-[8px] font-black text-slate-600 uppercase tracking-widest">${d.time_horizon} horizon</span>
+                  </div>
+                  <p class="text-[11px] font-black text-slate-100 uppercase tracking-tight leading-tight">${d.event}</p>
+                </div>
+              </div>
+            </div>
+            <div class="rounded-lg p-3 border ${actionBg}">
+              <p class="text-xs font-black ${actionClr} uppercase tracking-widest mb-1">${d.action} ${d.ticker}${amtStr}</p>
+              <p class="text-[10px] text-slate-400 font-medium leading-relaxed">${d.rationale}</p>
+            </div>
+          </div>`;
+      }).join('');
     }
 
     function renderRiskOptimizer(recs, totalPortfolioValue = 0) {
@@ -1220,22 +1765,7 @@
         rationale: `${(cashRatio * 100).toFixed(1)}% of your total portfolio value (£${grandTotal.toLocaleString('en-GB', { maximumFractionDigits: 0 })}) is held as cash. At 2.5% inflation this erodes purchasing power by ~£${Math.round(totalCash * 0.025).toLocaleString('en-GB')}/year. Consider deploying into a low-cost index fund (VWRP.L, CSPX) or a money-market fund to reduce drag while maintaining liquidity.`
       }] : [];
 
-      // Collect which tickers are held in GIA across all rows
-      const giaRows = [];
-      document.querySelectorAll('#ticker-rows > div').forEach(row => {
-        const sel = row.querySelector('.account-type-select');
-        const tk  = row.querySelector('.ticker-input')?.value?.trim().toUpperCase();
-        if (sel && sel.value === 'GIA' && tk) giaRows.push(tk);
-      });
-      const hasGia = giaRows.length > 0;
-      const giaList = giaRows.length > 0 ? giaRows.join(', ') : 'your distributing holdings';
-      const taxRec = hasGia ? [{
-        icon: '💷', action: 'TAX ALERT', _gia: true,
-        title: 'Tax Drag Warning — GIA Holdings Detected',
-        detail: `${giaList} — income and gains subject to UK tax`,
-        rationale: `In a General Investment Account, dividends from ${giaList} are taxed as income above your £500 allowance. Capital gains above £3,000 also incur CGT. Consider: (1) rotating to accumulating (Acc) share classes which reinvest dividends without triggering income tax; (2) prioritising capital-growth assets (e.g. EQQQ.L Acc, CSPX) over distributing equivalents; (3) sheltering high-yield positions inside your annual ISA or SIPP allowance first.`
-      }] : [];
-      const allRecs = [...cashDragRec, ...taxRec, ...recs];
+      const allRecs = [...cashDragRec, ...recs];
       document.getElementById('risk-optimizer').innerHTML = allRecs.map(r => {
         const isGia  = r._gia;
         const isCash = r._cashDrag;
@@ -1251,8 +1781,55 @@
 
     function renderSentimentSummary(a) {
       document.getElementById('sentiment-summary-panel').innerHTML = Object.entries(a).map(([tk, asset]) => {
-        const s = asset.sentiment || {}, b = Math.round((s.bullish || 0)*100), r_pct = Math.round((s.bearish || 0)*100), badge = sentimentBadge(s.label), delta = s.sentiment_delta || 0, exhaustion = s.exhaustion_alert ? '<span class="text-[7px] bg-red-600 text-white px-1 rounded animate-bounce">EXHAUSTION</span>' : '';
-        return `<div class="p-4 bg-slate-900/30 rounded-xl border border-slate-800"><div class="flex items-center justify-between mb-2"><span class="font-black text-sm text-slate-200">${tk}</span><div class="flex items-center gap-2">${exhaustion}<span class="text-[9px] font-black px-2 py-0.5 rounded border ${badge.cls}">${badge.text}</span></div></div><div class="sentiment-bar mb-2"><div style="width:${b}%; background:#22c55e;"></div><div style="width:${Math.max(0, 100-b-r_pct)}%; background:#334155;"></div><div style="width:${r_pct}%; background:#ef4444;"></div></div><div class="flex justify-between text-[8px] font-black uppercase tracking-tighter"><span>Bull ${b}%</span><span class="${retClr(delta)}">D: ${delta > 0 ? '+' : ''}${delta}</span><span>Bear ${r_pct}%</span></div></div>`;
+        const s      = asset.sentiment || {};
+        const b      = Math.round((s.bullish || 0) * 100);
+        const r_pct  = Math.round((s.bearish || 0) * 100);
+        const badge  = sentimentBadge(s.label);
+        const delta  = s.sentiment_delta || 0;
+        const exhaustion = s.exhaustion_alert
+          ? '<span class="text-[7px] bg-red-600 text-white px-1 rounded animate-bounce">EXHAUSTION</span>' : '';
+
+        // RSI badge
+        const rsi = parseFloat(s.rsi);
+        let rsiHtml = '';
+        if (!isNaN(rsi)) {
+          const rsiClr = rsi > 70 ? 'text-red-400' : rsi < 30 ? 'text-emerald-400' : 'text-slate-500';
+          const rsiBg  = rsi > 70 ? 'bg-red-950/60 border-red-700/50'
+                       : rsi < 30 ? 'bg-emerald-950/60 border-emerald-700/50'
+                       :            'bg-slate-900/60 border-slate-700/50';
+          const rsiLabel = rsi > 70
+            ? `<span class="text-[7px] bg-red-600 text-white font-black px-1.5 py-0.5 rounded uppercase">Overbought</span>
+               <span class="text-[7px] bg-red-950 border border-red-600/50 text-red-400 font-black px-1.5 py-0.5 rounded uppercase">Trim ↓</span>`
+            : rsi < 30
+            ? `<span class="text-[7px] bg-emerald-600 text-white font-black px-1.5 py-0.5 rounded uppercase">Oversold</span>
+               <span class="text-[7px] bg-emerald-950 border border-emerald-600/50 text-emerald-400 font-black px-1.5 py-0.5 rounded uppercase">Buy Dip ↑</span>`
+            : `<span class="text-[9px] ${rsiClr} font-black uppercase">Neutral</span>`;
+          rsiHtml = `
+            <div class="mt-2 pt-2 border-t border-slate-800/50 flex items-center justify-between">
+              <div class="flex items-center gap-1.5">
+                <span class="text-[9px] font-black text-slate-500 uppercase">RSI</span>
+                <span class="text-[9px] font-black ${rsiClr} font-mono ${rsiBg} border px-1.5 py-0.5 rounded">${rsi.toFixed(0)}</span>
+              </div>
+              <div class="flex items-center gap-1">${rsiLabel}</div>
+            </div>`;
+        }
+
+        return `
+          <div class="p-4 bg-slate-900/30 rounded-xl border border-slate-800">
+            <div class="flex items-center justify-between mb-2">
+              <span class="font-black text-sm text-slate-200">${tk}</span>
+              <div class="flex items-center gap-2">${exhaustion}<span class="text-[9px] font-black px-2 py-0.5 rounded border ${badge.cls}">${badge.text}</span></div>
+            </div>
+            <div class="sentiment-bar mb-2">
+              <div style="width:${b}%; background:#22c55e;"></div>
+              <div style="width:${Math.max(0, 100-b-r_pct)}%; background:#334155;"></div>
+              <div style="width:${r_pct}%; background:#ef4444;"></div>
+            </div>
+            <div class="flex justify-between text-[8px] font-black uppercase tracking-tighter">
+              <span>Bull ${b}%</span><span class="${retClr(delta)}">D: ${delta > 0 ? '+' : ''}${delta}</span><span>Bear ${r_pct}%</span>
+            </div>
+            ${rsiHtml}
+          </div>`;
       }).join('');
     }
 
@@ -1269,7 +1846,11 @@
         const betaHint = isNaN(betaV) ? 'N/A' : betaV > 1.2 ? 'Aggressive' : betaV < 0.8 ? 'Defensive' : 'Neutral';
         const evts = ev[tk] || {}, evtItems = Object.entries(evts).filter(([k,v]) => v).map(([k,v]) => `<div class="flex justify-between text-[9px] py-0.5 border-b border-slate-800/30 last:border-0"><span class="text-slate-500 font-black uppercase tracking-tighter">${k.replace(/_/g,' ')}</span><span class="text-slate-300 font-black font-mono">${v}</span></div>`).join('');
         const headlines = (asset.sentiment?.headlines || []).slice(0,5).map(h => `<li class="text-[9px] text-slate-500 leading-tight mb-2 flex gap-2 font-medium"><span>•</span><span class="line-clamp-2">${typeof h === 'object' ? h.title : h}</span></li>`).join('') || '<li class="text-[9px] text-slate-700 italic font-bold uppercase tracking-widest text-center py-2">No signals detected.</li>';
-        return `<div class="glass p-5 border-t-2 transition-all hover:shadow-2xl" style="border-top-color: ${c}">
+        const cardId = `card-details-${tk.replace(/\W/g,'_')}`;
+        const _base = tk.split('.')[0].toUpperCase();
+        const cardSector = (asset.sector && asset.sector !== 'N/A') ? asset.sector : 'Other';
+        const cardRegion = (typeof REGION_MAP !== 'undefined' && REGION_MAP[_base]) || (tk.endsWith('.L') ? 'United Kingdom' : 'Other');
+        return `<div class="glass p-5 border-t-2 transition-all hover:shadow-2xl" data-sector="${cardSector}" data-region="${cardRegion}" style="border-top-color: ${c}">
           <div class="flex justify-between mb-3">
             <div>
               <div class="flex items-center gap-2 mb-1.5"><span class="text-[10px] font-black px-2 py-0.5 rounded shadow-sm" style="background:${c}22;color:${c}">${tk}</span><span class="text-[9px] font-black px-2 py-0.5 rounded border shadow-sm ${b.cls}">${b.text}</span></div>
@@ -1282,7 +1863,7 @@
               <p class="text-[8px] ${safetyClr} font-bold">${safetyHint}</p>
             </div>
           </div>
-          <div class="grid grid-cols-2 gap-1.5 text-xs mb-3">
+          <div class="grid grid-cols-2 gap-1.5 text-xs mb-2">
             <div class="bg-slate-900/50 p-2 rounded border border-slate-800">
               <p class="text-slate-600 text-[8px] font-black uppercase">Qty / Value</p>
               <p class="text-[10px] font-black text-slate-200">${asset.quantity} · ${fmt(asset.value, 'currency', p.currency)}</p>
@@ -1291,40 +1872,45 @@
               <p class="text-slate-600 text-[8px] font-black uppercase">Risk Contrib</p>
               <p class="text-[10px] font-black text-slate-200">${asset.risk_contribution_pct}% of vol</p>
             </div>
-            <div class="bg-slate-900/50 p-2 rounded border border-slate-800">
-              <p class="text-slate-600 text-[8px] font-black uppercase">P/E Ratio</p>
-              <p class="text-[10px] font-black ${peClr}">${asset.pe_ratio === 'N/A' ? 'N/A' : asset.pe_ratio} <span class="text-[8px] text-slate-700">${peHint}</span></p>
-            </div>
-            <div class="bg-slate-900/50 p-2 rounded border border-slate-800">
-              <p class="text-slate-600 text-[8px] font-black uppercase">Div. Yield</p>
-              <p class="text-[10px] font-black text-indigo-400">${yldStr}</p>
-            </div>
-            <div class="bg-slate-900/50 p-2 rounded border border-slate-800">
-              <p class="text-slate-600 text-[8px] font-black uppercase">Beta (β)</p>
-              <p class="text-[10px] font-black ${betaClr}">${asset.beta === 'N/A' ? 'N/A' : asset.beta} <span class="text-[8px] text-slate-700">${betaHint}</span></p>
-            </div>
-            <div class="bg-slate-900/50 p-2 rounded border border-slate-800">
-              <p class="text-slate-600 text-[8px] font-black uppercase">Inst. Flow</p>
-              <p class="text-[10px] font-black text-indigo-400">${asset.institutional_flow_score}%</p>
-            </div>
-            <div class="bg-slate-900/50 p-2 rounded border border-slate-800 col-span-2">
-              <p class="text-slate-600 text-[8px] font-black uppercase flex items-center gap-1">TER / OCF (Annual Cost)${tipBtn('Blended TER')}</p>
-              ${(()=>{
-                const t = parseFloat(asset.ter);
-                if (isNaN(t)) return '<p class="text-[10px] font-black text-slate-600">N/A</p>';
-                const cls = t < 0.003 ? 'text-emerald-400' : t < 0.006 ? 'text-amber-400' : 'text-red-400';
-                const lbl = t < 0.003 ? 'Low cost' : t < 0.006 ? 'Moderate' : 'Expensive';
-                return `<p class="text-[10px] font-black ${cls}">${(t*100).toFixed(2)}% p.a. <span class="text-[8px] text-slate-700">${lbl}</span></p>`;
-              })()}
-            </div>
           </div>
-          <div class="border-t border-slate-800/50 pt-3">
-            <p class="text-[9px] font-black text-slate-600 uppercase tracking-widest mb-2">Upcoming Events</p>
-            ${evtItems || '<p class="text-[9px] text-slate-700 italic font-bold">No upcoming signals.</p>'}
-          </div>
-          <div class="border-t border-slate-800/50 mt-3 pt-3">
-            <p class="text-[9px] font-black text-slate-600 uppercase tracking-widest mb-2">${asset.sentiment?.headline_count > 0 ? 'Neural News Synthesis' : 'Macro Factor Synthesis'}</p>
-            <ul class="list-none m-0 p-0">${headlines}</ul>
+          <button onclick="const d=document.getElementById('${cardId}');const open=!d.classList.contains('hidden');d.classList.toggle('hidden');this.innerHTML=open?'▼ <span>Show Details</span>':'▲ <span>Hide Details</span>'" class="w-full flex items-center justify-center gap-1 py-1.5 text-[8px] font-black uppercase tracking-widest text-slate-600 hover:text-indigo-400 border border-slate-800 hover:border-indigo-500/40 rounded-lg transition-all mb-1">▼ <span>Show Details</span></button>
+          <div id="${cardId}" class="hidden">
+            <div class="grid grid-cols-2 gap-1.5 text-xs mb-3 mt-2">
+              <div class="bg-slate-900/50 p-2 rounded border border-slate-800">
+                <p class="text-slate-600 text-[8px] font-black uppercase">P/E Ratio</p>
+                <p class="text-[10px] font-black ${peClr}">${asset.pe_ratio === 'N/A' ? 'N/A' : asset.pe_ratio} <span class="text-[8px] text-slate-700">${peHint}</span></p>
+              </div>
+              <div class="bg-slate-900/50 p-2 rounded border border-slate-800">
+                <p class="text-slate-600 text-[8px] font-black uppercase">Div. Yield</p>
+                <p class="text-[10px] font-black text-indigo-400">${yldStr}</p>
+              </div>
+              <div class="bg-slate-900/50 p-2 rounded border border-slate-800">
+                <p class="text-slate-600 text-[8px] font-black uppercase">Beta (β)</p>
+                <p class="text-[10px] font-black ${betaClr}">${asset.beta === 'N/A' ? 'N/A' : asset.beta} <span class="text-[8px] text-slate-700">${betaHint}</span></p>
+              </div>
+              <div class="bg-slate-900/50 p-2 rounded border border-slate-800">
+                <p class="text-slate-600 text-[8px] font-black uppercase">Inst. Flow</p>
+                <p class="text-[10px] font-black text-indigo-400">${asset.institutional_flow_score}%</p>
+              </div>
+              <div class="bg-slate-900/50 p-2 rounded border border-slate-800 col-span-2">
+                <p class="text-slate-600 text-[8px] font-black uppercase flex items-center gap-1">TER / OCF (Annual Cost)${tipBtn('Blended TER')}</p>
+                ${(()=>{
+                  const t = parseFloat(asset.ter);
+                  if (isNaN(t)) return '<p class="text-[10px] font-black text-slate-600">N/A</p>';
+                  const cls = t < 0.003 ? 'text-emerald-400' : t < 0.006 ? 'text-amber-400' : 'text-red-400';
+                  const lbl = t < 0.003 ? 'Low cost' : t < 0.006 ? 'Moderate' : 'Expensive';
+                  return `<p class="text-[10px] font-black ${cls}">${(t*100).toFixed(2)}% p.a. <span class="text-[8px] text-slate-700">${lbl}</span></p>`;
+                })()}
+              </div>
+            </div>
+            <div class="border-t border-slate-800/50 pt-3">
+              <p class="text-[9px] font-black text-slate-600 uppercase tracking-widest mb-2">Upcoming Events</p>
+              ${evtItems || '<p class="text-[9px] text-slate-700 italic font-bold">No upcoming signals.</p>'}
+            </div>
+            <div class="border-t border-slate-800/50 mt-3 pt-3">
+              <p class="text-[9px] font-black text-slate-600 uppercase tracking-widest mb-2">${asset.sentiment?.headline_count > 0 ? 'Neural News Synthesis' : 'Macro Factor Synthesis'}</p>
+              <ul class="list-none m-0 p-0">${headlines}</ul>
+            </div>
           </div>
         </div>`;
       }).join('');
@@ -1332,37 +1918,78 @@
 
     function exportTradesCSV() {
       if (!_lastTradeActions.length) return;
-      const rows = [['Action','Category','Ticker','Shares','Price (£)','Est. Value (£)','Spread Cost (£)']];
-      _lastTradeActions.forEach(r => rows.push(...r));
+      const fmt = document.getElementById('broker-format')?.value || 'standard';
+      let headers, rowMapper, filename;
+      if (fmt === 'ib') {
+        headers = ['Action','Quantity','Symbol','SecType','Currency','OrderType','LmtPrice'];
+        rowMapper = r => [r[0] === 'Buy' ? 'BUY' : 'SELL', r[3], r[2], 'STK', 'GBP', 'MKT', r[4]];
+        filename = `vesper_IB_${new Date().toISOString().slice(0,10)}.csv`;
+      } else if (fmt === 't212') {
+        headers = ['Shares','Ticker','Price per share','Notes'];
+        rowMapper = r => [r[3], r[2], r[4], `${r[0]} ${r[1]}`];
+        filename = `vesper_T212_${new Date().toISOString().slice(0,10)}.csv`;
+      } else {
+        headers = ['Action','Category','Ticker','Shares','Price (£)','Est. Value (£)','Spread Cost (£)'];
+        rowMapper = r => r;
+        filename = `vesper_trades_${new Date().toISOString().slice(0,10)}.csv`;
+      }
+      const rows = [headers, ..._lastTradeActions.map(rowMapper)];
       const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\r\n');
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-      a.download = `vesper_trades_${new Date().toISOString().slice(0,10)}.csv`; a.click();
+      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+      a.download = filename; a.click();
       URL.revokeObjectURL(a.href);
     }
 
-    function renderBlueprint(blueprint, assets) {
+    function renderBlueprint(blueprint, assets, tacticalBlueprint) {
       const cats = ["Growth", "Core", "Defensive"];
       const colors = { Growth: "indigo-500", Core: "emerald-500", Defensive: "amber-500" };
       const totalPortfolioValue = assets ? Object.values(assets).reduce((s, a) => s + (a.value || 0), 0) : 0;
-      
+
       document.getElementById('blueprint-content').innerHTML = cats.map(cat => {
-        const target = blueprint.target[cat];
-        const current = blueprint.current[cat];
-        const tickers = blueprint.segments[cat] || [];
+        // blueprint.target is now the TACTICAL target (set by CIO).
+        // blueprint.strategic_target holds the original static risk-level target.
+        // Use strategic_target as the grey reference line; tactical as the amber tilt line.
+        const strategicTgt = blueprint.strategic_target?.[cat] ?? blueprint.target[cat] ?? 0;
+        const tacticalTgt  = blueprint.target[cat] ?? 0;
+        const current      = blueprint.current[cat] ?? 0;
+        const tickers      = blueprint.segments[cat] || [];
         const c = colors[cat];
+
+        const hasTilt   = Math.abs(tacticalTgt - strategicTgt) > 0.004;
+        const tiltDelta = hasTilt ? Math.round((tacticalTgt - strategicTgt) * 100) : 0;
+        const tiltSign  = tiltDelta > 0 ? '+' : '';
+        const tiltClr   = tiltDelta > 0 ? 'text-amber-400' : 'text-emerald-400';
+        const targetPct  = Math.round(strategicTgt * 100);   // grey line = strategic mandate
+        const tacPct     = Math.round(tacticalTgt  * 100);   // amber line = CIO tactical tilt
+        const currentPct = Math.round(current * 100);
+
+        const labelHtml = hasTilt
+          ? `Strategic <span class="line-through text-slate-600">${targetPct}%</span> · <span class="${tiltClr} font-black">Tac ${tacPct}%</span> · <span class="text-slate-300">Now ${currentPct}%</span>`
+          : `Target ${targetPct}% · <span class="text-slate-300">Now ${currentPct}%</span>`;
+
+        // Bar: dark bg, current fill, strategic target line (grey), tactical target line (amber)
+        const barHtml = `
+          <div class="h-3 w-full bg-slate-900 rounded-full border border-slate-800 relative overflow-hidden">
+            <div class="h-full bg-${c} shadow-[0_0_10px_rgba(99,102,241,0.3)] absolute left-0 top-0" style="width:${currentPct}%"></div>
+            <div class="absolute top-0 bottom-0 w-px bg-slate-400/60 z-10" style="left:${targetPct}%"></div>
+            ${hasTilt ? `<div class="absolute top-0 bottom-0 w-0.5 bg-amber-400 z-10" style="left:${tacPct}%"></div>` : ''}
+          </div>`;
+
+        const tiltNote = hasTilt
+          ? `<p class="text-[9px] font-bold ${tiltClr} leading-snug mt-1">${tiltSign}${tiltDelta}% tactical tilt — ${(tacticalBlueprint?.rationale || blueprint.tactical_rationale || 'CIO macro overlay active').split(' · ')[0]}</p>`
+          : '';
+
         return `
-          <div class="space-y-3">
+          <div class="space-y-2">
             <div class="flex justify-between items-end">
               <div>
                 <span class="text-sm font-black text-slate-200 uppercase">${cat}</span>
                 <p class="text-[9px] text-slate-500 font-bold uppercase mt-0.5">${tickers.join(', ') || 'None held'}</p>
               </div>
-              <span class="text-[10px] font-bold text-slate-500 uppercase">Target: ${Math.round(target*100)}% | <span class="text-slate-300">Current: ${Math.round(current*100)}%</span></span>
+              <span class="text-[10px] font-bold text-slate-500 uppercase text-right">${labelHtml}</span>
             </div>
-            <div class="h-3 w-full bg-slate-900 rounded-full overflow-hidden border border-slate-800">
-              <div class="h-full bg-${c} shadow-[0_0_10px_rgba(99,102,241,0.3)]" style="width: ${current*100}%"></div>
-            </div>
+            ${barHtml}
+            ${tiltNote}
           </div>`;
       }).join('');
 
@@ -1409,9 +2036,16 @@
 
       // Export button shown only when there are actionable trades
       const exportBtn = _lastTradeActions.length > 0
-        ? `<button onclick="exportTradesCSV()" class="mt-4 w-full flex items-center justify-center gap-2 py-2.5 border border-dashed border-emerald-700/50 text-emerald-500 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-emerald-500/10 transition-all">
-            <span>⬇</span> Export Trades (CSV)
-           </button>`
+        ? `<div class="mt-4 flex gap-2">
+             <select id="broker-format" class="bg-slate-900 border border-slate-700 text-slate-400 text-[9px] font-black uppercase rounded-xl px-3 outline-none focus:border-indigo-600 cursor-pointer hover:border-slate-600 transition-all" style="min-width:140px">
+               <option value="standard">Standard CSV</option>
+               <option value="ib">Interactive Brokers</option>
+               <option value="t212">Trading 212</option>
+             </select>
+             <button onclick="exportTradesCSV()" class="flex-1 flex items-center justify-center gap-2 py-2.5 border border-dashed border-emerald-700/50 text-emerald-500 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-emerald-500/10 transition-all">
+               <span>⬇</span> Export
+             </button>
+           </div>`
         : '';
 
       document.getElementById('blueprint-actions').innerHTML = actionCards + exportBtn;
@@ -1565,13 +2199,949 @@
       localStorage.setItem('vesper-theme', next);
     }
 
+    // ── Builder helpers: totals row + column sort ───────────────────────────
+    function _updateTotalsRow() {
+      let sumTotal = 0, sumDayPnl = 0, hasPrices = false;
+      document.querySelectorAll('#ticker-rows > div').forEach(row => {
+        const t = parseFloat(row.querySelector('[data-col="total"]')?.dataset.value) || 0;
+        const d = parseFloat(row.querySelector('[data-col="day-pnl"]')?.dataset.value) || 0;
+        if (t) { sumTotal += t; hasPrices = true; }
+        sumDayPnl += d;
+      });
+
+      const tRow = document.getElementById('totals-row');
+      if (!hasPrices) { tRow.classList.add('hidden'); return; }
+      tRow.classList.remove('hidden');
+
+      // Infer a currency symbol from any loaded row (default £)
+      const sym = document.querySelector('#ticker-rows .ticker-input')?.dataset.priceSym || '£';
+      const up  = sumDayPnl >= 0;
+
+      document.getElementById('totals-day-pnl').textContent = `${sumDayPnl >= 0 ? '+' : ''}${sym}${Math.abs(sumDayPnl).toFixed(2)}`;
+      document.getElementById('totals-day-pnl').className   = `text-[10px] font-black font-mono text-right pr-2 ${up ? 'text-emerald-400' : 'text-red-400'}`;
+      document.getElementById('totals-total').textContent   = `${sym}${Math.round(sumTotal).toLocaleString('en-GB')}`;
+      document.getElementById('totals-total').className     = 'text-[10px] font-black font-mono text-right pr-2 text-slate-200';
+    }
+
+    let _sortState = { col: null, dir: 1 };
+    function sortRows(col) {
+      const rows = Array.from(document.querySelectorAll('#ticker-rows > div'));
+      if (!rows.length) return;
+      _sortState.dir = _sortState.col === col ? -_sortState.dir : 1;
+      _sortState.col = col;
+
+      rows.sort((a, b) => {
+        let va, vb;
+        if (col === 'ticker') {
+          va = a.querySelector('.ticker-input')?.value.trim().toUpperCase() || '';
+          vb = b.querySelector('.ticker-input')?.value.trim().toUpperCase() || '';
+          return va.localeCompare(vb) * _sortState.dir;
+        } else if (col === 'qty') {
+          va = parseFloat(a.querySelector('.qty-input')?.value) || 0;
+          vb = parseFloat(b.querySelector('.qty-input')?.value) || 0;
+        } else {
+          va = parseFloat(a.querySelector(`[data-col="${col}"]`)?.dataset.value ?? '0') || 0;
+          vb = parseFloat(b.querySelector(`[data-col="${col}"]`)?.dataset.value ?? '0') || 0;
+        }
+        return (va - vb) * _sortState.dir;
+      });
+
+      const container = document.getElementById('ticker-rows');
+      rows.forEach(r => container.appendChild(r));
+
+      // Update sort indicators
+      ['ticker','qty','price','chg-pct','chg-val','day-pnl','total'].forEach(c => {
+        const el = document.getElementById(`sort-ind-${c}`);
+        if (el) el.textContent = c === col ? (_sortState.dir === 1 ? '↑' : '↓') : '↕';
+      });
+    }
+
+    // ── Live Ticker Bar ─────────────────────────────────────────────────────
+
+    function _getHoldings() {
+      // Returns { ticker: { shares, account } } from the builder rows
+      const h = {};
+      document.querySelectorAll('#ticker-rows > div').forEach(row => {
+        const tk  = row.querySelector('.ticker-input')?.value?.trim().toUpperCase();
+        const qty = parseFloat(row.querySelector('.qty-input')?.value) || 0;
+        if (tk && qty > 0) h[tk] = { shares: (h[tk]?.shares || 0) + qty };
+      });
+      return h;
+    }
+
+    async function refreshTickerBar(manual = false) {
+      const holdings = _getHoldings();
+      const tickers  = Object.keys(holdings);
+      const bar      = document.getElementById('ticker-bar');
+      const strip    = document.getElementById('ticker-strip');
+      const btn      = document.getElementById('ticker-refresh-btn');
+
+      if (tickers.length === 0) { bar.classList.add('hidden'); updateStickyTops(); return; }
+      bar.classList.remove('hidden'); updateStickyTops();
+
+      // Spin indicator
+      btn.innerHTML = '<span class="tb-spin">⟳</span>';
+      if (manual) strip.innerHTML = tickers.map(tk =>
+        `<div class="ticker-chip"><span class="text-[10px] font-black text-slate-600 font-mono">${tk}</span><span class="text-[9px] text-slate-700">…</span></div>`
+      ).join('');
+
+      try {
+        const res  = await fetch(`/api/quotes?tickers=${tickers.join(',')}`);
+        const data = await res.json();
+        _renderTickerChips(data.quotes, holdings);
+        document.getElementById('ticker-bar-time').textContent = data.timestamp || '';
+      } catch {
+        strip.innerHTML = `<div class="ticker-chip"><span class="text-[10px] text-red-500 font-black">Price fetch failed</span></div>`;
+      } finally {
+        btn.innerHTML = '⟳';
+      }
+
+    }
+
+    function _renderTickerChips(quotes, holdings) {
+      const strip = document.getElementById('ticker-strip');
+      if (!quotes || quotes.length === 0) { strip.innerHTML = ''; return; }
+
+      strip.innerHTML = quotes.map(q => {
+        const up      = q.change_pct >= 0;
+        const arrow   = up ? '▲' : '▼';
+        const clr     = q.price === 0 ? 'text-slate-600'
+                      : up ? 'text-emerald-400' : 'text-red-400';
+        const bgPct   = up ? 'text-emerald-500' : 'text-red-500';
+        const shares  = holdings[q.ticker]?.shares || 0;
+        const total   = shares * q.price;
+        const sym     = q.currency === 'GBP' ? '£' : q.currency === 'USD' ? '$' : q.currency + ' ';
+        const priceFmt = q.price === 0 ? '—' : `${sym}${q.price.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        const chgPct  = q.price === 0 ? '' : `${arrow} ${Math.abs(q.change_pct).toFixed(2)}%`;
+        const chgAbs  = q.price === 0 ? '' : `${up ? '+' : ''}${sym}${Math.abs(q.change).toFixed(2)}`;
+        const totalFmt = total > 0 ? `${sym}${Math.round(total).toLocaleString('en-GB')}` : '';
+
+        return `<div class="ticker-chip group">
+          <div class="flex flex-col justify-center leading-none gap-[2px]">
+            <div class="flex items-center gap-1.5">
+              <span class="text-[10px] font-black text-slate-200 font-mono tracking-tight">${q.ticker}</span>
+              <span class="text-[8px] text-slate-600 font-bold max-w-[90px] truncate hidden sm:inline">${q.name}</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="text-[11px] font-black font-mono ${clr}">${priceFmt}</span>
+              ${chgPct ? `<span class="text-[9px] font-black ${bgPct} font-mono">${chgPct}</span>` : ''}
+              ${chgAbs ? `<span class="ticker-chip-abs text-[9px] font-bold text-slate-600 font-mono">(${chgAbs})</span>` : ''}
+              ${totalFmt ? `<span class="ticker-chip-total text-[9px] font-black text-slate-500 font-mono border-l border-slate-800 pl-1.5">${totalFmt}</span>` : ''}
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+
+      // Cache live prices for unrealized gain calculation
+      quotes.forEach(q => { if (q.price > 0) _lastQuotes[q.ticker] = q.price; });
+      updateLedgerUnrealized();
+      renderAccountValueBanners();
+      renderAccountHoldings();
+    }
+
+
+
+    // ── Responsive sticky positioning ───────────────────────────────────────
+    // Recomputes ticker-bar, desk-tabs, and sub-nav `top` values from actual
+    // header height so they stack correctly on every screen size / zoom level.
+    function updateStickyTops() {
+      const headerH    = document.querySelector('header')?.offsetHeight || 60;
+      const tickerEl   = document.getElementById('ticker-bar');
+      const deskTabsEl = document.getElementById('desk-tabs');
+      const subNavEl   = document.getElementById('sub-nav');
+      if (tickerEl)   tickerEl.style.top   = headerH + 'px';
+      const tickerH   = (tickerEl && !tickerEl.classList.contains('hidden'))   ? (tickerEl.offsetHeight  || 0) : 0;
+      if (deskTabsEl) deskTabsEl.style.top = (headerH + tickerH) + 'px';
+      const deskH     = (deskTabsEl && !deskTabsEl.classList.contains('hidden')) ? (deskTabsEl.offsetHeight || 0) : 0;
+      if (subNavEl)   subNavEl.style.top   = (headerH + tickerH + deskH) + 'px';
+    }
+    window.addEventListener('resize', updateStickyTops);
+// 1. Global State Object to persist data between desk switches
+window.vesperGlobal = {
+    holdings: {},    // Map of Ticker_Account -> Qty
+    prices: {},      // Cached live prices
+    currentView: 'intelligence'
+};
+// 2. The Amnesia-Proof Switcher
+function switchDesk(desk) {
+    window.vesperGlobal.currentView = desk;
+    
+    // Toggle views using CSS 'hidden' class to preserve DOM state
+    document.getElementById('intelligence-view').classList.toggle('hidden', desk !== 'intelligence');
+    document.getElementById('ledger-view').classList.toggle('hidden', desk !== 'ledger');
+    
+    // Update tab styling
+    document.getElementById('desk-tab-intelligence').classList.toggle('active', desk === 'intelligence');
+    document.getElementById('desk-tab-ledger').classList.toggle('active', desk === 'ledger');
+    
+    // Sub-nav should only show on intelligence desk if we have results
+    const hasResults = !document.getElementById('results-section').classList.contains('hidden');
+    document.getElementById('sub-nav').classList.toggle('hidden', !(desk === 'intelligence' && hasResults));
+    
+    updateStickyTops();
+}
+
+// 3. Unified Data Sync (Call this after any CSV upload or manual change)
+function syncGlobalHoldings() {
+    const rows = document.querySelectorAll('#ticker-rows > div');
+    rows.forEach(row => {
+        const tk = row.querySelector('.ticker-input')?.value.trim().toUpperCase();
+        const qty = parseFloat(row.querySelector('.qty-input')?.value) || 0;
+        const acct = row.querySelector('.account-type-select')?.value || 'ISA';
+        if (tk && qty > 0) {
+            window.vesperGlobal.holdings[`${tk}_${acct}`] = qty;
+        }
+    });
+}
+
+    function setIntelFilter(acct) {
+      _intelAcctFilter = acct;
+      const label = acct === 'all' ? 'All Portfolio' : acct;
+      document.querySelectorAll('.intel-acct-pill').forEach(b =>
+        b.classList.toggle('active', b.textContent.trim() === label));
+      analyzePortfolio();
+    }
+
     window.addEventListener('DOMContentLoaded', () => {
       // Sync toggle icon with whatever theme was set by the anti-FOUC script
       if (document.documentElement.getAttribute('data-theme') === 'light')
         document.getElementById('theme-icon').textContent = '🌙';
+      updateStickyTops();
       initFirebase();
       pollHealth();
     });
+
+    // ── Transaction Ledger ────────────────────────────────────────────────────
+
+    async function handleTransactionUpload(file) {
+      if (!file || !file.name.toLowerCase().endsWith('.csv')) {
+        showToast('File must be a .csv', 'error'); return;
+      }
+      const accountType = document.getElementById('ledger-account-select').value;
+      document.getElementById('ledger-upload-icon').textContent = '⏳';
+      document.getElementById('ledger-upload-label').textContent = 'Parsing transactions…';
+
+      let text;
+      try { text = await file.text(); }
+      catch(e) {
+        text = await new Promise((res, rej) => {
+          const r = new FileReader();
+          r.onload = e => res(e.target.result);
+          r.onerror = rej;
+          r.readAsText(file);
+        });
+      }
+
+      // Optional Firebase token — if absent, backend processes CSV-only (local mode)
+      let idToken = '';
+      try { if (auth?.currentUser) idToken = await auth.currentUser.getIdToken(true); } catch(e) {}
+
+      try {
+        const resp = await fetch('/api/parse-transactions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ csv_text: text, account_type: accountType, id_token: idToken }),
+        });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+          throw new Error(err.detail || resp.statusText);
+        }
+        const data = await resp.json();
+
+        // ── Amnesia fix: accumulate per-account data in vesperState ──────────
+        // The server only returns the account just uploaded when Firebase is unavailable.
+        // vesperState preserves all previously uploaded accounts so switching from
+        // ISA → GIA upload doesn't wipe ISA data.
+        if (data.by_account) {
+          ['ISA', 'GIA', 'SIPP'].forEach(acct => {
+            if (data.by_account[acct]) window.vesperState[acct] = data.by_account[acct];
+          });
+          // Rebuild a proper 'all' view from all loaded accounts client-side
+          const consolidated = renderConsolidatedView();
+          data.by_account = Object.assign({}, data.by_account, window.vesperState);
+          if (consolidated) data.by_account.all = consolidated;
+        }
+
+        renderPerformanceDashboard(data);
+        const total = data.by_account?.all?.transaction_count || 0;
+        document.getElementById('ledger-upload-icon').textContent = '✅';
+        document.getElementById('ledger-upload-label').textContent = `${total} total transactions loaded`;
+        const saved = idToken
+          ? `${data.new_count ?? 0} saved to cloud. ${data.dup_count ?? 0} duplicates skipped.`
+          : `${accountType} parsed locally (no cloud sync — sign in to persist).`;
+        showToast(saved, 'success');
+        document.getElementById('ledger-file-input').value = '';
+      } catch(e) {
+        document.getElementById('ledger-upload-icon').textContent = '❌';
+        document.getElementById('ledger-upload-label').textContent = `Error: ${e.message}`;
+        showToast(`Ledger error: ${e.message}`, 'error');
+      }
+    }
+
+    /**
+     * Client-side merge of all accounts in window.vesperState → 'all' view.
+     * Mirrors the backend's _aggregate_analytics() so the 'All Accounts' tab
+     * is always correct even when Firebase is unavailable (local mode).
+     */
+    function renderConsolidatedView() {
+      const accounts = Object.values(window.vesperState).filter(a => a !== null);
+      if (accounts.length === 0) return null;
+      if (accounts.length === 1) return { ...accounts[0], account_type: 'all' };
+
+      // Merge open positions
+      const mergedPos = {};
+      accounts.forEach(a => {
+        Object.entries(a.open_positions || {}).forEach(([sym, p]) => {
+          if (!mergedPos[sym]) mergedPos[sym] = { qty: 0, cost: 0 };
+          mergedPos[sym].qty  += p.qty;
+          mergedPos[sym].cost += p.total_cost;
+        });
+      });
+      const open_positions = {};
+      Object.entries(mergedPos).forEach(([sym, p]) => {
+        if (p.qty > 0.001) {
+          open_positions[sym] = {
+            qty:        Math.round(p.qty  * 10000) / 10000,
+            avg_cost:   Math.round((p.cost / p.qty) * 10000) / 10000,
+            total_cost: Math.round(p.cost * 100)   / 100,
+          };
+        }
+      });
+
+      // Sum scalars
+      const r2 = v => Math.round(v * 100) / 100;
+      const total_paid_in               = accounts.reduce((s, a) => s + (a.total_paid_in               || 0), 0);
+      const total_earnings              = accounts.reduce((s, a) => s + (a.total_earnings              || 0), 0);
+      const total_personal_contribution = accounts.reduce((s, a) => s + (a.total_personal_contribution || 0), 0);
+      const transaction_count           = accounts.reduce((s, a) => s + (a.transaction_count           || 0), 0);
+      const total_book_cost             = Object.values(open_positions).reduce((s, p) => s + p.total_cost, 0);
+      const all_time_ror                = total_paid_in > 0 ? total_earnings / total_paid_in * 100 : 0;
+
+      // Merge by-year maps
+      function sumByYear(...dicts) {
+        const out = {};
+        dicts.forEach(d => Object.entries(d || {}).forEach(([yr, v]) => { out[yr] = (out[yr] || 0) + v; }));
+        return out;
+      }
+      const all_cg = sumByYear(...accounts.map(a => a.capital_gains?.by_year  || {}));
+      const all_dv = sumByYear(...accounts.map(a => a.dividends?.by_year      || {}));
+      const all_in = sumByYear(...accounts.map(a => a.interest?.by_year       || {}));
+      const curYr  = String(new Date().getFullYear());
+
+      // Merge cash timelines and sort
+      const cash_timeline = accounts.flatMap(a => a.cash_timeline || [])
+        .sort((a, b) => a.date.localeCompare(b.date));
+
+      // Merge yearly summaries
+      const allYears = new Set(accounts.flatMap(a => Object.keys(a.yearly || {})));
+      const yearly = {};
+      [...allYears].sort().forEach(yr => {
+        const g = accounts.reduce((s, a) => s + (a.yearly?.[yr]?.realized_gains || 0), 0);
+        const d = accounts.reduce((s, a) => s + (a.yearly?.[yr]?.dividends      || 0), 0);
+        const i = accounts.reduce((s, a) => s + (a.yearly?.[yr]?.interest       || 0), 0);
+        yearly[yr] = { realized_gains: r2(g), dividends: r2(d), interest: r2(i),
+                       net_profit: r2(g + d + i), ror: 0, top_3_holdings: [] };
+      });
+
+      return {
+        account_type:                'all',
+        total_paid_in:               r2(total_paid_in),
+        total_earnings:              r2(total_earnings),
+        all_time_ror:                r2(all_time_ror),
+        total_book_cost:             r2(total_book_cost),
+        total_personal_contribution: r2(total_personal_contribution),
+        capital_gains: {
+          ytd: r2(all_cg[curYr] || 0),
+          total: r2(Object.values(all_cg).reduce((s, v) => s + v, 0)),
+          by_year: all_cg,
+        },
+        dividends: { total: r2(Object.values(all_dv).reduce((s, v) => s + v, 0)), by_year: all_dv },
+        interest:  { total: r2(Object.values(all_in).reduce((s, v) => s + v, 0)), by_year: all_in },
+        open_positions,
+        cash_timeline,
+        yearly,
+        transaction_count,
+      };
+    }
+
+    // ── Performance Dashboard ──────────────────────────────────────────────
+
+    let _ledgerData = null;
+
+    function calculateTotalPortfolio() {
+      // Returns the current 'all accounts' view.
+      // renderConsolidatedView() keeps it fresh after every upload in local mode.
+      return _ledgerData?.by_account?.all || renderConsolidatedView() || null;
+    }
+
+    function renderPerformanceDashboard(data) {
+      _ledgerData = data;
+      const total = data.by_account?.all?.transaction_count || 0;
+      document.getElementById('perf-tx-badge').textContent = `${total} transactions`;
+      // Show/hide tabs based on data presence
+      ['ISA', 'GIA', 'SIPP'].forEach(acct => {
+        const btn = document.querySelector(`[data-tab="${acct}"]`);
+        const hasData = (data.by_account?.[acct]?.transaction_count || 0) > 0;
+        if (btn) btn.style.display = hasData ? '' : 'none';
+      });
+      document.getElementById('performance-metrics').classList.remove('hidden');
+      switchLedgerTab('all');
+
+      // Show open positions panel
+      document.getElementById('ledger-panel').classList.remove('hidden');
+      document.getElementById('ledger-tx-badge').textContent = `${total} transactions`;
+      const deskBadge = document.getElementById('ledger-desk-tx-badge');
+      if (deskBadge) deskBadge.textContent = `${total} transactions`;
+      updateLedgerUnrealized(); // always runs now — no legacy crash before it
+    }
+
+    function switchLedgerTab(account) {
+      document.querySelectorAll('.ledger-tab').forEach(t =>
+        t.classList.toggle('active', t.dataset.tab === account));
+      _activeLedgerTab = account;
+      const d = _ledgerData?.by_account?.[account];
+      if (!d) return;
+      renderTopCards(d);
+      renderRealUnreal(d);
+      renderEarningsBar(d);
+      renderYearTable(d);
+      renderLedgerSummaryCards(d);
+      renderOpenPositionsTable(d);
+      renderFundingTimeline(d);
+    }
+
+    function renderTopCards(d) {
+      const fmt = v => '£' + Number(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const rorColor  = d.all_time_ror >= 0 ? 'text-emerald-400' : 'text-red-400';
+      const rorBorder = d.all_time_ror >= 0 ? 'border-emerald-500/40' : 'border-red-500/40';
+      const ytd = d.capital_gains?.ytd || 0;
+      const ytdColor = ytd >= 0 ? 'text-emerald-500' : 'text-red-400';
+      document.getElementById('perf-top-cards').innerHTML = `
+        <div class="glass p-5 border-t-2 border-indigo-500/40">
+          <div class="text-2xl mb-1">💷</div>
+          <div class="text-2xl font-black text-slate-200 font-mono">${fmt(d.total_paid_in)}</div>
+          <p class="text-xs font-bold text-slate-500 uppercase mt-1">Net Capital Deployed</p>
+          <p class="text-[10px] text-slate-600 mt-1">Buys minus sell proceeds (no double-counting)</p>
+        </div>
+        <div class="glass p-5 border-t-2 border-emerald-500/40">
+          <div class="text-2xl mb-1">📊</div>
+          <div class="text-2xl font-black text-emerald-400 font-mono">${fmt(d.total_earnings)}</div>
+          <p class="text-xs font-bold text-slate-500 uppercase mt-1">Total Realized Earnings</p>
+          <div class="mt-2 pt-2 border-t border-slate-800/60 flex justify-between text-[10px]">
+            <span class="text-slate-500">YTD realized gains</span>
+            <span class="font-mono font-bold ${ytdColor}">${ytd >= 0 ? '+' : ''}${fmt(ytd)}</span>
+          </div>
+        </div>
+        <div class="glass p-5 border-t-2 ${rorBorder}">
+          <div class="text-2xl mb-1">📈</div>
+          <div class="text-2xl font-black ${rorColor} font-mono">${d.all_time_ror >= 0 ? '+' : ''}${d.all_time_ror.toFixed(2)}%</div>
+          <p class="text-xs font-bold text-slate-500 uppercase mt-1">All-Time Rate of Return</p>
+          <p class="text-[10px] text-slate-600 mt-1">Total realized earnings ÷ net capital</p>
+        </div>
+      `;
+    }
+
+    function renderRealUnreal(d) {
+      const el = document.getElementById('perf-realunreal');
+      const realized = d.total_earnings || 0;
+      // Compute live unrealized from _lastQuotes; fall back to backend value
+      const pos = d.open_positions || {};
+      let liveEquity = 0, hasAny = false;
+      Object.entries(pos).forEach(([sym, p]) => {
+        const lp = _livePrice(sym);
+        if (lp !== null) { liveEquity += lp * p.qty; hasAny = true; }
+        else if (p.market_value !== undefined) { liveEquity += p.market_value; hasAny = true; }
+      });
+      const bookCost = d.total_book_cost ??
+        Object.values(pos).reduce((s, p) => s + (p.total_cost || 0), 0);
+      const unrealized = hasAny ? liveEquity - bookCost : (d.unrealized_total ?? null);
+      if (unrealized === null) { el.classList.add('hidden'); return; }
+      el.classList.remove('hidden');
+      const fmt = v => '£' + Number(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const total = realized + unrealized;
+      const rCls = realized   >= 0 ? 'text-emerald-400' : 'text-red-400';
+      const uCls = unrealized >= 0 ? 'text-emerald-400' : 'text-red-400';
+      const tCls = total      >= 0 ? 'text-emerald-400' : 'text-red-400';
+      el.innerHTML = `
+        <p class="text-xs font-bold text-slate-500 uppercase mb-3">Realized vs Unrealized Gains</p>
+        <div class="grid grid-cols-3 gap-4 text-center">
+          <div>
+            <div class="text-lg font-black font-mono ${rCls}">${realized >= 0 ? '+' : ''}${fmt(realized)}</div>
+            <p class="text-[10px] font-bold text-slate-500 uppercase mt-1">Realized (all-time)</p>
+          </div>
+          <div class="border-x border-slate-800">
+            <div class="text-lg font-black font-mono ${uCls}">${unrealized >= 0 ? '+' : ''}${fmt(unrealized)}</div>
+            <p class="text-[10px] font-bold text-slate-500 uppercase mt-1">Unrealized (open)</p>
+          </div>
+          <div>
+            <div class="text-lg font-black font-mono ${tCls}">${total >= 0 ? '+' : ''}${fmt(total)}</div>
+            <p class="text-[10px] font-bold text-slate-500 uppercase mt-1">Total P&amp;L</p>
+          </div>
+        </div>
+      `;
+    }
+
+    async function clearLedger() {
+      const acct = document.getElementById('clear-account-select').value;
+      const label = acct || 'ALL accounts';
+      if (!confirm(`Delete all saved transactions for ${label}? This cannot be undone.`)) return;
+      try {
+        const user = auth?.currentUser;
+        if (!user) { showToast('Please sign in first.', 'error'); return; }
+        const token = await user.getIdToken();
+        const url = acct ? `/api/clear-ledger?account_type=${acct}` : '/api/clear-ledger';
+        const resp = await fetch(url, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!resp.ok) throw new Error((await resp.json().catch(() => ({}))).detail || resp.statusText);
+        const { deleted } = await resp.json();
+        showToast(`Cleared ${deleted} transactions${acct ? ` from ${acct}` : ''}.`, 'success');
+        // Reset UI
+        _ledgerData = null;
+        document.getElementById('performance-metrics').classList.add('hidden');
+        document.getElementById('ledger-panel').classList.add('hidden');
+        document.getElementById('ledger-upload-icon').textContent = '📂';
+        document.getElementById('ledger-upload-label').textContent = 'Drop broker transaction CSV to unlock P&L';
+      } catch(e) {
+        showToast(`Clear failed: ${e.message}`, 'error');
+      }
+    }
+
+    function renderEarningsBar(d) {
+      const gains = d.capital_gains?.total || 0;
+      const divs  = d.dividends?.total    || 0;
+      const ints  = d.interest?.total     || 0;
+      const total = gains + divs + ints;
+      const el = document.getElementById('perf-breakdown');
+      if (total <= 0) { el.classList.add('hidden'); return; }
+      el.classList.remove('hidden');
+      const pct = v => ((v / total) * 100).toFixed(1);
+      const fmt = v => '£' + Number(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      el.innerHTML = `
+        <p class="text-xs font-bold text-slate-500 uppercase mb-3">Earnings Breakdown</p>
+        <div class="flex rounded-lg overflow-hidden h-6 mb-3" style="gap:2px">
+          ${gains > 0 ? `<div style="width:${pct(gains)}%" class="bg-emerald-500 transition-all" title="Capital Gains ${pct(gains)}%"></div>` : ''}
+          ${divs  > 0 ? `<div style="width:${pct(divs)}%"  class="bg-blue-500 transition-all"    title="Dividends ${pct(divs)}%"></div>` : ''}
+          ${ints  > 0 ? `<div style="width:${pct(ints)}%"  class="bg-violet-500 transition-all"  title="Interest ${pct(ints)}%"></div>` : ''}
+        </div>
+        <div class="flex flex-wrap gap-4 text-[10px]">
+          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block"></span>
+            <span class="font-bold text-slate-400">Capital Gains</span>
+            <span class="font-mono text-slate-300">${fmt(gains)} (${pct(gains)}%)</span></span>
+          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-blue-500 inline-block"></span>
+            <span class="font-bold text-slate-400">Dividends</span>
+            <span class="font-mono text-slate-300">${fmt(divs)} (${pct(divs)}%)</span></span>
+          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-violet-500 inline-block"></span>
+            <span class="font-bold text-slate-400">Interest</span>
+            <span class="font-mono text-slate-300">${fmt(ints)} (${pct(ints)}%)</span></span>
+        </div>
+      `;
+    }
+
+    function renderYearTable(d) {
+      const yearly = d.yearly || {};
+      const years = Object.keys(yearly).sort().reverse();
+      const sect = document.getElementById('perf-year-section');
+      if (years.length === 0) { sect.classList.add('hidden'); return; }
+      sect.classList.remove('hidden');
+      const fmt = v => '£' + Number(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const thisYear = String(new Date().getFullYear());
+      document.getElementById('perf-year-table').innerHTML = `
+        <table class="w-full text-xs min-w-[560px]">
+          <thead><tr class="text-[10px] font-bold text-slate-500 uppercase border-b border-slate-800">
+            <th class="text-left pb-2 pr-4">Year</th>
+            <th class="text-right pb-2 pr-4">RoR</th>
+            <th class="text-right pb-2 pr-4">Net Profit</th>
+            <th class="text-right pb-2 pr-4">Realized Gains</th>
+            <th class="text-right pb-2 pr-4">Dividends</th>
+            <th class="text-right pb-2 pr-4">Interest</th>
+            <th class="text-left pb-2">Top 3</th>
+          </tr></thead>
+          <tbody class="divide-y divide-slate-800/40">
+            ${years.map(yr => {
+              const y = yearly[yr];
+              const isYTD   = yr === thisYear;
+              const rorCls  = y.ror >= 0 ? 'text-emerald-400' : 'text-red-400';
+              const npCls   = y.net_profit >= 0 ? 'text-emerald-400' : 'text-red-400';
+              const top3    = (y.top_3_holdings || []).map(h => h.symbol).join(', ') || '—';
+              const rowCls  = isYTD ? 'bg-indigo-950/20' : '';
+              return `<tr class="${rowCls}">
+                <td class="py-2 pr-4 font-mono font-bold text-slate-200">
+                  ${yr}${isYTD ? ' <span class="text-[8px] font-black text-indigo-400 ml-1 align-middle">YTD</span>' : ''}
+                </td>
+                <td class="py-2 pr-4 text-right font-mono font-bold ${rorCls}">${y.ror !== 0 ? (y.ror >= 0 ? '+' : '') + y.ror.toFixed(2) + '%' : '—'}</td>
+                <td class="py-2 pr-4 text-right font-mono ${npCls}">${fmt(y.net_profit)}</td>
+                <td class="py-2 pr-4 text-right font-mono text-emerald-600">${fmt(y.realized_gains)}</td>
+                <td class="py-2 pr-4 text-right font-mono text-blue-400">${fmt(y.dividends)}</td>
+                <td class="py-2 pr-4 text-right font-mono text-violet-400">${fmt(y.interest)}</td>
+                <td class="py-2 text-slate-500 font-mono">${top3}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+
+    // ── Live-enriched Ledger Desk functions ──────────────────────────────────
+
+    function updateLedgerUnrealized() {
+      if (!_ledgerData) return;
+      const d = (_activeLedgerTab === 'all')
+        ? _ledgerData.by_account?.all
+        : _ledgerData.by_account?.[_activeLedgerTab];
+      if (!d) return;
+      renderLedgerSummaryCards(d);
+      renderOpenPositionsTable(d);
+    }
+
+    function _livePrice(sym) {
+      // Try exact match, then with .L suffix (for LSE tickers in II CSVs)
+      if (_lastQuotes[sym] > 0) return _lastQuotes[sym];
+      if (_lastQuotes[sym + '.L'] > 0) return _lastQuotes[sym + '.L'];
+      return null;
+    }
+
+    function renderLedgerSummaryCards(d) {
+      const el = document.getElementById('ledger-summary-cards');
+      if (!el) return;
+      const fmt = v => '£' + Number(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const pos = d.open_positions || {};
+
+      // Live equity value: prefer _lastQuotes, fall back to backend market_value
+      let liveEquity = 0, anyLive = false, anyFallback = false;
+      Object.entries(pos).forEach(([sym, p]) => {
+        const lp = _livePrice(sym);
+        if (lp !== null) { liveEquity += lp * p.qty; anyLive = true; }
+        else if (p.market_value !== undefined) { liveEquity += p.market_value; anyFallback = true; }
+      });
+
+      // Book cost: use backend field or compute from positions
+      const bookCost = d.total_book_cost ??
+        Object.values(pos).reduce((s, p) => s + (p.total_cost || 0), 0);
+
+      // Cash: prefer CSV-derived backend cash_balance; fall back to manual Intelligence tab inputs
+      const cash = d.cash_balance !== undefined && d.cash_balance > 0
+        ? d.cash_balance
+        : (() => {
+            const acct = _activeLedgerTab || 'all';
+            const cashISA  = parseFloat(document.getElementById('cash-isa')?.value)  || 0;
+            const cashGIA  = parseFloat(document.getElementById('cash-gia')?.value)  || 0;
+            const cashSIPP = parseFloat(document.getElementById('cash-sipp')?.value) || 0;
+            return acct === 'ISA' ? cashISA : acct === 'GIA' ? cashGIA : acct === 'SIPP' ? cashSIPP : cashISA + cashGIA + cashSIPP;
+          })();
+
+      const totalValue    = liveEquity + cash;
+      const unrealPnL     = liveEquity - bookCost;
+      const realizedGains = d.total_earnings || 0;
+
+      const uColor  = unrealPnL >= 0 ? 'text-emerald-400' : 'text-red-400';
+      const uBorder = unrealPnL >= 0 ? 'border-emerald-500/40' : 'border-red-500/40';
+      const rColor  = realizedGains >= 0 ? 'text-emerald-400' : 'text-red-400';
+      const priceTag = anyLive ? (anyFallback ? 'Mixed' : 'Live') : (anyFallback ? 'Stale' : '—');
+      const tagColor = anyLive ? 'text-emerald-500 bg-emerald-950/50 border-emerald-900/50'
+                               : 'text-amber-500 bg-amber-950/50 border-amber-900/50';
+
+      el.innerHTML = `
+        <div class="glass p-5 border-t-2 border-indigo-500/40">
+          <div class="flex items-start justify-between mb-1">
+            <span class="text-2xl">🏦</span>
+            <span class="text-[8px] font-black px-1.5 py-0.5 rounded ${tagColor} border uppercase">${priceTag}</span>
+          </div>
+          <div class="text-2xl font-black text-slate-200 font-mono">${fmt(totalValue)}</div>
+          <p class="text-xs font-bold text-slate-500 uppercase mt-1">Total Account Value</p>
+          <p class="text-[10px] text-slate-600 mt-1">Equities ${fmt(liveEquity)} + cash ${fmt(cash)}</p>
+        </div>
+        <div class="glass p-5 border-t-2 border-amber-500/40">
+          <div class="text-2xl mb-1">📋</div>
+          <div class="text-2xl font-black text-amber-400 font-mono">${fmt(bookCost)}</div>
+          <p class="text-xs font-bold text-slate-500 uppercase mt-1">Total Book Cost</p>
+          <p class="text-[10px] text-slate-600 mt-1">Cost basis of all open positions</p>
+        </div>
+        <div class="glass p-5 border-t-2 ${uBorder}">
+          <div class="text-2xl mb-1">📈</div>
+          <div class="text-2xl font-black ${uColor} font-mono">${unrealPnL >= 0 ? '+' : ''}${fmt(unrealPnL)}</div>
+          <p class="text-xs font-bold text-slate-500 uppercase mt-1">Unrealized P&amp;L</p>
+          <p class="text-[10px] text-slate-600 mt-1">Live equities − book cost</p>
+        </div>
+        <div class="glass p-5 border-t-2 border-emerald-500/40">
+          <div class="text-2xl mb-1">📊</div>
+          <div class="text-2xl font-black ${rColor} font-mono">${realizedGains >= 0 ? '+' : ''}${fmt(realizedGains)}</div>
+          <p class="text-xs font-bold text-slate-500 uppercase mt-1">Realized Gains</p>
+          <p class="text-[10px] text-slate-600 mt-1">Cap gains + dividends + interest</p>
+        </div>
+        ${d.total_personal_contribution > 0 ? `
+        <div class="glass p-5 border-t-2 border-indigo-500/30 col-span-full md:col-span-1">
+          <div class="text-2xl mb-1">💷</div>
+          <div class="text-2xl font-black text-indigo-300 font-mono">${fmt(d.total_personal_contribution)}</div>
+          <p class="text-xs font-bold text-slate-500 uppercase mt-1">Total Contributed</p>
+          <p class="text-[10px] text-slate-600 mt-1">Sum of all cash deposits &amp; transfers in</p>
+        </div>` : ''}
+      `;
+      el.classList.remove('hidden');
+    }
+
+    function renderFundingTimeline(d) {
+      const section = document.getElementById('funding-timeline-section');
+      const tbody   = document.getElementById('funding-timeline-body');
+      if (!section || !tbody) return;
+      const rows = d.cash_timeline || [];
+      if (!rows.length) { section.classList.add('hidden'); return; }
+      const fmt = v => '£' + Number(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const OUTFLOW_TYPES = new Set(['Transfer Out', 'Withdrawal']);
+      tbody.innerHTML = rows.map(r => {
+        const isOut = OUTFLOW_TYPES.has(r.type);
+        return `<tr class="border-b border-slate-800/50">
+          <td class="py-2 text-slate-400 font-mono">${r.date}</td>
+          <td class="py-2 ${isOut ? 'text-red-400' : 'text-emerald-400'} font-bold">${r.type}</td>
+          <td class="py-2 text-right font-mono text-slate-200">${fmt(r.amount)}</td>
+        </tr>`;
+      }).join('');
+      // Show total personal contribution if available
+      const totalContrib = d.total_personal_contribution;
+      const contribEl = document.getElementById('funding-total-contrib');
+      if (contribEl) {
+        if (totalContrib > 0) {
+          contribEl.textContent = `Total Contributed: ${fmt(totalContrib)}`;
+          contribEl.classList.remove('hidden');
+        } else {
+          contribEl.classList.add('hidden');
+        }
+      }
+      section.classList.remove('hidden');
+    }
+
+    function renderAccountValueBanners() {
+      const el = document.getElementById('intel-account-banners');
+      if (!el) return;
+      const fmt = v => '£' + Number(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const acctEquity = { ISA: 0, GIA: 0, SIPP: 0 };
+      document.querySelectorAll('#ticker-rows > div').forEach(row => {
+        const tickerInput = row.querySelector('.ticker-input');
+        const qtyInput    = row.querySelector('.qty-input');
+        const acctSel     = row.querySelector('.account-type-select');
+        if (!tickerInput || !qtyInput || !acctSel) return;
+        const ticker = tickerInput.value.trim().toUpperCase();
+        const qty    = parseFloat(qtyInput.value) || 0;
+        const acct   = acctSel.value;
+        const lp     = _livePrice(ticker);
+        if (lp !== null && acctEquity[acct] !== undefined) acctEquity[acct] += lp * qty;
+      });
+      const cashISA  = parseFloat(document.getElementById('cash-isa')?.value)  || 0;
+      const cashGIA  = parseFloat(document.getElementById('cash-gia')?.value)  || 0;
+      const cashSIPP = parseFloat(document.getElementById('cash-sipp')?.value) || 0;
+      const isaTotal  = acctEquity.ISA  + cashISA;
+      const giaTotal  = acctEquity.GIA  + cashGIA;
+      const sippTotal = acctEquity.SIPP + cashSIPP;
+      const total     = isaTotal + giaTotal + sippTotal;
+      if (total === 0) { el.style.display = 'none'; return; }
+      el.innerHTML = `
+        <div class="glass p-4 border-t-2 border-indigo-500/40 text-center">
+          <p class="text-[10px] font-black text-slate-500 uppercase mb-1">Total Portfolio</p>
+          <p class="text-xl font-black text-slate-100 font-mono">${fmt(total)}</p>
+        </div>
+        <div class="glass p-4 border-t-2 border-emerald-500/40 text-center">
+          <p class="text-[10px] font-black text-slate-500 uppercase mb-1">ISA Value</p>
+          <p class="text-xl font-black text-emerald-400 font-mono">${fmt(isaTotal)}</p>
+          <p class="text-[9px] text-slate-600 mt-1">Equities ${fmt(acctEquity.ISA)} + cash ${fmt(cashISA)}</p>
+        </div>
+        <div class="glass p-4 border-t-2 border-amber-500/40 text-center">
+          <p class="text-[10px] font-black text-slate-500 uppercase mb-1">GIA Value</p>
+          <p class="text-xl font-black text-amber-400 font-mono">${fmt(giaTotal)}</p>
+          <p class="text-[9px] text-slate-600 mt-1">Equities ${fmt(acctEquity.GIA)} + cash ${fmt(cashGIA)}</p>
+        </div>
+      `;
+      el.style.display = 'grid';
+      el.style.gridTemplateColumns = 'repeat(3, minmax(0, 1fr))';
+      el.style.gap = '1rem';
+      el.style.marginBottom = '1.5rem';
+    }
+
+    function renderAccountHoldings() {
+      const el = document.getElementById('intel-acct-holdings');
+      if (!el) return;
+      const fmt = v => '£' + Number(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const byAcct = {};
+      document.querySelectorAll('#ticker-rows > div').forEach(row => {
+        const tickerInput = row.querySelector('.ticker-input');
+        const qtyInput    = row.querySelector('.qty-input');
+        const acctSel     = row.querySelector('.account-type-select');
+        if (!tickerInput || !qtyInput || !acctSel) return;
+        const ticker = tickerInput.value.trim().toUpperCase();
+        const qty    = parseFloat(qtyInput.value) || 0;
+        const acct   = acctSel.value;
+        if (!ticker || !qty) return;
+        if (!byAcct[acct]) byAcct[acct] = [];
+        const lp  = _livePrice(ticker);
+        const val = lp !== null ? lp * qty : null;
+        byAcct[acct].push({ ticker, qty, lp, val });
+      });
+      const accts = Object.keys(byAcct);
+      if (!accts.length) { el.style.display = 'none'; return; }
+      const acctColors = {
+        ISA:  { label: 'text-emerald-400', border: 'border-emerald-500/30' },
+        GIA:  { label: 'text-amber-400',   border: 'border-amber-500/30'   },
+        SIPP: { label: 'text-indigo-400',  border: 'border-indigo-500/30'  },
+      };
+      el.innerHTML = accts.map(acct => {
+        const rows  = byAcct[acct];
+        const clr   = acctColors[acct] || { label: 'text-slate-300', border: 'border-slate-700/30' };
+        const total = rows.reduce((s, r) => s + (r.val || 0), 0);
+        return `
+          <div class="glass p-4 rounded-xl border ${clr.border} mb-3">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-[10px] font-black ${clr.label} uppercase tracking-widest">${acct} Holdings</span>
+              <span class="text-xs font-black text-slate-300 font-mono">${total > 0 ? fmt(total) : '—'}</span>
+            </div>
+            <div class="space-y-1">
+              ${rows.map(r => `
+                <div class="flex items-center justify-between text-[11px]">
+                  <span class="font-mono font-bold text-slate-300">${r.ticker}</span>
+                  <span class="text-slate-500">${r.qty.toLocaleString('en-GB')} sh</span>
+                  <span class="font-mono text-slate-300">${r.val !== null ? fmt(r.val) : '—'}</span>
+                </div>`).join('')}
+            </div>
+          </div>`;
+      }).join('');
+      el.style.display = 'block';
+    }
+
+    function renderOpenPositionsTable(d) {
+      const el = document.getElementById('ledger-positions');
+      if (!el) return;
+      const fmt = v => '£' + Number(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const pos = d.open_positions || {};
+      const posKeys = Object.keys(pos).sort();
+      if (posKeys.length === 0) {
+        el.innerHTML = '<p class="text-xs text-slate-600 italic">No open positions — all trades fully closed.</p>';
+        return;
+      }
+      const hasAnyLive = posKeys.some(s => _livePrice(s) !== null);
+      el.innerHTML = `<table class="w-full text-xs min-w-[640px]">
+        <thead><tr class="text-[10px] font-bold text-slate-500 uppercase border-b border-slate-800">
+          <th class="text-left pb-2 pr-4">Symbol</th>
+          <th class="text-right pb-2 pr-4">Qty</th>
+          <th class="text-right pb-2 pr-4">Avg Cost</th>
+          <th class="text-right pb-2 pr-4">Total Paid</th>
+          ${hasAnyLive ? '<th class="text-right pb-2 pr-4">Live Price</th><th class="text-right pb-2 pr-4">Cur. Value</th><th class="text-right pb-2">Unrealized</th>' : '<th class="text-right pb-2">Unrealized</th>'}
+        </tr></thead>
+        <tbody class="divide-y divide-slate-800/40">
+          ${posKeys.map(sym => {
+            const p = pos[sym];
+            const lp = _livePrice(sym);
+            const curVal = lp !== null ? lp * p.qty : (p.market_value ?? null);
+            const unreal = lp !== null ? (lp - p.avg_cost) * p.qty : (p.unrealized_gain ?? null);
+            const upct   = lp !== null
+              ? ((p.avg_cost > 0) ? (lp - p.avg_cost) / p.avg_cost * 100 : 0)
+              : (p.unrealized_pct ?? null);
+            const uCls   = (unreal ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400';
+            const sym2   = lp !== null ? sym : (p.market_value !== undefined ? sym : sym);
+            const lpFmt  = lp !== null ? fmt(lp) : '—';
+            const cvFmt  = curVal !== null ? fmt(curVal) : '—';
+            const urFmt  = unreal !== null
+              ? `<span class="${uCls} font-bold">${unreal >= 0 ? '+' : ''}${fmt(unreal)}</span>`
+                + (upct !== null ? `<br><span class="text-[9px] ${uCls}">${upct >= 0 ? '+' : ''}${upct.toFixed(2)}%</span>` : '')
+              : '—';
+            return `<tr>
+              <td class="py-1.5 pr-4 font-mono font-bold text-slate-200">${sym}</td>
+              <td class="py-1.5 pr-4 text-right text-slate-400 font-mono">${p.qty}</td>
+              <td class="py-1.5 pr-4 text-right font-mono text-slate-400">${fmt(p.avg_cost)}</td>
+              <td class="py-1.5 pr-4 text-right font-mono text-amber-400">${fmt(p.total_cost)}</td>
+              ${hasAnyLive ? `<td class="py-1.5 pr-4 text-right font-mono text-slate-300">${lpFmt}</td>
+              <td class="py-1.5 pr-4 text-right font-mono text-slate-300">${cvFmt}</td>` : ''}
+              <td class="py-1.5 text-right font-mono leading-tight">${urFmt}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`;
+    }
+
+    function renderLegacyLedgerCards(d) {
+      const fmt = v => '£' + Number(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const sign = v => (v >= 0 ? '+' : '');
+      const cg = d.capital_gains || {};
+      const dv = d.dividends || {};
+      const it = d.interest || {};
+      const cards = [
+        {
+          icon: '💰', label: 'Realized Gains (YTD / Total)',
+          value: fmt(cg.total || 0),
+          meta: `YTD: ${sign(cg.ytd || 0)}${fmt(cg.ytd || 0)}`,
+          border: (cg.total || 0) >= 0 ? 'border-emerald-500/40' : 'border-red-500/40',
+          valColor: (cg.total || 0) >= 0 ? 'text-emerald-400' : 'text-red-400',
+          byYear: cg.by_year || {},
+        },
+        {
+          icon: '🏦', label: 'Dividends Collected',
+          value: fmt(dv.total || 0),
+          meta: (() => { const e = Object.entries(dv.by_year || {}); const l = e[e.length-1]; return l ? `${l[0]}: ${fmt(l[1])}` : ''; })(),
+          border: 'border-amber-500/40', valColor: 'text-amber-400', byYear: dv.by_year || {},
+        },
+        {
+          icon: '📈', label: 'Interest Earned',
+          value: fmt(it.total || 0),
+          meta: (() => { const e = Object.entries(it.by_year || {}); const l = e[e.length-1]; return l ? `${l[0]}: ${fmt(l[1])}` : ''; })(),
+          border: 'border-slate-500/40', valColor: 'text-slate-300', byYear: it.by_year || {},
+        },
+      ];
+      document.getElementById('ledger-metrics').innerHTML = cards.map(c => `
+        <div class="glass p-5 border-t-2 ${c.border}">
+          <div class="flex justify-between items-start mb-2">
+            <span class="text-2xl">${c.icon}</span>
+            <span class="text-[8px] font-black px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 uppercase">Lifetime</span>
+          </div>
+          <div class="text-2xl font-black ${c.valColor} font-mono">${c.value}</div>
+          <p class="text-xs font-bold text-slate-500 uppercase mt-1">${c.label}</p>
+          ${c.meta ? `<p class="text-[10px] font-mono text-slate-500 mt-1">${c.meta}</p>` : ''}
+        </div>
+      `).join('');
+      const pos = d.open_positions || {};
+      const posKeys = Object.keys(pos).sort();
+      const lfmt = v => '£' + Number(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      // Show P&L columns if any live price OR any backend-enriched value is available
+      const hasLive = posKeys.some(s => _livePrice(s) !== null || pos[s].unrealized_gain !== undefined);
+      document.getElementById('ledger-positions').innerHTML = posKeys.length === 0
+        ? '<p class="text-xs text-slate-600 italic">No open positions — all trades fully closed.</p>'
+        : `<table class="w-full text-xs min-w-[${hasLive ? 560 : 420}px]">
+            <thead><tr class="text-[10px] font-bold text-slate-500 uppercase border-b border-slate-800 pb-2">
+              <th class="text-left pb-2 pr-4">Symbol</th>
+              <th class="text-right pb-2 pr-4">Qty</th>
+              <th class="text-right pb-2 pr-4">Avg Cost</th>
+              <th class="text-right pb-2 pr-4">Cost Basis</th>
+              ${hasLive ? '<th class="text-right pb-2 pr-4">Mkt Value</th><th class="text-right pb-2">Unrealized</th>' : ''}
+            </tr></thead>
+            <tbody class="divide-y divide-slate-800/40">
+              ${posKeys.map(sym => {
+                const p = pos[sym];
+                // Prefer live price; fall back to backend-enriched values
+                const lp      = _livePrice(sym);
+                const curVal  = lp !== null ? lp * p.qty : (p.market_value ?? null);
+                const unreal  = lp !== null ? (lp - p.avg_cost) * p.qty
+                                            : (p.unrealized_gain ?? null);
+                const upct    = lp !== null && p.avg_cost > 0
+                                ? ((lp / p.avg_cost) - 1) * 100
+                                : (p.unrealized_pct ?? null);
+                const upnlCls = (unreal ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400';
+                const unrStr  = unreal !== null
+                  ? (unreal >= 0 ? '+' : '') + lfmt(unreal)
+                    + (upct !== null ? ` (${upct >= 0 ? '+' : ''}${upct.toFixed(1)}%)` : '')
+                  : '—';
+                return `<tr>
+                  <td class="py-1.5 pr-4 font-mono font-bold text-slate-200">${sym}</td>
+                  <td class="py-1.5 pr-4 text-right text-slate-400 font-mono">${p.qty}</td>
+                  <td class="py-1.5 pr-4 text-right font-mono text-slate-400">${lfmt(p.avg_cost)}</td>
+                  <td class="py-1.5 pr-4 text-right font-mono text-amber-400">${lfmt(p.total_cost)}</td>
+                  ${hasLive ? `<td class="py-1.5 pr-4 text-right font-mono text-slate-300">${curVal !== null ? lfmt(curVal) : '—'}</td>
+                  <td class="py-1.5 text-right font-mono font-bold ${upnlCls}">${unrStr}</td>` : ''}
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>`;
+    }
+
   </script>
+
+  <!-- ── Toast Notification Container ──────────────────────────────────── -->
+  <div id="toast-container" class="fixed bottom-4 right-4 z-[200] flex flex-col gap-2 items-end pointer-events-none" aria-live="polite" aria-atomic="false"></div>
 </body>
 </html>
