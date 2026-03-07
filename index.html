@@ -637,6 +637,7 @@
     let currentImportType = 'ISA';
     let _lastQuotes = {}; // ticker → live price, updated by ticker bar
     let _intelAcctFilter = 'all'; // 'all' | 'ISA' | 'GIA' | 'SIPP'
+    window.vesperState = { ISA: null, GIA: null, SIPP: null };
     const PALETTE = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6','#f97316','#14b8a6','#ef4444','#a855f7'];
 
     // ── X-Ray look-through tables ──────────────────────────────────────────
@@ -2526,6 +2527,18 @@
           throw new Error(err.detail || resp.statusText);
         }
         const data = await resp.json();
+
+        // ── Amnesia fix: accumulate per-account data in vesperState ──────────
+        if (data.by_account) {
+          ['ISA', 'GIA', 'SIPP'].forEach(acct => {
+            if (data.by_account[acct]) window.vesperState[acct] = data.by_account[acct];
+          });
+          // Rebuild a proper 'all' view from all loaded accounts client-side
+          const consolidated = renderConsolidatedView();
+          data.by_account = Object.assign({}, data.by_account, window.vesperState);
+          if (consolidated) data.by_account.all = consolidated;
+        }
+
         renderPnlDashboard(data);
         const total = data.by_account?.all?.transaction_count || 0;
         document.getElementById('pnl-upload-icon').textContent = '✅';
@@ -2588,6 +2601,90 @@
       }
     }
 
+    /**
+     * Client-side merge of all accounts in window.vesperState → 'all' view.
+     * Mirrors the backend's _aggregate_analytics() so the 'All Accounts' tab
+     * is always correct even when Firebase is unavailable (local mode).
+     */
+    function renderConsolidatedView() {
+      const accounts = Object.values(window.vesperState).filter(a => a !== null);
+      if (accounts.length === 0) return null;
+      if (accounts.length === 1) return { ...accounts[0], account_type: 'all' };
+
+      // Merge open positions (keep accounts separate via composite keys)
+      const open_positions = {};
+      accounts.forEach(a => {
+        const acct = a.account_type;
+        Object.entries(a.open_positions || {}).forEach(([sym, p]) => {
+          if (p.qty > 0.001) {
+            const key = `${sym}_${acct}`;
+            open_positions[key] = {
+              qty:        Math.round(p.qty  * 10000) / 10000,
+              avg_cost:   Math.round(p.avg_cost * 10000) / 10000,
+              total_cost: Math.round(p.total_cost * 100)   / 100,
+              account_type: acct,
+              symbol: sym
+            };
+          }
+        });
+      });
+
+      // Sum scalars
+      const r2 = v => Math.round(v * 100) / 100;
+      const total_paid_in               = accounts.reduce((s, a) => s + (a.total_paid_in               || 0), 0);
+      const total_earnings              = accounts.reduce((s, a) => s + (a.total_earnings              || 0), 0);
+      const total_personal_contribution = accounts.reduce((s, a) => s + (a.total_personal_contribution || 0), 0);
+      const transaction_count           = accounts.reduce((s, a) => s + (a.transaction_count           || 0), 0);
+      const total_book_cost             = Object.values(open_positions).reduce((s, p) => s + p.total_cost, 0);
+      const all_time_ror                = total_paid_in > 0 ? total_earnings / total_paid_in * 100 : 0;
+
+      // Merge by-year maps
+      function sumByYear(...dicts) {
+        const out = {};
+        dicts.forEach(d => Object.entries(d || {}).forEach(([yr, v]) => { out[yr] = (out[yr] || 0) + v; }));
+        return out;
+      }
+      const all_cg = sumByYear(...accounts.map(a => a.capital_gains?.by_year  || {}));
+      const all_dv = sumByYear(...accounts.map(a => a.dividends?.by_year      || {}));
+      const all_in = sumByYear(...accounts.map(a => a.interest?.by_year       || {}));
+      const curYr  = currentTaxYear();
+
+      // Merge cash timelines and sort
+      const cash_timeline = accounts.flatMap(a => a.cash_timeline || [])
+        .sort((a, b) => a.date.localeCompare(b.date));
+
+      // Merge yearly summaries
+      const allYears = new Set(accounts.flatMap(a => Object.keys(a.yearly || {})));
+      const yearly = {};
+      [...allYears].sort().forEach(yr => {
+        const g = accounts.reduce((s, a) => s + (a.yearly?.[yr]?.realized_gains || 0), 0);
+        const d = accounts.reduce((s, a) => s + (a.yearly?.[yr]?.dividends      || 0), 0);
+        const i = accounts.reduce((s, a) => s + (a.yearly?.[yr]?.interest       || 0), 0);
+        yearly[yr] = { realized_gains: r2(g), dividends: r2(d), interest: r2(i),
+                       net_profit: r2(g + d + i), ror: 0, top_3_holdings: [] };
+      });
+
+      return {
+        account_type:                'all',
+        total_paid_in:               r2(total_paid_in),
+        total_earnings:              r2(total_earnings),
+        all_time_ror:                r2(all_time_ror),
+        total_book_cost:             r2(total_book_cost),
+        total_personal_contribution: r2(total_personal_contribution),
+        capital_gains: {
+          ytd: r2(all_cg[curYr] || 0),
+          total: r2(Object.values(all_cg).reduce((s, v) => s + v, 0)),
+          by_year: all_cg,
+        },
+        dividends: { total: r2(Object.values(all_dv).reduce((s, v) => s + v, 0)), by_year: all_dv },
+        interest:  { total: r2(Object.values(all_in).reduce((s, v) => s + v, 0)), by_year: all_in },
+        open_positions,
+        cash_timeline,
+        yearly,
+        transaction_count,
+      };
+    }
+
     function renderPnlDashboard(data) {
       _ledgerData = data;
       const total = data.by_account?.all?.transaction_count || 0;
@@ -2624,7 +2721,8 @@
 
       // Live equity from _lastQuotes
       let liveEquity = 0, anyLive = false;
-      Object.entries(pos).forEach(([sym, p]) => {
+      Object.entries(pos).forEach(([key, p]) => {
+        const sym = p.symbol || key;
         const lp = _livePrice(sym);
         if (lp !== null) { liveEquity += lp * p.qty; anyLive = true; }
       });
@@ -2691,8 +2789,10 @@
           ${hasLive ? '<th class="text-right pb-2 pr-4">Mkt Value</th><th class="text-right pb-2">Unrealized</th>' : ''}
         </tr></thead>
         <tbody class="divide-y divide-slate-800/40">
-          ${posKeys.map(sym => {
-            const p = pos[sym];
+          ${posKeys.map(key => {
+            const p = pos[key];
+            const sym = p.symbol || key;
+            const acct = p.account_type;
             const lp = _livePrice(sym);
             const curVal = lp !== null ? lp * p.qty : null;
             const unreal = lp !== null ? (lp - p.avg_cost) * p.qty : null;
@@ -2701,8 +2801,9 @@
             const unrStr = unreal !== null
               ? (unreal >= 0 ? '+' : '') + fmt(unreal) + (upct !== null ? ` (${upct >= 0 ? '+' : ''}${upct.toFixed(1)}%)` : '')
               : '—';
+            const displaySym = acct && _activePnlTab === 'all' ? `${sym} <span class="text-[9px] text-slate-500 font-black uppercase">[${acct}]</span>` : sym;
             return `<tr>
-              <td class="py-1.5 pr-4 font-mono font-bold text-slate-200">${sym}</td>
+              <td class="py-1.5 pr-4 font-mono font-bold text-slate-200">${displaySym}</td>
               <td class="py-1.5 pr-4 text-right text-slate-400 font-mono">${Number(p.qty).toLocaleString('en-GB')}</td>
               <td class="py-1.5 pr-4 text-right font-mono text-slate-400">${fmt(p.avg_cost)}</td>
               <td class="py-1.5 pr-4 text-right font-mono text-amber-400">${fmt(p.total_cost)}</td>

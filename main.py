@@ -234,8 +234,12 @@ _TRANSFER_IN_KEYWORDS = [
 ]
 # Debit-side keywords → TRANSFER_OUT (cash leaving or internal move)
 _TRANSFER_OUT_KEYWORDS = [
-    "fee transfer", "total monthly fee",
     "bed & isa transfer",    # GIA→ISA Bed & ISA (debit side)
+    "withdrawal",
+    "transfer out",
+]
+_FEE_KEYWORDS = [
+    "fee transfer", "total monthly fee", "management fee", "service charge",
 ]
 # Descriptions starting with "PAYMENT" followed by reference → TRANSFER_IN
 # e.g. "PAYMENT Q5724180656JMR S SHARMA"
@@ -362,6 +366,9 @@ def _classify_row(row: dict) -> str:
     # Must check before TRANSFER_IN because "Bed & ISA Transfer" has debit
     # and ISA Subscription debits are internal moves out
     if debit > 0:
+        for kw in _FEE_KEYWORDS:
+            if kw in desc_lower:
+                return "FEE"
         for kw in _TRANSFER_OUT_KEYWORDS:
             if kw in desc_lower:
                 return "TRANSFER_OUT"
@@ -561,12 +568,17 @@ def _run_pnl_engine(df: pd.DataFrame, account_type: str) -> dict:
             yearly[ty]["interest"] += credit
 
         elif tx == "TRANSFER_OUT":
+            total_personal_contribution -= debit
             transfer_out_detail.append({
                 "date": date_str, "tax_year": ty,
                 "symbol": inst or "CASH",
                 "amount": round(debit, 2), "type": "Transfer Out",
                 "description": desc,
             })
+
+        elif tx == "FEE":
+            # Fees are not subtracted from Total Contributed per user requirement.
+            pass
 
     # ── 4. Build open positions ──────────────────────────────────────────────
     open_positions = {}
@@ -999,13 +1011,13 @@ def _get_advanced_intelligence(assets, portfolio, risk_level, risk_data, base_cu
     target_g_w = targets.get(risk_level, 0.40)
     # Segment Identification — ticker-base matching takes priority over sector/PE heuristics
     growth_tks = [tk for tk, a in assets.items() if
-        tk.split('.')[0].upper() in _GROWTH_BASES or
+        tk.replace('_', '.').split('.')[0].upper() in _GROWTH_BASES or
         a["sector"] in ("Technology", "Communication Services") or
         (_to_float(a.get("pe_ratio")) or 0) > 30]
     defensive_tks = [tk for tk, a in assets.items() if
-        tk.split('.')[0].upper() in _DEFENSIVE_BASES or
+        tk.replace('_', '.').split('.')[0].upper() in _DEFENSIVE_BASES or
         "Treasury" in a["name"] or "Gold" in a["name"] or "Bond" in a["name"] or
-        tk in ("TN28.L",)]
+        tk.replace('_', '.').split('.')[0].upper() in ("TN28",)]
     core_tks = [tk for tk in assets if tk not in growth_tks and tk not in defensive_tks]
     
     targets = {"Conservative": 0.20, "Balanced": 0.40, "Aggressive": 0.70}
@@ -1044,7 +1056,7 @@ def _get_advanced_intelligence(assets, portfolio, risk_level, risk_data, base_cu
         _rsi  = _mock_rsi(_tk)                                          # 20–80
         _beta = _to_float(_a.get("beta")) or 1.0
         _ter  = (_to_float(_a.get("ter"))
-                 or _KNOWN_TER.get(_tk.split('.')[0].upper(), 0.003))
+                 or _KNOWN_TER.get(_tk.replace('_', '.').split('.')[0].upper(), 0.003))
         _yld  = _to_float(_a.get("dividend_yield")) or 0.0
         _pe   = _to_float(_a.get("pe_ratio"))                          # None for most ETFs
 
@@ -1085,7 +1097,7 @@ def _get_advanced_intelligence(assets, portfolio, risk_level, risk_data, base_cu
             })
 
     # Hedge optimizer — check existing gold/defensive before recommending more GLD
-    existing_gold_w = sum(a["weight"] for tk, a in assets.items() if tk.split('.')[0].upper() in _GOLD_BASES)
+    existing_gold_w = sum(a["weight"] for tk, a in assets.items() if tk.replace('_', '.').split('.')[0].upper() in _GOLD_BASES)
     if existing_gold_w >= 0.10:
         hedge_opt = {"optimal_gld_weight": 0.0, "hedge_efficiency": "SUFFICIENT",
                      "note": f"Gold at {existing_gold_w*100:.0f}% — adequate. Consider IGLT.L for duration hedge."}
@@ -1154,7 +1166,7 @@ def _get_global_events():
 
 def _generate_recommendations(assets, portfolio, risk_level, base_currency="GBP"):
     recs = []
-    is_ucits = base_currency in ("GBP", "EUR") or any(tk.endswith('.L') or tk.endswith('.AS') or tk.endswith('.DE') for tk in assets)
+    is_ucits = base_currency in ("GBP", "EUR") or any(tk.replace('_', '.').endswith('.L') or tk.replace('_', '.').endswith('.AS') or tk.replace('_', '.').endswith('.DE') for tk in assets)
     pb = portfolio.get("portfolio_beta", 1.0)
     sharpe = portfolio.get("sharpe_ratio", 0.0)
     yld = portfolio.get("weighted_dividend_yield", 0.0)
@@ -1200,12 +1212,11 @@ def _generate_recommendations(assets, portfolio, risk_level, base_currency="GBP"
         recs.append({"type": "warning", "icon": "🏗️", "title": "Factor Concentration", "detail": "Low ticker breadth.", "rationale": "Exposure to idiosyncratic company-specific risk is too high.", "action": "Add 2+ Assets"})
 
     # UK GIA / Acc Fund ERI Tax Advisory
-    # Acc (Accumulating) funds in a GIA are still subject to UK dividend tax via
-    # Excess Reportable Income (ERI). Advising clients to switch to Acc to avoid GIA
-    # tax is a compliance error. Flag this if any fund name contains "Acc".
     if base_currency == "GBP":
-        acc_tks = [tk for tk, a in assets.items() if "acc" in (a.get("name") or "").lower()]
-        if acc_tks:
+        acc_gia_tks = [tk for tk, a in assets.items() 
+                       if "acc" in (a.get("name") or "").lower() 
+                       and a.get("account_type") == "GIA"]
+        if acc_gia_tks:
             recs.append({
                 "type": "warning", "icon": "🏦",
                 "title": "GIA Tax Alert: ERI on Acc Funds",
@@ -1215,7 +1226,7 @@ def _generate_recommendations(assets, portfolio, risk_level, base_currency="GBP"
                     "in a GIA as dividend income — even though no cash is distributed. "
                     "Switching to an Acc share class does NOT reduce GIA dividend or income tax. "
                     "Recommended action: Bed & ISA transfer at UK tax year start (before 5 April) "
-                    f"to shelter gains inside an ISA. Affected: {', '.join(acc_tks[:3])}."
+                    f"to shelter gains inside an ISA. Affected: {', '.join(acc_gia_tks[:3])}."
                 ),
                 "action": "Bed & ISA Transfer",
             })
@@ -1892,13 +1903,14 @@ async def analyze_portfolio(request: PortfolioRequest):
                 "quantity": holdings[tk], 
                 "value": val_in_base, 
                 "currency": curr,
+                "account_type": request.account_mapping.get(tk, "ISA"),
                 "dividend_yield": _round(info.get("dividendYield")), 
                 "pe_ratio": _round(info.get("trailingPE")), 
                 "beta": _round(info.get("beta")), 
                 "sector": safe_fetch(info, "sector", "N/A"),
                 "institutional_flow_score": round(_to_float(info.get("heldPercentInstitutions", 0.5))*100, 1),
                 "ter": _round(_to_float(info.get("annualReportExpenseRatio") or info.get("totalExpenseRatio"))
-                              or _KNOWN_TER.get(tk.split('.')[0].upper())),
+                              or _KNOWN_TER.get(api_ticker.split('.')[0].upper())),
             }
         
         total_val = sum(a["value"] for a in assets.values())
