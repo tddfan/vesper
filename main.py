@@ -5,6 +5,7 @@ Vesper v5.0 — Intelligence Engine (Multi-Currency Apex)
 from __future__ import annotations
 
 import asyncio
+import calendar
 import datetime
 import hashlib
 import io
@@ -117,7 +118,7 @@ Respond with ONLY a single, strict, valid JSON object — no markdown, no commen
   }
 }
 
-ALSO include these two additional top-level keys in the JSON:
+ALSO include these additional top-level keys in the JSON:
 
 "summary_hints": {
   "var":    "One concise line (≤12 words). Portfolio-aware VaR advice referencing actual defensive holdings.",
@@ -125,7 +126,19 @@ ALSO include these two additional top-level keys in the JSON:
   "sharpe": "One concise line (≤12 words). Sharpe/efficiency advice referencing actual drag assets or quality.",
   "cagr":   "One concise line (≤12 words). Real return advice referencing the CMA-blended growth outlook."
 },
-"quant_intelligence": "2–3 sentences. Institutional-grade diversification commentary. Mention the specific DR value, reference 1–2 actual tickers held, and give a precise actionable insight."
+"quant_intelligence": "2–3 sentences. Institutional-grade diversification commentary. Mention the specific DR value, reference 1–2 actual tickers held, and give a precise actionable insight.",
+"market_outlook": [
+  {"l": "Short label (2-4 words)", "v": "Short value/title (3-7 words)", "d": "2-3 sentence deep institutional analysis with specific data points, referencing actual holdings where relevant.", "i": "emoji"}
+],
+"strategic_commentary": "2-3 sentences. Portfolio-specific strategic observation referencing the client's Sharpe ratio, factor exposures, and allocation efficiency. Must mention actual tickers held.",
+"future_outlook": "2-3 sentences. Forward-looking macro thesis with specific catalysts, rotation targets, and risk scenarios. Reference actual market conditions and the client's positioning."
+
+market_outlook RULES:
+- EXACTLY 5 items covering these topics in order: (1) Macro Regime, (2) Sector Rotation, (3) Regional Alpha, (4) Valuation Framework, (5) Strategic Hedge
+- Each item MUST reference current market conditions and the client's actual holdings
+- Labels (l) must be concise (2-4 words), values (v) must be punchy titles (3-7 words)
+- Descriptions (d) must be 2-3 sentences of dense institutional-grade analysis
+- Do NOT use generic/boilerplate text — every point must reflect TODAY's macro environment
 
 RULES:
 - severity must be one of: GEO-RISK, MACRO-SHOCK, MOMENTUM, SECTOR-ROTATE
@@ -1227,7 +1240,7 @@ def _run_apex_advisor(assets, prices, ohlc_data, p_summary):
         "watchlist": watchlist_analysis
     }
 
-def _get_advanced_intelligence(assets, portfolio, risk_level, risk_data, base_currency):
+def _get_advanced_intelligence(assets, portfolio, risk_level, risk_data, base_currency, rsi_cache=None):
     total_val = portfolio.get("total_value", 0)
     beta = portfolio.get("portfolio_beta", 1.0)
     var_95 = portfolio.get("var_95_daily", 0)
@@ -1299,7 +1312,7 @@ def _get_advanced_intelligence(assets, portfolio, risk_level, risk_data, base_cu
     # when actually available — producing varied, realistic scores across the portfolio.
     div_safety = {}
     for _tk, _a in assets.items():
-        _rsi  = _mock_rsi(_tk)                                          # 20–80
+        _rsi  = (rsi_cache or {}).get(_tk, _mock_rsi(_tk))                 # real RSI when available
         _beta = _to_float(_a.get("beta")) or 1.0
         _ter  = (_to_float(_a.get("ter"))
                  or _KNOWN_TER.get(_tk.replace('_', '.').split('.')[0].upper(), 0.003))
@@ -1403,12 +1416,72 @@ def _get_market_outlook(assets, portfolio):
     return {"points": points, "commentary": " ".join(comm), "future_outlook": future_outlook}
 
 def _get_global_events():
+    """Generate approximate economic calendar based on known recurring schedules."""
     now = datetime.datetime.now()
-    return [
-        {"d": (now + pd.Timedelta(days=12)).strftime("%Y-%m-%d"), "e": "US Fed Meeting", "i": "Rate decision."},
-        {"d": (now + pd.Timedelta(days=18)).strftime("%Y-%m-%d"), "e": "US CPI Data", "i": "Inflation trigger."},
-        {"d": (now + pd.Timedelta(days=25)).strftime("%Y-%m-%d"), "e": "BoE Meeting", "i": "GBP driver."}
-    ]
+    year, month = now.year, now.month
+    events = []
+
+    def _nth_weekday(y, m, weekday, n):
+        """Return date of the nth weekday (0=Mon) of month m in year y."""
+        first_day = calendar.weekday(y, m, 1)
+        offset = (weekday - first_day) % 7
+        day = 1 + offset + 7 * (n - 1)
+        return datetime.datetime(y, m, day)
+
+    # FOMC: 3rd Wednesday of Jan, Mar, May, Jun, Jul, Sep, Nov, Dec
+    fomc_months = [1, 3, 5, 6, 7, 9, 11, 12]
+    for m in fomc_months:
+        y = year if m >= month else year + 1
+        try:
+            dt = _nth_weekday(y, m, 2, 3)  # 3rd Wednesday
+            if dt > now:
+                events.append({"d": dt.strftime("%Y-%m-%d"), "e": "FOMC Rate Decision",
+                               "i": "Fed Funds rate decision. Key driver for all risk assets."})
+                break
+        except ValueError:
+            continue
+
+    # BoE MPC: 1st Thursday of Feb, Mar, May, Jun, Aug, Sep, Nov, Dec
+    boe_months = [2, 3, 5, 6, 8, 9, 11, 12]
+    for m in boe_months:
+        y = year if m >= month else year + 1
+        try:
+            dt = _nth_weekday(y, m, 3, 1)  # 1st Thursday
+            if dt > now:
+                events.append({"d": dt.strftime("%Y-%m-%d"), "e": "BoE MPC Meeting",
+                               "i": "Bank Rate decision. GBP and gilt driver."})
+                break
+        except ValueError:
+            continue
+
+    # US CPI: typically 12th-14th of each month
+    cpi_m = month + 1 if now.day > 15 else month
+    cpi_y = year
+    if cpi_m > 12:
+        cpi_m, cpi_y = 1, year + 1
+    events.append({"d": f"{cpi_y}-{cpi_m:02d}-13", "e": "US CPI Data",
+                   "i": "Core CPI drives Fed rate expectations. Inflation trigger."})
+
+    # US NFP: 1st Friday of each month
+    nfp_m = month + 1 if now.day > 7 else month
+    nfp_y = year
+    if nfp_m > 12:
+        nfp_m, nfp_y = 1, year + 1
+    try:
+        nfp_dt = _nth_weekday(nfp_y, nfp_m, 4, 1)  # 1st Friday
+        events.append({"d": nfp_dt.strftime("%Y-%m-%d"), "e": "US Non-Farm Payrolls",
+                       "i": "Labour market health. Affects rate cut timeline."})
+    except ValueError:
+        pass
+
+    # UK Budget/Spring Statement: typically late March or late October
+    budget_m = 3 if month <= 3 else 10 if month <= 10 else 3
+    budget_y = year if budget_m >= month else year + 1
+    events.append({"d": f"{budget_y}-{budget_m:02d}-26", "e": "UK Fiscal Statement",
+                   "i": "Chancellor's fiscal policy. Gilt and GBP catalyst."})
+
+    events.sort(key=lambda x: x["d"])
+    return [e for e in events if e["d"] >= now.strftime("%Y-%m-%d")][:5]
 
 def _generate_recommendations(assets, portfolio, risk_level, base_currency="GBP"):
     recs = []
@@ -1969,6 +2042,7 @@ async def _call_cio_llm(
     assets: Dict[str, Any],
     portfolio: Dict[str, Any],
     ideal_blueprint: Dict[str, float],
+    rsi_cache: Dict[str, float] = None,
 ) -> Dict[str, Any]:
     """
     Calls Claude Opus 4.6 (CIO persona) to generate live TAA recommendations.
@@ -1996,7 +2070,7 @@ async def _call_cio_llm(
     asset_lines = []
     for tk, a in assets.items():
         s   = a.get("sentiment", {})
-        rsi = s.get("rsi", _mock_rsi(tk))
+        rsi = s.get("rsi", (rsi_cache or {}).get(tk, _mock_rsi(tk)))
         sig = "OVERBOUGHT" if rsi > 70 else "OVERSOLD" if rsi < 30 else "NEUTRAL"
         cls = ("Growth"    if tk.split(".")[0].upper() in _GROWTH_BASES    else
                "Defensive" if tk.split(".")[0].upper() in _DEFENSIVE_BASES else "Core")
@@ -2030,7 +2104,7 @@ async def _call_cio_llm(
     client = _anthropic.AsyncAnthropic()
     async with client.messages.stream(
         model="claude-opus-4-6",
-        max_tokens=2048,
+        max_tokens=3200,
         thinking={"type": "adaptive"},
         # Cache the static system prompt — ~90% cheaper on repeated calls (5-min TTL)
         system=[{
@@ -2070,10 +2144,11 @@ async def _cio_with_fallback(
     assets: Dict[str, Any],
     portfolio: Dict[str, Any],
     ideal_blueprint: Dict[str, float],
+    rsi_cache: Dict[str, float] = None,
 ) -> Dict[str, Any]:
     """Calls the LLM; falls back silently to the rule-based engine on any error."""
     try:
-        return await _call_cio_llm(holdings, assets, portfolio, ideal_blueprint)
+        return await _call_cio_llm(holdings, assets, portfolio, ideal_blueprint, rsi_cache=rsi_cache)
     except Exception:
         traceback.print_exc()
         desk      = _generate_tactical_desk(holdings, assets, portfolio)
@@ -2169,11 +2244,22 @@ async def analyze_portfolio(request: PortfolioRequest):
         # Clean tickers (strip _ISA etc) for external API history fetch
         api_tickers = list(set([t.split('_')[0] for t in tickers] + ["SPY", "^VIX", "VWRL.L"] + list(GLOBAL_WATCHLIST.keys())))
         full_prices, ohlc_data = await _fetch_full_history(api_tickers)
+
+        # Pre-compute real RSI for all tickers using OHLC data
+        _rsi_cache: Dict[str, float] = {}
+        for _tk_raw in tickers:
+            _api_tk = _tk_raw.split('_')[0]
+            _ohlc = ohlc_data.get(_api_tk, pd.DataFrame())
+            if not _ohlc.empty and 'Close' in _ohlc.columns and len(_ohlc) >= 15:
+                _rsi_cache[_tk_raw] = _compute_rsi(_ohlc['Close'])
+            else:
+                _rsi_cache[_tk_raw] = _mock_rsi(_tk_raw)
+
         risk_data = _compute_risk_history_from_prices(full_prices, tickers, {tk: assets[tk]["weight"] for tk in tickers})
         sentiments = await asyncio.gather(*[_get_sentiment(t) for t in tickers])
-        
+
         for tk, s in zip(tickers, sentiments):
-            rsi_val = _mock_rsi(tk)
+            rsi_val = _rsi_cache.get(tk, _mock_rsi(tk))
             s["rsi"] = rsi_val
             s["rsi_signal"] = "OVERBOUGHT" if rsi_val > 70 else "OVERSOLD" if rsi_val < 30 else "NEUTRAL"
             assets[tk]["sentiment"] = s
@@ -2182,13 +2268,13 @@ async def analyze_portfolio(request: PortfolioRequest):
         blended_ter = sum((_to_float(a.get("ter")) or _KNOWN_TER.get(tk.replace('_', '.').split('.')[0].upper(), 0.002)) * a["weight"]
                           for tk, a in assets.items())
         p_summary = {**risk_data["portfolio_risk"], "total_value": round(total_val, 2), "weighted_dividend_yield": round(sum((_to_float(a["dividend_yield"]) or 0)*a["weight"] for a in assets.values()), 4), "portfolio_beta": round(sum((_to_float(a["beta"]) or 1)*a["weight"] for a in assets.values()), 2), "asset_count": len(tickers), "currency": base_curr, "blended_ter": round(blended_ter, 4)}
-        advanced = _get_advanced_intelligence(assets, p_summary, request.risk_level, risk_data, base_curr)
+        advanced = _get_advanced_intelligence(assets, p_summary, request.risk_level, risk_data, base_curr, rsi_cache=_rsi_cache)
         apex_advisor = _run_apex_advisor(assets, full_prices, ohlc_data, p_summary)
 
         # ── CIO LLM — live TAA (falls back to rule engine when disabled/error) ─
         ideal_bp = advanced.get("ideal_blueprint", {})
         if request.enable_cio_llm:
-            cio = await _cio_with_fallback(holdings, assets, p_summary, ideal_bp)
+            cio = await _cio_with_fallback(holdings, assets, p_summary, ideal_bp, rsi_cache=_rsi_cache)
         else:
             desk = _generate_tactical_desk(holdings, assets, p_summary)
             cio  = {"tactical_desk": desk,
@@ -2226,7 +2312,7 @@ async def analyze_portfolio(request: PortfolioRequest):
             if tk in assets and isinstance(upd, dict):
                 s = assets[tk].get("sentiment", {})
                 s.update({k: v for k, v in upd.items() if v is not None})
-                rsi = float(s.get("rsi", _mock_rsi(tk)))
+                rsi = float(s.get("rsi", _rsi_cache.get(tk, _mock_rsi(tk))))
                 s["rsi_signal"] = "OVERBOUGHT" if rsi > 70 else "OVERSOLD" if rsi < 30 else "NEUTRAL"
                 assets[tk]["sentiment"] = s
 
@@ -2283,9 +2369,18 @@ async def analyze_portfolio(request: PortfolioRequest):
                 )
 
         # Attach summary_hints to advanced_intel and quant_intelligence to market_outlook
-        advanced["summary_hints"] = cio["summary_hints"]
+        advanced["summary_hints"] = cio.get("summary_hints", {})
         market_outlook = _get_market_outlook(assets, p_summary)
-        market_outlook["quant_intelligence"] = cio["quant_intelligence"]
+        market_outlook["quant_intelligence"] = cio.get("quant_intelligence", "")
+
+        # Merge LLM-generated 5-Point Intelligence (override hardcoded fallback when valid)
+        llm_outlook = cio.get("market_outlook")
+        if isinstance(llm_outlook, list) and len(llm_outlook) >= 3:
+            market_outlook["points"] = llm_outlook
+        if cio.get("strategic_commentary"):
+            market_outlook["commentary"] = cio["strategic_commentary"]
+        if cio.get("future_outlook"):
+            market_outlook["future_outlook"] = cio["future_outlook"]
 
         return {
             "portfolio": p_summary, "assets": assets, "risk": risk_data, "advanced_intel": advanced,

@@ -5,7 +5,7 @@ Vesper v5.0 — Intelligence Engine (Multi-Currency Apex)
 from __future__ import annotations
 
 import asyncio
-import copy
+import calendar
 import datetime
 import hashlib
 import io
@@ -16,6 +16,9 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional, Tuple
+import copy
+import csv
+import re
 
 try:
     import anthropic as _anthropic
@@ -115,7 +118,7 @@ Respond with ONLY a single, strict, valid JSON object — no markdown, no commen
   }
 }
 
-ALSO include these two additional top-level keys in the JSON:
+ALSO include these additional top-level keys in the JSON:
 
 "summary_hints": {
   "var":    "One concise line (≤12 words). Portfolio-aware VaR advice referencing actual defensive holdings.",
@@ -123,7 +126,19 @@ ALSO include these two additional top-level keys in the JSON:
   "sharpe": "One concise line (≤12 words). Sharpe/efficiency advice referencing actual drag assets or quality.",
   "cagr":   "One concise line (≤12 words). Real return advice referencing the CMA-blended growth outlook."
 },
-"quant_intelligence": "2–3 sentences. Institutional-grade diversification commentary. Mention the specific DR value, reference 1–2 actual tickers held, and give a precise actionable insight."
+"quant_intelligence": "2–3 sentences. Institutional-grade diversification commentary. Mention the specific DR value, reference 1–2 actual tickers held, and give a precise actionable insight.",
+"market_outlook": [
+  {"l": "Short label (2-4 words)", "v": "Short value/title (3-7 words)", "d": "2-3 sentence deep institutional analysis with specific data points, referencing actual holdings where relevant.", "i": "emoji"}
+],
+"strategic_commentary": "2-3 sentences. Portfolio-specific strategic observation referencing the client's Sharpe ratio, factor exposures, and allocation efficiency. Must mention actual tickers held.",
+"future_outlook": "2-3 sentences. Forward-looking macro thesis with specific catalysts, rotation targets, and risk scenarios. Reference actual market conditions and the client's positioning."
+
+market_outlook RULES:
+- EXACTLY 5 items covering these topics in order: (1) Macro Regime, (2) Sector Rotation, (3) Regional Alpha, (4) Valuation Framework, (5) Strategic Hedge
+- Each item MUST reference current market conditions and the client's actual holdings
+- Labels (l) must be concise (2-4 words), values (v) must be punchy titles (3-7 words)
+- Descriptions (d) must be 2-3 sentences of dense institutional-grade analysis
+- Do NOT use generic/boilerplate text — every point must reflect TODAY's macro environment
 
 RULES:
 - severity must be one of: GEO-RISK, MACRO-SHOCK, MOMENTUM, SECTOR-ROTATE
@@ -145,6 +160,17 @@ income. Only ISA and SIPP wrappers provide legal UK tax shelter.
 _GROWTH_BASES    = {"EQQQ","AINF","DAGB","QQQ","ARKK","SMH","SOXX","MAGS","SCHG","VUG","QQQM","IGM","IIND","WTEC","LGQG","ROBO"}
 _DEFENSIVE_BASES = {"SGLN","GLD","IAU","GLDM","PHAU","TLT","BND","AGG","IGLT","VGLT","IGLS","HMSO","TN28","XGSD"}
 _GOLD_BASES      = {"GLD","SGLN","IAU","GLDM","PHAU","HMSO","IGLN","SGLP"}
+
+GLOBAL_WATCHLIST = {
+    "VUSA.L": {"name": "Vanguard S&P 500", "strategy": "Momentum", "type": "Equity"},
+    "VUKE.L": {"name": "Vanguard FTSE 100", "strategy": "Mean Reversion", "type": "Equity"},
+    "VIXL.L": {"name": "WisdomTree VIX Short-Term Futures", "strategy": "Volatility", "type": "Hedge"},
+    "IGLN.L": {"name": "iShares Physical Gold", "strategy": "Volatility", "type": "Safe Haven"},
+    "ISF.L":  {"name": "iShares FTSE 100", "strategy": "Arbitrage", "type": "Equity"},
+    "VEMB.L": {"name": "JPM Emerging Markets Bond", "strategy": "Income/Reversion", "type": "Fixed Income"},
+    "3BRL.L": {"name": "WisdomTree S&P 500 3x Daily", "strategy": "Scalping", "type": "Leveraged"},
+    "I500.L": {"name": "iShares S&P 500 Swap", "strategy": "Mean Reversion", "type": "Equity"},
+}
 
 # Known fund TERs (annual ongoing charge) for common ETFs — used when yfinance doesn't return it
 _KNOWN_TER: Dict[str, float] = {
@@ -201,559 +227,12 @@ class PortfolioRequest(BaseModel):
         if not v: raise ValueError("Provide at least one ticker.")
         return {k.upper().strip(): float(q) for k, q in v.items()}
 
+
 class TransactionRequest(BaseModel):
     csv_text: str
     account_type: str = "ISA"   # ISA | GIA | SIPP
-    id_token: str = ""           # Firebase ID token (empty = unauthenticated)
+    id_token: str = ""          # Firebase auth token (optional)
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Transaction Ledger Helpers
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _parse_ii_csv(csv_text: str) -> "pd.DataFrame":
-    """Parse Interactive Investor (and other UK broker) CSV exports.
-
-    Handles:
-    - UTF-8 BOM characters on the Date column / file header
-    - UK date format DD/MM/YYYY
-    - Currency strings with £ and commas (e.g. "£13,996.56")
-    - 'n/a' string values in numeric columns
-    """
-    # Strip ALL leading BOM characters (II exports can have multiple \ufeff bytes)
-    csv_text = csv_text.lstrip("\ufeff")
-
-    # Auto-detect separator (II = tab-separated; others = comma-separated)
-    df = pd.read_csv(io.StringIO(csv_text), sep=None, engine="python")
-
-    # Strip any residual BOM / whitespace from column names
-    df.columns = (
-        df.columns.str.replace(r"^\ufeff", "", regex=True).str.strip()
-    )
-
-    # ── Parse dates (UK format DD/MM/YYYY) ───────────────────────────────────
-    if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(
-            df["Date"], format="%d/%m/%Y", errors="coerce"
-        )
-    else:
-        df["Date"] = pd.NaT
-
-    df = df.dropna(subset=["Date"])
-    if df.empty:
-        return df
-
-    # Stable sort: date asc, then Reference to keep Buy/Sell order as in the CSV
-    sort_cols = ["Date"] + (["Reference"] if "Reference" in df.columns else [])
-    df = df.sort_values(sort_cols, kind="mergesort").reset_index(drop=True)
-
-    # ── Clean currency / numeric columns ─────────────────────────────────────
-    def _clean_num(series: "pd.Series") -> "pd.Series":
-        return pd.to_numeric(
-            series.astype(str)
-                  .str.replace("£", "", regex=False)
-                  .str.replace(",", "", regex=False)
-                  .str.replace("n/a", "0", case=False, regex=False)
-                  .str.strip(),
-            errors="coerce",
-        ).fillna(0.0)
-
-    for col in ["Debit", "Credit", "Price", "Running Balance"]:
-        df[col] = _clean_num(df[col]) if col in df.columns else 0.0
-
-    df["Quantity"] = _clean_num(df["Quantity"]) if "Quantity" in df.columns else 0.0
-
-    # ── String columns ────────────────────────────────────────────────────────
-    for col in ["Symbol", "Description", "Reference"]:
-        df[col] = (
-            df[col].fillna("").astype(str).str.strip()
-            if col in df.columns
-            else ""
-        )
-
-    # ── Build a clean identifier: prefer Symbol ticker, fall back to SEDOL ───
-    # II exports "n/a" in the Symbol column for OEICs / mutual funds; the actual
-    # identifier sits in a separate "Sedol" (or "SEDOL") column.
-    sedol_col = next((c for c in df.columns if c.lower() == "sedol"), None)
-    sedol_vals = df[sedol_col].fillna("").astype(str).str.strip() if sedol_col else ""
-
-    def _pick_sym(sym_raw, sedol_raw):
-        s = str(sym_raw).strip()
-        if s and s.lower() not in ("n/a", "na", ""):
-            return s.upper()
-        s2 = str(sedol_raw).strip()
-        if s2 and s2.lower() not in ("n/a", "na", ""):
-            return s2.upper()
-        return ""
-
-    df["Symbol"] = [
-        _pick_sym(sym, sed)
-        for sym, sed in zip(df["Symbol"], sedol_vals if sedol_col else [""] * len(df))
-    ]
-
-    return df
-
-
-def _run_pnl_engine(df: "pd.DataFrame", account_type: str) -> Dict[str, Any]:
-    """Average-cost P&L engine with year-by-year analytics."""
-    portfolio_pool: Dict[str, Dict[str, float]] = {}
-    cap_gains_by_year: Dict[int, float] = {}
-    dividends_by_year: Dict[int, float] = {}
-    interest_by_year:  Dict[int, float] = {}
-
-    prev_year: Optional[int] = None
-    year_start_cost: Dict[int, float] = {}
-    year_end_snapshots: Dict[int, Dict[str, Dict[str, float]]] = {}
-
-    total_buy_debits:             float = 0.0
-    total_sell_credits:           float = 0.0   # subtract so reinvestments don't double-count
-    total_personal_contribution:  float = 0.0   # sum of all cash inflows (deposits, transfers, subs)
-    cash_balance:                 float = 0.0   # running cash: credits − real debits (excl. in-specie)
-    cash_timeline: list = []
-
-    for _, row in df.iterrows():
-        year   = int(row["Date"].year)
-        desc   = str(row.get("Description", "")).upper()
-        qty    = float(row["Quantity"])
-        debit  = float(row["Debit"])
-        credit = float(row["Credit"])
-        sym    = str(row.get("Symbol", "")).upper()
-
-        # Year boundary — snapshot pool before processing new year's first row
-        if prev_year is not None and year != prev_year:
-            year_end_snapshots[prev_year] = copy.deepcopy(portfolio_pool)
-            year_start_cost[year] = sum(p["cost"] for p in portfolio_pool.values())
-        if prev_year is None:
-            year_start_cost[year] = 0.0
-        prev_year = year
-
-        # ── Classify row ─────────────────────────────────────────────────────
-        # Dividend / income — gate on qty == 0 so ETF sell rows (qty > 0, credit > 0)
-        # with "DIST" / "INCOME" in the ETF name (e.g. "Vanguard S&P 500 Distributing")
-        # are NOT misclassified as dividends and fall through to the sym sell branch.
-        if credit > 0 and qty == 0 and any(kw in desc for kw in ("DIV", "DIVIDEND", "INCOME", "DISTRIBUTION", "DIST", "SCRIP")):
-            dividends_by_year[year] = dividends_by_year.get(year, 0.0) + credit
-            cash_balance += credit
-
-        elif credit > 0 and qty == 0 and "INTEREST" in desc:
-            interest_by_year[year] = interest_by_year.get(year, 0.0) + credit
-            cash_balance += credit
-
-        elif not sym and (credit > 0 or debit > 0):
-            # ── Fund sell without a ticker (sym="", qty>0, credit>0) ──────────
-            # Vanguard mutual funds arrive with only an ISIN, no LSE ticker.
-            # Only count as Transfer In if description confirms it's a Vanguard fund.
-            _VAN_KWS = ("VANGUARD", "VAND ", "VAN LIFE", "VAN US", "VAN UK")
-            if qty > 0 and credit > 0 and any(kw in desc for kw in _VAN_KWS):
-                total_personal_contribution += credit
-                cash_balance += credit
-                cash_timeline.append({
-                    "date":   row["Date"].strftime("%Y-%m-%d"),
-                    "type":   "Transfer In (Funds)",
-                    "amount": float(credit),
-                })
-
-            else:
-                # ── Pure cash flow — classify by description keyword ──────────
-                if credit > 0: cash_balance += credit
-                elif debit > 0: cash_balance -= debit
-                is_contribution = False
-                if "SUBSCRIPTION" in desc or "SUBSCR" in desc:
-                    flow_type       = "Subscription"
-                    is_contribution = credit > 0
-                elif "TRF" in desc or "TRANSFER" in desc:
-                    flow_type       = "Transfer In" if credit > 0 else "Transfer Out"
-                    is_contribution = credit > 0
-                elif any(kw in desc for kw in ("HSBC", "VIRGIN", "LLOYDS", "BARCLAYS",
-                                               "NATWEST", "HALIFAX", "SANTANDER", "MONZO",
-                                               "NATIONWIDE", "STARLING")):
-                    flow_type       = "Cash In"
-                    is_contribution = credit > 0
-                elif any(kw in desc for kw in ("CASH IN", "CHAPS", "BACS",
-                                               "FASTER PAYMENT", "FPS ", "CREDIT FROM")):
-                    flow_type       = "Cash In"
-                    is_contribution = credit > 0
-                elif "BED" in desc:
-                    flow_type       = "Bed & ISA"
-                    is_contribution = credit > 0
-                elif "ISA" in desc:
-                    # Catches "2024/25 ISA", "2025/26 ISA", "ISA SUBSCRIPTION" etc.
-                    flow_type       = "Subscription"
-                    is_contribution = credit > 0
-                else:
-                    # Unknown cash row — show in timeline but don't count as contribution
-                    flow_type = "Deposit" if credit > 0 else "Withdrawal"
-
-                if is_contribution:
-                    total_personal_contribution += credit
-
-                cash_timeline.append({
-                    "date":   row["Date"].strftime("%Y-%m-%d"),
-                    "type":   flow_type,
-                    "amount": float(credit if credit > 0 else debit),
-                })
-
-        elif qty != 0 and sym:
-            # II sometimes exports negative qty on sell rows — normalise to abs value.
-            qty_abs = abs(qty)
-            pool = portfolio_pool.setdefault(sym, {"qty": 0.0, "cost": 0.0})
-
-            if debit > 0:       # Buy
-                pool["qty"]  += qty_abs
-                pool["cost"] += debit
-                total_buy_debits += debit
-                # "VAND " is II's abbreviation for in-specie Vanguard deliveries only.
-                # Regular purchases of Vanguard ETFs use the full word "VANGUARD" in their
-                # description — we must NOT exclude those from cash deduction.
-                if "VAND " in desc:
-                    # In-specie delivery: no real cash paid — do NOT reduce cash_balance
-                    total_personal_contribution += debit
-                    cash_timeline.append({
-                        "date":   row["Date"].strftime("%Y-%m-%d"),
-                        "type":   "Transfer In (Funds)",
-                        "amount": float(debit),
-                    })
-                else:
-                    cash_balance -= debit  # Real cash purchase
-
-            elif credit > 0:
-                if pool["qty"] > 0.01:   # Normal sell — cost basis known
-                    avg_cost = pool["cost"] / pool["qty"]
-                    cogs     = avg_cost * qty_abs
-                    realized = credit - cogs
-                    cap_gains_by_year[year] = cap_gains_by_year.get(year, 0.0) + realized
-                    pool["qty"]  = max(0.0, pool["qty"]  - qty_abs)
-                    pool["cost"] = max(0.0, pool["cost"] - cogs)
-                    total_sell_credits += credit
-                    cash_balance += credit  # Sell proceeds land as cash
-                else:                    # Sell with no matching buy = in-specie transfer proceeds
-                    # With the SEDOL fix each fund has its own pool; if qty=0 it means
-                    # this was genuinely transferred in from another platform (no buy in II).
-                    total_personal_contribution += credit
-                    cash_balance += credit  # Proceeds also land as cash
-                    cash_timeline.append({
-                        "date":   row["Date"].strftime("%Y-%m-%d"),
-                        "type":   "Transfer In (Funds)",
-                        "amount": float(credit),
-                    })
-
-            else:
-                # debit=0, credit=0: in-specie delivery or scrip dividend shares.
-                # Add qty to pool but NOT to pool["cost"] — the Price column here is the
-                # market price at delivery, not the investor's cash outlay.  Including it
-                # inflates book cost by ~£26K+ (e.g. 276 VUSA scrip shares × £97 = £26,772).
-                # Cost basis for these shares is treated as zero; any realised gain on
-                # subsequent sells of these shares will appear in cap_gains_by_year.
-                pool["qty"] += qty_abs
-
-    # Save snapshot for the final year
-    if prev_year is not None:
-        year_end_snapshots[prev_year] = copy.deepcopy(portfolio_pool)
-
-    # Drop ghost positions (floating-point residues from fully-sold positions)
-    portfolio_pool = {k: v for k, v in portfolio_pool.items() if v['qty'] > 0.01}
-
-    # ── Year-by-year stats ────────────────────────────────────────────────────
-    all_years = sorted(
-        set(cap_gains_by_year) | set(dividends_by_year) | set(interest_by_year)
-    )
-    yearly: Dict[str, Any] = {}
-    for yr in all_years:
-        gains   = cap_gains_by_year.get(yr, 0.0)
-        divs    = dividends_by_year.get(yr, 0.0)
-        ints    = interest_by_year.get(yr, 0.0)
-        net     = gains + divs + ints
-        cap_soy = year_start_cost.get(yr, 0.0)
-        ror     = (net / cap_soy * 100.0) if cap_soy > 0 else 0.0
-
-        snap = year_end_snapshots.get(yr, {})
-        top3 = sorted(
-            [
-                {"symbol": s, "qty": round(p["qty"], 4), "cost": round(p["cost"], 2)}
-                for s, p in snap.items()
-                if p["qty"] > 0.01
-            ],
-            key=lambda x: x["cost"],
-            reverse=True,
-        )[:3]
-
-        yearly[str(yr)] = {
-            "realized_gains": round(gains, 2),
-            "dividends":      round(divs, 2),
-            "interest":       round(ints, 2),
-            "net_profit":     round(net, 2),
-            "ror":            round(ror, 2),
-            "top_3_holdings": top3,
-        }
-
-    # ── Use II's Running Balance as the definitive cash figure ───────────────
-    # Transaction-flow cash is algebraically fixed (contributions + earnings − book_cost);
-    # II's own Running Balance column is more reliable — use the last non-zero value.
-    if "Running Balance" in df.columns:
-        rb_vals = df["Running Balance"]
-        rb_pos  = rb_vals[rb_vals > 0]
-        if not rb_pos.empty:
-            cash_balance = float(rb_pos.iloc[-1])
-
-    # ── Open positions ────────────────────────────────────────────────────────
-    open_positions = {
-        sym: {
-            "qty":        round(p["qty"], 4),
-            "avg_cost":   round(p["cost"] / p["qty"], 4) if p["qty"] > 0 else 0.0,
-            "total_cost": round(p["cost"], 2),
-        }
-        for sym, p in portfolio_pool.items()
-        if p["qty"] > 0.01
-    }
-
-    # ── Totals ────────────────────────────────────────────────────────────────
-    total_gains    = sum(cap_gains_by_year.values())
-    total_divs     = sum(dividends_by_year.values())
-    total_ints     = sum(interest_by_year.values())
-    total_earnings = total_gains + total_divs + total_ints
-    # Net capital deployed: buys minus sell proceeds so reinvestments don't double-count
-    total_paid_in  = max(0.0, total_buy_debits - total_sell_credits)
-    all_time_ror   = (total_earnings / total_paid_in * 100.0) if total_paid_in > 0 else 0.0
-
-    current_year = datetime.datetime.now().year
-
-    return {
-        "account_type":  account_type,
-        "total_paid_in": round(total_paid_in, 2),
-        "total_earnings": round(total_earnings, 2),
-        "all_time_ror":  round(all_time_ror, 2),
-        "capital_gains": {
-            "ytd":     round(cap_gains_by_year.get(current_year, 0.0), 2),
-            "total":   round(total_gains, 2),
-            "by_year": {str(k): round(v, 2) for k, v in sorted(cap_gains_by_year.items())},
-        },
-        "dividends": {
-            "total":   round(total_divs, 2),
-            "by_year": {str(k): round(v, 2) for k, v in sorted(dividends_by_year.items())},
-        },
-        "interest": {
-            "total":   round(total_ints, 2),
-            "by_year": {str(k): round(v, 2) for k, v in sorted(interest_by_year.items())},
-        },
-        "open_positions":              open_positions,
-        "total_book_cost":             round(sum(p["total_cost"] for p in open_positions.values()), 2),
-        "total_personal_contribution": round(total_personal_contribution, 2),
-        "cash_balance":                round(max(0.0, cash_balance), 2),
-        "cash_timeline":               cash_timeline,
-        "yearly":                      yearly,
-        "transaction_count":           len(df),
-    }
-
-
-def _aggregate_analytics(accounts: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
-    """Merge per-account analytics into a combined 'all' view."""
-    if not accounts:
-        return {"account_type": "all", "transaction_count": 0,
-                "total_paid_in": 0, "total_earnings": 0, "all_time_ror": 0,
-                "total_book_cost": 0, "total_personal_contribution": 0,
-                "cash_balance": 0,
-                "cash_timeline": [],
-                "capital_gains": {"ytd": 0, "total": 0, "by_year": {}},
-                "dividends": {"total": 0, "by_year": {}},
-                "interest": {"total": 0, "by_year": {}},
-                "open_positions": {}, "yearly": {}}
-
-    def _sum_by_year(*dicts: Dict[str, float]) -> Dict[str, float]:
-        result: Dict[str, float] = {}
-        for d in dicts:
-            for yr, v in d.items():
-                result[yr] = round(result.get(yr, 0.0) + v, 2)
-        return result
-
-    total_paid_in                = sum(a.get("total_paid_in", 0)                 for a in accounts.values())
-    total_earnings               = sum(a.get("total_earnings", 0)                for a in accounts.values())
-    tx_count                     = sum(a.get("transaction_count", 0)             for a in accounts.values())
-    total_personal_contribution  = sum(a.get("total_personal_contribution", 0)   for a in accounts.values())
-    total_cash_balance           = sum(a.get("cash_balance", 0)                  for a in accounts.values())
-    all_time_ror   = (total_earnings / total_paid_in * 100.0) if total_paid_in > 0 else 0.0
-
-    current_year = datetime.datetime.now().year
-    all_cg_by_year = _sum_by_year(*(a["capital_gains"]["by_year"] for a in accounts.values()))
-    all_dv_by_year = _sum_by_year(*(a["dividends"]["by_year"] for a in accounts.values()))
-    all_in_by_year = _sum_by_year(*(a["interest"]["by_year"] for a in accounts.values()))
-
-    # Merge open positions
-    merged_pos: Dict[str, Dict[str, float]] = {}
-    for a in accounts.values():
-        for sym, pos in a.get("open_positions", {}).items():
-            if sym not in merged_pos:
-                merged_pos[sym] = {"qty": 0.0, "cost": 0.0}
-            merged_pos[sym]["qty"]  += pos["qty"]
-            merged_pos[sym]["cost"] += pos["total_cost"]
-    open_positions = {
-        sym: {
-            "qty":        round(p["qty"], 4),
-            "avg_cost":   round(p["cost"] / p["qty"], 4) if p["qty"] > 0 else 0.0,
-            "total_cost": round(p["cost"], 2),
-        }
-        for sym, p in merged_pos.items()
-    }
-
-    # Merge yearly
-    all_years = set()
-    for a in accounts.values():
-        all_years.update(a.get("yearly", {}).keys())
-    merged_yearly: Dict[str, Any] = {}
-    for yr in sorted(all_years):
-        gains = sum(a.get("yearly", {}).get(yr, {}).get("realized_gains", 0) for a in accounts.values())
-        divs  = sum(a.get("yearly", {}).get(yr, {}).get("dividends", 0) for a in accounts.values())
-        ints  = sum(a.get("yearly", {}).get(yr, {}).get("interest", 0) for a in accounts.values())
-        net   = gains + divs + ints
-        merged_yearly[yr] = {
-            "realized_gains": round(gains, 2),
-            "dividends":      round(divs, 2),
-            "interest":       round(ints, 2),
-            "net_profit":     round(net, 2),
-            "ror":            0.0,   # can't merge RoR meaningfully without full pool
-            "top_3_holdings": [],
-        }
-
-    # Merge cash timelines chronologically
-    merged_cash_timeline: list = []
-    for a in accounts.values():
-        merged_cash_timeline.extend(a.get("cash_timeline", []))
-    merged_cash_timeline.sort(key=lambda r: r["date"])
-
-    return {
-        "account_type":   "all",
-        "total_paid_in":  round(total_paid_in, 2),
-        "total_earnings": round(total_earnings, 2),
-        "all_time_ror":   round(all_time_ror, 2),
-        "capital_gains": {
-            "ytd":     all_cg_by_year.get(str(current_year), 0.0),
-            "total":   round(sum(all_cg_by_year.values()), 2),
-            "by_year": all_cg_by_year,
-        },
-        "dividends": {"total": round(sum(all_dv_by_year.values()), 2), "by_year": all_dv_by_year},
-        "interest":  {"total": round(sum(all_in_by_year.values()), 2), "by_year": all_in_by_year},
-        "open_positions":              open_positions,
-        "total_book_cost":             round(sum(p["total_cost"] for p in open_positions.values()), 2),
-        "total_personal_contribution": round(total_personal_contribution, 2),
-        "cash_balance":                round(max(0.0, total_cash_balance), 2),
-        "cash_timeline":               merged_cash_timeline,
-        "yearly":                      merged_yearly,
-        "transaction_count":           tx_count,
-    }
-
-
-def _save_transactions_to_firestore(
-    df: "pd.DataFrame", uid: str, account_type: str
-) -> Tuple[int, int]:
-    """Write new transactions to Firestore; return (new_count, dup_count)."""
-    if not _FIREBASE_OK or _FS_CLIENT is None:
-        return (0, 0)
-
-    user_coll = (
-        _FS_CLIENT.collection("users")
-                  .document(uid)
-                  .collection("transactions")
-    )
-
-    doc_ids: List[str] = []
-    rows_data: List[Dict[str, Any]] = []
-
-    for _, row in df.iterrows():
-        ref = str(row.get("Reference", "")).strip()
-        if not ref or ref.lower() in ("", "nan", "n/a"):
-            key = (
-                f"{row['Date'].strftime('%Y%m%d')}_"
-                f"{row.get('Symbol', '')}_"
-                f"{row.get('Debit', 0)}_"
-                f"{row.get('Credit', 0)}"
-            )
-            ref = hashlib.md5(key.encode()).hexdigest()[:12]
-
-        doc_id = f"{ref}_{account_type}"
-        doc_ids.append(doc_id)
-        rows_data.append({
-            "date":         row["Date"].strftime("%Y-%m-%d"),
-            "symbol":       str(row.get("Symbol", "")),
-            "quantity":     float(row.get("Quantity", 0)),
-            "price":        float(row.get("Price", 0)),
-            "description":  str(row.get("Description", "")),
-            "reference":    ref,
-            "debit":        float(row.get("Debit", 0)),
-            "credit":       float(row.get("Credit", 0)),
-            "account_type": account_type,
-            "uploaded_at":  datetime.datetime.utcnow().isoformat(),
-        })
-
-    # Batch-read to identify duplicates
-    existing: set = set()
-    for i in range(0, len(doc_ids), 500):
-        chunk_refs = [user_coll.document(d) for d in doc_ids[i : i + 500]]
-        for snap in _FS_CLIENT.get_all(chunk_refs):
-            if snap.exists:
-                existing.add(snap.id)
-
-    # Batch-write only new docs
-    new_count = dup_count = 0
-    batch = _FS_CLIENT.batch()
-    batch_size = 0
-
-    for doc_id, row_data in zip(doc_ids, rows_data):
-        if doc_id in existing:
-            dup_count += 1
-        else:
-            batch.set(user_coll.document(doc_id), row_data)
-            new_count += 1
-            batch_size += 1
-            if batch_size >= 499:
-                batch.commit()
-                batch = _FS_CLIENT.batch()
-                batch_size = 0
-
-    if batch_size > 0:
-        batch.commit()
-
-    return new_count, dup_count
-
-
-def _load_user_transactions(uid: str) -> Dict[str, "pd.DataFrame"]:
-    """Load all stored transactions for a user, grouped by account_type."""
-    if not _FIREBASE_OK or _FS_CLIENT is None:
-        return {}
-
-    docs = (
-        _FS_CLIENT.collection("users")
-                  .document(uid)
-                  .collection("transactions")
-                  .stream()
-    )
-    rows = [d.to_dict() for d in docs]
-    if not rows:
-        return {}
-
-    df = pd.DataFrame(rows)
-    df["Date"] = pd.to_datetime(df["date"], errors="coerce")
-    df = df.dropna(subset=["Date"]).sort_values("Date").reset_index(drop=True)
-
-    for col in ["quantity", "price", "debit", "credit"]:
-        df[col] = pd.to_numeric(df.get(col, 0), errors="coerce").fillna(0.0)
-
-    df["Symbol"]      = df.get("symbol",      pd.Series(dtype=str)).fillna("").str.strip().str.upper()
-    df["Description"] = df.get("description", pd.Series(dtype=str)).fillna("")
-    df["Quantity"]    = df["quantity"]
-    df["Debit"]       = df["debit"]
-    df["Credit"]      = df["credit"]
-    df["Price"]       = df["price"]
-
-    # Stable sort: date ascending, then reference to keep original order for same-day trades
-    df = (df.sort_values(["Date", "reference"], ascending=[True, True], kind="mergesort")
-            .reset_index(drop=True))
-
-    result: Dict[str, pd.DataFrame] = {}
-    for acct, grp in df.groupby("account_type"):
-        result[str(acct)] = grp.reset_index(drop=True)
-    return result
-
-
-# ─────────────────────────────────────────────────────────────────────────────
 
 def safe_fetch(info: dict, key: str, default: Any = "N/A") -> Any:
     val = info.get(key)
@@ -769,6 +248,589 @@ def _round(val: Any, decimals: int = 4) -> Any:
     f = _to_float(val)
     return round(f, decimals) if f is not None else "N/A"
 
+# ── P&L Desk helpers ─────────────────────────────────────────────────────────
+
+# Credit-side keywords → TRANSFER_IN (cash coming in)
+_TRANSFER_IN_KEYWORDS = [
+    "trf from", "subscription", "isa subscription", "bed & isa sub",
+    "debit card payment", "payment via", "cash deposited",
+    "pbb payment", "cashback",
+]
+# Debit-side keywords → TRANSFER_OUT (cash leaving or internal move)
+_TRANSFER_OUT_KEYWORDS = [
+    "bed & isa transfer",    # GIA→ISA Bed & ISA (debit side)
+    "withdrawal",
+    "transfer out",
+]
+_FEE_KEYWORDS = [
+    "fee transfer", "total monthly fee", "management fee", "service charge",
+]
+# Descriptions starting with "PAYMENT" followed by reference → TRANSFER_IN
+# e.g. "PAYMENT Q5724180656JMR S SHARMA"
+
+def _tax_year(dt: datetime.date) -> str:
+    """UK tax year: 6-Apr to 5-Apr.  2025-03-15 → '2024/25', 2025-04-06 → '2025/26'."""
+    y, m, d = dt.year, dt.month, dt.day
+    if m > 4 or (m == 4 and d >= 6):
+        return f"{y}/{str((y + 1) % 100).zfill(2)}"
+    return f"{y - 1}/{str(y % 100).zfill(2)}"
+
+def _parse_gbp(raw: str) -> Optional[float]:
+    """Parse '£1,234.56', '(£1,234.56)', 'n/a' → float or None."""
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    if not s or s.lower() == "n/a":
+        return None
+    neg = s.startswith("(") and s.endswith(")")
+    s = s.strip("()")
+    s = re.sub(r"[£,\s\ufeff]", "", s)
+    try:
+        v = float(s)
+        return -v if neg else v
+    except ValueError:
+        return None
+
+def _parse_ii_csv(csv_text: str, account_type: str) -> pd.DataFrame:
+    """Parse an Interactive Investor CSV export into a DataFrame."""
+    # Strip BOM
+    clean = csv_text.replace("\ufeff", "")
+    reader = csv.DictReader(io.StringIO(clean))
+    rows = []
+    for i, raw in enumerate(reader):
+        date_str = (raw.get("Date") or "").strip()
+        if not date_str:
+            continue
+        try:
+            dt = datetime.datetime.strptime(date_str, "%d/%m/%Y").date()
+        except ValueError:
+            continue
+        settle_str = (raw.get("Settlement Date") or "").strip()
+        try:
+            settle = datetime.datetime.strptime(settle_str, "%d/%m/%Y").date()
+        except ValueError:
+            settle = dt
+
+        sym = (raw.get("Symbol") or "").strip()
+        sedol = (raw.get("Sedol") or "").strip()
+        if sym.lower() == "n/a":
+            sym = None
+        if sedol.lower() == "n/a":
+            sedol = None
+
+        # Instrument key
+        inst = None
+        if sym:
+            inst = sym.upper()
+        elif sedol:
+            inst = f"SEDOL:{sedol.upper()}"
+
+        qty_raw = (raw.get("Quantity") or "").strip()
+        qty = None
+        if qty_raw and qty_raw.lower() != "n/a":
+            try:
+                qty = float(qty_raw.replace(",", ""))
+            except ValueError:
+                qty = None
+
+        price = _parse_gbp(raw.get("Price"))
+        debit = _parse_gbp(raw.get("Debit"))
+        credit = _parse_gbp(raw.get("Credit"))
+        balance = _parse_gbp(raw.get("Running Balance"))
+        desc = (raw.get("Description") or "").strip()
+        ref = (raw.get("Reference") or "").strip()
+
+        rows.append({
+            "row_idx": i,
+            "date": dt,
+            "settle_date": settle,
+            "symbol": sym,
+            "sedol": sedol,
+            "instrument_key": inst,
+            "qty": qty,
+            "price": price,
+            "description": desc,
+            "reference": ref,
+            "debit": debit,
+            "credit": credit,
+            "balance": balance,
+            "account_type": account_type,
+        })
+    return pd.DataFrame(rows)
+
+
+def _classify_row(row: dict) -> str:
+    """Classify a transaction row into a type string."""
+    desc_lower = (row.get("description") or "").lower()
+    inst = row.get("instrument_key")
+    raw_qty = row.get("qty")
+    # Handle NaN from pandas
+    qty = None if raw_qty is None or (isinstance(raw_qty, float) and np.isnan(raw_qty)) else raw_qty
+    debit = row.get("debit") or 0
+    credit = row.get("credit") or 0
+
+    # ── Dividend / distribution income ─────────────────────────────────────
+    # "Div ", "Dividend Grp", "Equalisation" in description, credit > 0, no trade qty
+    if credit > 0 and (qty is None or qty == 0):
+        if ("div " in desc_lower or "dividend " in desc_lower or "equalisation" in desc_lower):
+            return "DIVIDEND"
+
+    # ── Interest ───────────────────────────────────────────────────────────
+    if "gross interest" in desc_lower and credit > 0:
+        return "INTEREST"
+
+    # ── Trade: must have instrument + qty > 0 ─────────────────────────────
+    if inst and qty and qty > 0:
+        if debit > 0:
+            return "TRADE_BUY"
+        if credit > 0:
+            return "TRADE_SELL"
+
+    # ── Transfer OUT (debit side) ──────────────────────────────────────────
+    # Must check before TRANSFER_IN because "Bed & ISA Transfer" has debit
+    # and ISA Subscription debits are internal moves out
+    if debit > 0:
+        for kw in _FEE_KEYWORDS:
+            if kw in desc_lower:
+                return "FEE"
+        for kw in _TRANSFER_OUT_KEYWORDS:
+            if kw in desc_lower:
+                return "TRANSFER_OUT"
+        # "2024/25 ISA Subscription" with DEBIT → money going OUT (from GIA to ISA)
+        if "isa subscription" in desc_lower:
+            return "TRANSFER_OUT"
+        # "PAYMENT" with debit → money leaving (rare, e.g. "PAYMENT Q57..." debit)
+        if desc_lower.startswith("payment ") and debit > 0:
+            return "TRANSFER_OUT"
+
+    # ── Transfer IN (credit side) ──────────────────────────────────────────
+    if credit > 0:
+        for kw in _TRANSFER_IN_KEYWORDS:
+            if kw in desc_lower:
+                return "TRANSFER_IN"
+        # "PAYMENT Q57..." with credit → money coming in
+        if desc_lower.startswith("payment "):
+            return "TRANSFER_IN"
+
+    return "OTHER"
+
+
+def _run_pnl_engine(df: pd.DataFrame, account_type: str) -> dict:
+    """
+    Pooled Average Cost P&L engine.
+    Processes a DataFrame of transactions and returns comprehensive analytics.
+    """
+    if df.empty:
+        return {
+            "account_type": account_type,
+            "transaction_count": 0,
+            "total_personal_contribution": 0,
+            "total_book_cost": 0,
+            "total_earnings": 0,
+            "capital_gains": {"ytd": 0, "total": 0, "by_year": {}},
+            "dividends": {"total": 0, "by_year": {}},
+            "interest": {"total": 0, "by_year": {}},
+            "open_positions": {},
+            "yearly": {},
+            "disposals": [],
+            "transfer_in_detail": [],
+            "transfer_out_detail": [],
+            "dividend_detail": [],
+        }
+
+    # ── 1. Classify every row ────────────────────────────────────────────────
+    records = df.to_dict("records")
+    for r in records:
+        r["tx_type"] = _classify_row(r)
+
+    # ── 2. Deterministic sort: date ASC → BUY=0 / OTHER=1 / SELL=2 → row_idx
+    _SORT_PRIORITY = {"TRADE_BUY": 0, "TRADE_SELL": 2}
+    records.sort(key=lambda r: (
+        r["date"],
+        _SORT_PRIORITY.get(r["tx_type"], 1),
+        r["row_idx"],
+    ))
+
+    # ── 3. Process each row ──────────────────────────────────────────────────
+    pools: Dict[str, Dict] = {}          # instrument → {qty, total_cost}
+    transfer_window_end: Optional[datetime.date] = None
+
+    total_personal_contribution = 0.0
+    cg_by_year: Dict[str, float] = {}
+    div_by_year: Dict[str, float] = {}
+    int_by_year: Dict[str, float] = {}
+    yearly: Dict[str, Dict] = {}         # tax_year → accumulators
+
+    disposals: List[dict] = []
+    transfer_in_detail: List[dict] = []
+    transfer_out_detail: List[dict] = []
+    dividend_detail: List[dict] = []
+
+    def _ensure_year(ty: str):
+        if ty not in yearly:
+            yearly[ty] = {
+                "realized_gains": 0, "dividends": 0, "interest": 0,
+                "total_proceeds": 0, "total_allowable_cost": 0,
+                "gains": 0, "losses": 0, "net_profit": 0,
+            }
+
+    def _safe_num(v):
+        """Convert NaN/None to 0."""
+        if v is None:
+            return 0
+        if isinstance(v, float) and np.isnan(v):
+            return 0
+        return float(v)
+
+    for r in records:
+        tx = r["tx_type"]
+        dt = r["date"]
+        ty = _tax_year(dt)
+        _ensure_year(ty)
+        raw_inst = r.get("instrument_key")
+        inst = None if raw_inst is None or (isinstance(raw_inst, float) and np.isnan(raw_inst)) else raw_inst
+        qty = _safe_num(r.get("qty"))
+        debit = _safe_num(r.get("debit"))
+        credit = _safe_num(r.get("credit"))
+        desc = r.get("description") or ""
+        date_str = dt.isoformat()
+
+        if tx == "TRANSFER_IN":
+            total_personal_contribution += credit
+            transfer_window_end = dt + datetime.timedelta(days=10)
+            transfer_in_detail.append({
+                "date": date_str, "tax_year": ty,
+                "symbol": inst or "CASH",
+                "amount": round(credit, 2), "type": "Transfer In",
+                "description": desc,
+            })
+
+        elif tx == "TRADE_BUY":
+            cost = debit
+            pool = pools.setdefault(inst, {"qty": 0, "total_cost": 0})
+            pool["qty"] += qty
+            pool["total_cost"] += cost
+
+        elif tx == "TRADE_SELL":
+            proceeds = credit
+            pool = pools.get(inst, {"qty": 0, "total_cost": 0})
+
+            # ── Transfer-in asset detection ──────────────────────────────
+            in_window = (transfer_window_end is not None and dt <= transfer_window_end)
+            if pool["qty"] < 0.001 and in_window:
+                # Sell without prior buy inside transfer window
+                # → treat as transferred shares arriving; gain = 0
+                pool_entry = pools.setdefault(inst, {"qty": 0, "total_cost": 0})
+                pool_entry["qty"] += qty       # add shares as if bought
+                pool_entry["total_cost"] += proceeds  # cost basis = proceeds
+                # Count inferred asset transfer as personal contribution
+                total_personal_contribution += proceeds
+                transfer_in_detail.append({
+                    "date": date_str, "tax_year": ty, "symbol": inst,
+                    "amount": round(proceeds, 2),
+                    "type": "Asset Transfer In (inferred)",
+                    "description": f"Sell with no prior buy within transfer window — treated as asset arrival. {desc}",
+                })
+                # Then immediately sell them → gain = 0
+                pool_entry["qty"] -= qty
+                pool_entry["total_cost"] -= proceeds
+                disposals.append({
+                    "date": date_str, "tax_year": ty, "symbol": inst,
+                    "qty": round(qty, 4), "proceeds": round(proceeds, 2),
+                    "allowable_cost": round(proceeds, 2), "gain": 0,
+                })
+                yearly[ty]["total_proceeds"] += proceeds
+                yearly[ty]["total_allowable_cost"] += proceeds
+            else:
+                # Normal sell against pool
+                if pool["qty"] > 0.001:
+                    avg_cost = pool["total_cost"] / pool["qty"]
+                else:
+                    avg_cost = 0
+
+                allowable_cost = round(avg_cost * qty, 2)
+                gain = round(proceeds - allowable_cost, 2)
+
+                # Deduct from pool
+                pool["qty"] -= qty
+                pool["total_cost"] -= allowable_cost
+                if pool["qty"] < 0.001:
+                    pool["qty"] = 0
+                    pool["total_cost"] = 0
+
+                pools[inst] = pool
+
+                disposals.append({
+                    "date": date_str, "tax_year": ty, "symbol": inst,
+                    "qty": round(qty, 4), "proceeds": round(proceeds, 2),
+                    "allowable_cost": round(allowable_cost, 2),
+                    "gain": gain,
+                })
+
+                cg_by_year[ty] = round(cg_by_year.get(ty, 0) + gain, 2)
+                yearly[ty]["realized_gains"] += gain
+                yearly[ty]["total_proceeds"] += proceeds
+                yearly[ty]["total_allowable_cost"] += allowable_cost
+                if gain >= 0:
+                    yearly[ty]["gains"] += gain
+                else:
+                    yearly[ty]["losses"] += gain  # negative
+
+        elif tx == "DIVIDEND":
+            div_by_year[ty] = round(div_by_year.get(ty, 0) + credit, 2)
+            yearly[ty]["dividends"] += credit
+            div_sym = inst if inst else (desc.split()[1] if len(desc.split()) > 1 else "Unknown")
+            dividend_detail.append({
+                "date": date_str, "tax_year": ty,
+                "symbol": div_sym,
+                "amount": round(credit, 2), "type": "Dividend",
+                "description": desc,
+            })
+
+        elif tx == "INTEREST":
+            int_by_year[ty] = round(int_by_year.get(ty, 0) + credit, 2)
+            yearly[ty]["interest"] += credit
+
+        elif tx == "TRANSFER_OUT":
+            total_personal_contribution -= debit
+            transfer_out_detail.append({
+                "date": date_str, "tax_year": ty,
+                "symbol": inst or "CASH",
+                "amount": round(debit, 2), "type": "Transfer Out",
+                "description": desc,
+            })
+
+        elif tx == "FEE":
+            # Fees are not subtracted from Total Contributed per user requirement.
+            pass
+
+    # ── 4. Build open positions ──────────────────────────────────────────────
+    open_positions = {}
+    total_book_cost = 0
+    for inst, pool in pools.items():
+        if pool["qty"] > 0.001:
+            avg = round(pool["total_cost"] / pool["qty"], 4)
+            tc = round(pool["total_cost"], 2)
+            open_positions[inst] = {
+                "qty": round(pool["qty"], 4),
+                "avg_cost": avg,
+                "total_cost": tc,
+            }
+            total_book_cost += tc
+
+    # ── 5. Finalize yearly summaries ─────────────────────────────────────────
+    for ty, y in yearly.items():
+        y["realized_gains"] = round(y["realized_gains"], 2)
+        y["dividends"] = round(y["dividends"], 2)
+        y["interest"] = round(y["interest"], 2)
+        y["total_proceeds"] = round(y["total_proceeds"], 2)
+        y["total_allowable_cost"] = round(y["total_allowable_cost"], 2)
+        y["gains"] = round(y["gains"], 2)
+        y["losses"] = round(y["losses"], 2)
+        y["net_profit"] = round(y["realized_gains"] + y["dividends"] + y["interest"], 2)
+
+    # ── 6. Totals ────────────────────────────────────────────────────────────
+    total_cg = round(sum(cg_by_year.values()), 2)
+    total_div = round(sum(div_by_year.values()), 2)
+    total_int = round(sum(int_by_year.values()), 2)
+    total_earnings = round(total_cg + total_div + total_int, 2)
+
+    cur_ty = _tax_year(datetime.date.today())
+
+    return {
+        "account_type": account_type,
+        "transaction_count": len(records),
+        "total_personal_contribution": round(total_personal_contribution, 2),
+        "total_book_cost": round(total_book_cost, 2),
+        "total_earnings": total_earnings,
+        "capital_gains": {
+            "ytd": round(cg_by_year.get(cur_ty, 0), 2),
+            "total": total_cg,
+            "by_year": cg_by_year,
+        },
+        "dividends": {"total": total_div, "by_year": div_by_year},
+        "interest": {"total": total_int, "by_year": int_by_year},
+        "open_positions": open_positions,
+        "yearly": yearly,
+        "disposals": disposals,
+        "transfer_in_detail": transfer_in_detail,
+        "transfer_out_detail": transfer_out_detail,
+        "dividend_detail": dividend_detail,
+    }
+
+
+def _aggregate_analytics(*results: dict) -> dict:
+    """Merge multiple per-account P&L results into an 'all' view."""
+    accounts = [r for r in results if r.get("transaction_count", 0) > 0]
+    if not accounts:
+        return _run_pnl_engine(pd.DataFrame(), "all")
+    if len(accounts) == 1:
+        merged = copy.deepcopy(accounts[0])
+        merged["account_type"] = "all"
+        return merged
+
+    r2 = lambda v: round(v, 2)
+
+    # Merge open positions
+    merged_pos: Dict[str, Dict] = {}
+    for a in accounts:
+        for sym, p in a.get("open_positions", {}).items():
+            if sym not in merged_pos:
+                merged_pos[sym] = {"qty": 0, "cost": 0}
+            merged_pos[sym]["qty"] += p["qty"]
+            merged_pos[sym]["cost"] += p["total_cost"]
+
+    open_positions = {}
+    for sym, p in merged_pos.items():
+        if p["qty"] > 0.001:
+            open_positions[sym] = {
+                "qty": round(p["qty"], 4),
+                "avg_cost": round(p["cost"] / p["qty"], 4),
+                "total_cost": round(p["cost"], 2),
+            }
+
+    total_book_cost = sum(p["total_cost"] for p in open_positions.values())
+
+    # Sum scalars
+    total_contrib = sum(a.get("total_personal_contribution", 0) for a in accounts)
+    total_earnings = sum(a.get("total_earnings", 0) for a in accounts)
+    tx_count = sum(a.get("transaction_count", 0) for a in accounts)
+
+    # Merge by-year maps
+    def merge_by_year(*dicts):
+        out = {}
+        for d in dicts:
+            for yr, v in (d or {}).items():
+                out[yr] = round(out.get(yr, 0) + v, 2)
+        return out
+
+    all_cg = merge_by_year(*[a["capital_gains"]["by_year"] for a in accounts])
+    all_dv = merge_by_year(*[a["dividends"]["by_year"] for a in accounts])
+    all_in = merge_by_year(*[a["interest"]["by_year"] for a in accounts])
+
+    cur_ty = _tax_year(datetime.date.today())
+
+    # Merge yearly summaries
+    all_years = set()
+    for a in accounts:
+        all_years.update(a.get("yearly", {}).keys())
+    sum_fields = ["realized_gains", "dividends", "interest", "total_proceeds",
+                  "total_allowable_cost", "gains", "losses"]
+    yearly = {}
+    for yr in sorted(all_years):
+        merged_yr = {}
+        for f in sum_fields:
+            merged_yr[f] = r2(sum(a.get("yearly", {}).get(yr, {}).get(f, 0) for a in accounts))
+        merged_yr["net_profit"] = r2(merged_yr["realized_gains"] + merged_yr["dividends"] + merged_yr["interest"])
+        yearly[yr] = merged_yr
+
+    # Concat lists
+    disposals = sorted(
+        [d for a in accounts for d in a.get("disposals", [])],
+        key=lambda x: x["date"])
+    transfer_in_detail = sorted(
+        [d for a in accounts for d in a.get("transfer_in_detail", [])],
+        key=lambda x: x["date"])
+    transfer_out_detail = sorted(
+        [d for a in accounts for d in a.get("transfer_out_detail", [])],
+        key=lambda x: x["date"])
+    dividend_detail = sorted(
+        [d for a in accounts for d in a.get("dividend_detail", [])],
+        key=lambda x: x["date"])
+
+    return {
+        "account_type": "all",
+        "transaction_count": tx_count,
+        "total_personal_contribution": r2(total_contrib),
+        "total_book_cost": r2(total_book_cost),
+        "total_earnings": r2(total_earnings),
+        "capital_gains": {
+            "ytd": r2(all_cg.get(cur_ty, 0)),
+            "total": r2(sum(all_cg.values())),
+            "by_year": all_cg,
+        },
+        "dividends": {"total": r2(sum(all_dv.values())), "by_year": all_dv},
+        "interest": {"total": r2(sum(all_in.values())), "by_year": all_in},
+        "open_positions": open_positions,
+        "yearly": yearly,
+        "disposals": disposals,
+        "transfer_in_detail": transfer_in_detail,
+        "transfer_out_detail": transfer_out_detail,
+        "dividend_detail": dividend_detail,
+    }
+
+
+# ── Firestore persistence for P&L Desk ──────────────────────────────────────
+
+def _save_transactions_to_firestore(uid: str, csv_text: str, account_type: str) -> Tuple[int, int]:
+    """Save parsed CSV rows to Firestore, deduplicating by reference field.
+    Returns (new_count, dup_count)."""
+    if not _FIREBASE_OK or not _FS_CLIENT:
+        return 0, 0
+    df = _parse_ii_csv(csv_text, account_type)
+    coll = _FS_CLIENT.collection("users").document(uid).collection("transactions")
+    new_count = 0
+    dup_count = 0
+    for _, row in df.iterrows():
+        ref = row.get("reference") or ""
+        if not ref:
+            continue
+        doc_id = f"{account_type}_{ref}"
+        doc_ref = coll.document(doc_id)
+        if doc_ref.get().exists:
+            dup_count += 1
+            continue
+        doc_ref.set({
+            "date": row["date"].isoformat(),
+            "settle_date": row["settle_date"].isoformat(),
+            "symbol": row.get("symbol") or "",
+            "sedol": row.get("sedol") or "",
+            "instrument_key": row.get("instrument_key") or "",
+            "qty": row.get("qty"),
+            "price": row.get("price"),
+            "description": row.get("description") or "",
+            "reference": ref,
+            "debit": row.get("debit"),
+            "credit": row.get("credit"),
+            "balance": row.get("balance"),
+            "account_type": account_type,
+        })
+        new_count += 1
+    return new_count, dup_count
+
+
+def _load_user_transactions(uid: str) -> dict:
+    """Load all saved transactions from Firestore, run P&L engine, return aggregated."""
+    if not _FIREBASE_OK or not _FS_CLIENT:
+        return _run_pnl_engine(pd.DataFrame(), "all")
+    coll = _FS_CLIENT.collection("users").document(uid).collection("transactions")
+    docs = coll.stream()
+    rows_by_acct: Dict[str, List[dict]] = {}
+    for doc in docs:
+        d = doc.to_dict()
+        acct = d.get("account_type", "ISA")
+        rows_by_acct.setdefault(acct, []).append(d)
+
+    results = {}
+    for acct, rows in rows_by_acct.items():
+        # Reconstruct DataFrame
+        for r in rows:
+            r["date"] = datetime.datetime.strptime(r["date"], "%Y-%m-%d").date()
+            r["settle_date"] = datetime.datetime.strptime(r["settle_date"], "%Y-%m-%d").date()
+            r["row_idx"] = 0
+        df = pd.DataFrame(rows)
+        df["row_idx"] = range(len(df))
+        results[acct] = _run_pnl_engine(df, acct)
+
+    all_results = list(results.values())
+    if all_results:
+        results["all"] = _aggregate_analytics(*all_results)
+    else:
+        results["all"] = _run_pnl_engine(pd.DataFrame(), "all")
+
+    return {"by_account": results}
+
+
 async def _in_thread(fn, *args):
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(_executor, fn, *args)
@@ -783,21 +845,24 @@ async def _get_fx_rate(from_curr: str, to_curr: str) -> float:
         return float(rate) if rate else 1.0
     except: return 1.0
 
-async def _fetch_full_history(tickers: List[str]) -> pd.DataFrame:
-    all_series = {}
+async def _fetch_full_history(tickers: List[str]) -> Tuple[pd.DataFrame, Dict[str, pd.DataFrame]]:
+    closes = {}
+    full_data = {}
     async def fetch_one(ticker: str):
         try:
             t = yf.Ticker(ticker)
-            h = await _in_thread(lambda: t.history(period="max", auto_adjust=True))
+            h = await _in_thread(lambda: t.history(period="1y", auto_adjust=True))
             if not h.empty:
                 if h.index.tz is not None: h.index = h.index.tz_localize(None)
-                return ticker, h["Close"]
+                return ticker, h
         except: pass
-        return ticker, pd.Series()
+        return ticker, pd.DataFrame()
     results = await asyncio.gather(*[fetch_one(tk) for tk in tickers])
-    for tk, s in results:
-        if not s.empty: all_series[tk] = s
-    return pd.DataFrame(all_series)
+    for tk, df in results:
+        if not df.empty:
+            closes[tk] = df["Close"]
+            full_data[tk] = df
+    return pd.DataFrame(closes), full_data
 
 def _compute_risk_history_from_prices(prices: pd.DataFrame, tickers: List[str], weights_dict: Dict[str, float]) -> Dict[str, Any]:
     empty = {
@@ -943,7 +1008,239 @@ def _compute_risk_history_from_prices(prices: pd.DataFrame, tickers: List[str], 
         traceback.print_exc()
         return empty
 
-def _get_advanced_intelligence(assets, portfolio, risk_level, risk_data, base_currency):
+def _compute_rsi(series: pd.Series, window: int = 14) -> float:
+    if len(series) < window + 1:
+        return 50.0
+    delta = series.diff()
+    gain = delta.clip(lower=0).rolling(window=window, min_periods=window).mean()
+    loss = -1 * delta.clip(upper=0).rolling(window=window, min_periods=window).mean()
+    rs = gain / loss
+    rsi = 100 - (100 / (1 + rs))
+    return float(rsi.iloc[-1]) if not pd.isna(rsi.iloc[-1]) else 50.0
+
+def _compute_atr(df: pd.DataFrame, window: int = 14) -> float:
+    if len(df) < window + 1: return 0.0
+    high = df['High'] if 'High' in df.columns else df['Close']
+    low = df['Low'] if 'Low' in df.columns else df['Close']
+    close = df['Close']
+    tr = pd.concat([high - low, 
+                    (high - close.shift(1)).abs(), 
+                    (low - close.shift(1)).abs()], axis=1).max(axis=1)
+    atr = tr.rolling(window=window).mean().iloc[-1]
+    return float(atr) if not pd.isna(atr) else 0.0
+
+def _get_advisor_logic(symbol: str, hist: pd.DataFrame, sentiment_val: float, a: dict, vix: float, benchmark_hist: pd.DataFrame, cycle: str) -> dict:
+    if hist.empty or len(hist) < 14:
+        return {
+            "score": 50, "strat": "Neutral", "action": "HOLD", 
+            "why": "Insufficient data", "detailed_advisor_report": "Insufficient data.",
+            "probability": "50%", "strategy_narrative": "None", "evidence": {}
+        }
+
+    price = hist['Close'].iloc[-1]
+    prev_close = hist['Close'].iloc[-2]
+    ma50 = hist['Close'].rolling(50).mean().iloc[-1] if len(hist) >= 50 else price
+    ma200 = hist['Close'].rolling(200).mean().iloc[-1] if len(hist) >= 200 else ma50
+    rsi = _compute_rsi(hist['Close'])
+    atr = _compute_atr(hist)
+    day_gain = (price / prev_close - 1) * 100
+    atr_pct = (atr / price) * 100 if price > 0 else 0
+    
+    # Data-driven gain/loss proxy: 30-day performance
+    perf_30d = (price / hist['Close'].iloc[-21] - 1) * 100 if len(hist) >= 21 else 0.0
+    
+    base_tk = symbol.split('_')[0].split('.')[0].upper()
+    is_watchlist = symbol in GLOBAL_WATCHLIST
+    
+    score = 50
+    strat = "Neutral"
+    action = "HOLD"
+    probability = 50
+    
+    # 1. Momentum: Strong trend and healthy RSI
+    is_momentum = price > ma50 and 55 <= rsi <= 70
+    if is_momentum:
+        score += 30; strat = "Momentum"; action = "BUY (MOMENTUM RIDE)"; probability = 70
+
+    # 2. Mean Reversion: Oversold or significant recent drop
+    is_reversion = rsi < 35 or perf_30d < -10
+    if is_reversion:
+        score += 40; strat = "Mean Reversion"; action = "BUY (REVERSION BUY)"; probability = 80
+
+    # 3. Pairs Trading: Correlation break with global benchmark
+    if not benchmark_hist.empty and len(hist) >= 60:
+        common_idx = hist.index.intersection(benchmark_hist.index)
+        if len(common_idx) > 30:
+            corr = hist['Close'].loc[common_idx].corr(benchmark_hist['Close'].loc[common_idx])
+            if corr < 0.55:
+                score += 25; strat = "Pairs Trading"; action = "BUY (REL-VAL OPPORTUNITY)"; probability = 65
+
+    # 4. Volatility Defense: Flight to safety during high VIX
+    is_vol_defense = base_tk in _GOLD_BASES or "CMOP" in base_tk or "VIX" in base_tk
+    if vix > 25 and is_vol_defense:
+        score = max(score, 85); strat = "Volatility Defense"; action = "HEDGE (VOL DEFENSE)"; probability = 95
+
+    # 5. Scalping: High volatility and intraday/daily gain
+    if atr_pct > 2.5 and abs(day_gain) > 1.5:
+        score = max(score, 80); strat = "Scalping"; action = "TRIM (QUICK SCALP)" if day_gain > 0 else "BUY (SCALP DIP)"; probability = 85
+
+    # 6. Arbitrage: Regional/Instrument specific checks
+    if base_tk == "ISF": # Example for UK benchmark arb
+        score += 15; strat = "Arbitrage"; action = "BUY (NAV ARB)"; probability = 55
+
+    # 7. Hedging: Negative sentiment and breaking technicals
+    is_hedge_candidate = (sentiment_val < -0.3 and price < ma50)
+    if is_hedge_candidate:
+        score = max(score, 85); strat = "Hedging"; action = "HEDGE (SENTIMENT HEDGE)"; probability = 90
+
+    # Exhaustion Engine
+    exhaustion_status = "Neutral"
+    logic_tag = "Stable"
+    if rsi > 75 and day_gain > 2: 
+        exhaustion_status = "Blow-off Top"
+        logic_tag = "Exit Peak"
+    elif rsi > 70 and sentiment_val < 0: 
+        exhaustion_status = "Bull Trap"
+        logic_tag = "False Breakout"
+    elif rsi < 30 and perf_30d < -15: 
+        exhaustion_status = "Deep Exhaustion"
+        logic_tag = "Rubber Band"
+    elif rsi < 35: 
+        exhaustion_status = "Oversold"
+        logic_tag = "Mean Reversion"
+    elif rsi > 65: 
+        exhaustion_status = "Overextended"
+        logic_tag = "Profit Taking"
+    
+    if strat == "Volatility Defense": logic_tag = "Safe Haven"
+    elif strat == "Hedging": logic_tag = "Beta Hedge"
+    elif is_momentum: logic_tag = "Trend Ride"
+
+    # Regime-Based Probability Weighting (Contraction focus)
+    if cycle == "Contraction":
+        if strat == "Momentum": 
+            score -= 30; probability -= 20
+        if strat in ["Volatility Defense", "Hedging", "Mean Reversion"]: 
+            score += 15; probability += 10
+        # Boost safe havens in high fear
+        if is_vol_defense:
+            probability = max(probability, 92)
+
+    final_score = min(100, max(0, int(score)))
+    final_prob = min(99, max(5, int(probability)))
+    
+    # Executive Reasoning (Redundancy-Free)
+    reasoning = f"{strat} alignment verified. "
+    if is_reversion:
+        reasoning += f"Extreme price-to-mean stretch ({perf_30d:+.1f}%) suggests high-probability snap-back. Current fear is masking value."
+    elif is_momentum:
+        reasoning += f"Trend persistence is holding, but {cycle} regime requires aggressive stop-loss management."
+    elif is_vol_defense:
+        reasoning += f"VIX {vix:.2f} regime mandates flight to quality. {base_tk} acts as portfolio insurance while risk assets liquidate."
+    elif is_hedge_candidate:
+        reasoning += f"Sentiment/Price divergence detected. Market is ignoring deteriorating internals; protect capital now."
+    else:
+        reasoning += f"Macro regime ({cycle}) and technical signals confirm current posture."
+
+    # Watchlist Comparative Advantage
+    comp_adv = ""
+    if is_watchlist:
+        w_info = GLOBAL_WATCHLIST.get(symbol, {})
+        w_type = w_info.get("type", "Asset")
+        comp_adv = f"Superior {w_type} instrument for {strat} in {cycle} regimes."
+
+    # Action Instruction
+    if final_score > 80:
+        if strat == "Mean Reversion": act_instr = f"BUY 5% NOW (£{price:.2f})"
+        elif strat == "Volatility Defense": act_instr = "HEDGE UP (Safe Haven Rotation)"
+        elif strat == "Scalping": act_instr = "TRIM 10% (Volatility Harvest)"
+        elif strat == "Hedging": act_instr = "HEDGE 5% NOW (Neutralize Beta)"
+        else: act_instr = f"{action} NOW"
+    elif final_score < 40:
+        act_instr = "TRIM (Raise Dry Powder)"
+    else:
+        act_instr = "HOLD (Await Signal)"
+
+    return {
+        "score": final_score,
+        "strat": strat,
+        "action": action,
+        "probability": f"{final_prob}%",
+        "sentiment_impact": "Warning" if sentiment_val < 0 else "Confirmation",
+        "exhaustion_status": exhaustion_status,
+        "logic_tag": logic_tag,
+        "reasoning": reasoning,
+        "comparative_advantage": comp_adv,
+        "action_instruction": act_instr,
+        "why": reasoning,
+        "detailed_advisor_report": reasoning,
+        "evidence": {
+            "rsi": round(rsi, 1),
+            "atr_pct": round(atr_pct, 2),
+            "ma50": round(ma50, 2),
+            "perf_30d": f"{perf_30d:+.1f}%",
+            "vix": round(vix, 2),
+            "sentiment": round(sentiment_val, 2),
+            "exhaustion": exhaustion_status,
+        }
+    }
+
+def _run_apex_advisor(assets, prices, ohlc_data, p_summary):
+    vix_latest = 15.0
+    if "^VIX" in prices.columns and not prices["^VIX"].dropna().empty:
+        vix_latest = float(prices["^VIX"].dropna().iloc[-1])
+    
+    vusa_p = prices["VUSA.L"].iloc[-1] if "VUSA.L" in prices.columns else 0
+    vusa_ma200 = prices["VUSA.L"].rolling(200).mean().iloc[-1] if "VUSA.L" in prices.columns and len(prices) >= 200 else vusa_p
+    
+    # Macro Regime Detection
+    cycle_indicator = "Expansion"
+    if vix_latest > 25:
+        cycle_indicator = "Contraction"
+    elif vusa_p < vusa_ma200:
+        cycle_indicator = "Trough"
+    elif vusa_p > vusa_ma200 * 1.1:
+        cycle_indicator = "Peak"
+    
+    benchmark_hist = prices["VWRL.L"] if "VWRL.L" in prices.columns else pd.Series()
+    
+    # Analyze Portfolio
+    apex_scores = {}
+    act_now = []
+    
+    for tk, a in assets.items():
+        api_tk = tk.split('_')[0]
+        hist_df = ohlc_data.get(api_tk, pd.DataFrame())
+        
+        s = a.get("sentiment", {})
+        bull = _to_float(s.get("bullish")) if s.get("bullish") is not None else 0.5
+        bear = _to_float(s.get("bearish")) if s.get("bearish") is not None else 0.5
+        sentiment_val = (bull or 0.5) - (bear or 0.5)
+        
+        logic = _get_advisor_logic(tk, hist_df, sentiment_val, a, vix_latest, pd.DataFrame({"Close": benchmark_hist}), cycle_indicator)
+        apex_scores[tk] = logic
+        
+        if logic["score"] > 80:
+            act_now.append({"ticker": tk, "score": logic["score"], "action": logic["action"], "strat": logic["strat"]})
+
+    # Analyze Watchlist
+    watchlist_analysis = {}
+    for tk, info in GLOBAL_WATCHLIST.items():
+        hist_df = ohlc_data.get(tk, pd.DataFrame())
+        logic = _get_advisor_logic(tk, hist_df, 0.0, {}, vix_latest, pd.DataFrame({"Close": benchmark_hist}), cycle_indicator)
+        watchlist_analysis[tk] = logic
+
+    act_now = sorted(act_now, key=lambda x: x["score"], reverse=True)[:3]
+    
+    return {
+        "cycle_indicator": cycle_indicator,
+        "vix": round(vix_latest, 2),
+        "act_now": act_now,
+        "scores": apex_scores,
+        "watchlist": watchlist_analysis
+    }
+
+def _get_advanced_intelligence(assets, portfolio, risk_level, risk_data, base_currency, rsi_cache=None):
     total_val = portfolio.get("total_value", 0)
     beta = portfolio.get("portfolio_beta", 1.0)
     var_95 = portfolio.get("var_95_daily", 0)
@@ -958,7 +1255,7 @@ def _get_advanced_intelligence(assets, portfolio, risk_level, risk_data, base_cu
     # Use _UNDERLYING_FX lookup to estimate the real non-base-currency fraction.
     if base_currency == "GBP":
         non_base_frac = sum(
-            a["weight"] * _UNDERLYING_FX.get(tk.split('.')[0].upper(),
+            a["weight"] * _UNDERLYING_FX.get(tk.replace('_', '.').split('.')[0].upper(),
                 0.0 if a.get("currency") == base_currency else 1.0)
             for tk, a in assets.items()
         )
@@ -973,13 +1270,13 @@ def _get_advanced_intelligence(assets, portfolio, risk_level, risk_data, base_cu
     target_g_w = targets.get(risk_level, 0.40)
     # Segment Identification — ticker-base matching takes priority over sector/PE heuristics
     growth_tks = [tk for tk, a in assets.items() if
-        tk.split('.')[0].upper() in _GROWTH_BASES or
+        tk.replace('_', '.').split('.')[0].upper() in _GROWTH_BASES or
         a["sector"] in ("Technology", "Communication Services") or
         (_to_float(a.get("pe_ratio")) or 0) > 30]
     defensive_tks = [tk for tk, a in assets.items() if
-        tk.split('.')[0].upper() in _DEFENSIVE_BASES or
+        tk.replace('_', '.').split('.')[0].upper() in _DEFENSIVE_BASES or
         "Treasury" in a["name"] or "Gold" in a["name"] or "Bond" in a["name"] or
-        tk in ("TN28.L",)]
+        tk.replace('_', '.').split('.')[0].upper() in ("TN28",)]
     core_tks = [tk for tk in assets if tk not in growth_tks and tk not in defensive_tks]
     
     targets = {"Conservative": 0.20, "Balanced": 0.40, "Aggressive": 0.70}
@@ -1015,10 +1312,10 @@ def _get_advanced_intelligence(assets, portfolio, risk_level, risk_data, base_cu
     # when actually available — producing varied, realistic scores across the portfolio.
     div_safety = {}
     for _tk, _a in assets.items():
-        _rsi  = _mock_rsi(_tk)                                          # 20–80
+        _rsi  = (rsi_cache or {}).get(_tk, _mock_rsi(_tk))                 # real RSI when available
         _beta = _to_float(_a.get("beta")) or 1.0
         _ter  = (_to_float(_a.get("ter"))
-                 or _KNOWN_TER.get(_tk.split('.')[0].upper(), 0.003))
+                 or _KNOWN_TER.get(_tk.replace('_', '.').split('.')[0].upper(), 0.003))
         _yld  = _to_float(_a.get("dividend_yield")) or 0.0
         _pe   = _to_float(_a.get("pe_ratio"))                          # None for most ETFs
 
@@ -1059,7 +1356,7 @@ def _get_advanced_intelligence(assets, portfolio, risk_level, risk_data, base_cu
             })
 
     # Hedge optimizer — check existing gold/defensive before recommending more GLD
-    existing_gold_w = sum(a["weight"] for tk, a in assets.items() if tk.split('.')[0].upper() in _GOLD_BASES)
+    existing_gold_w = sum(a["weight"] for tk, a in assets.items() if tk.replace('_', '.').split('.')[0].upper() in _GOLD_BASES)
     if existing_gold_w >= 0.10:
         hedge_opt = {"optimal_gld_weight": 0.0, "hedge_efficiency": "SUFFICIENT",
                      "note": f"Gold at {existing_gold_w*100:.0f}% — adequate. Consider IGLT.L for duration hedge."}
@@ -1119,16 +1416,76 @@ def _get_market_outlook(assets, portfolio):
     return {"points": points, "commentary": " ".join(comm), "future_outlook": future_outlook}
 
 def _get_global_events():
+    """Generate approximate economic calendar based on known recurring schedules."""
     now = datetime.datetime.now()
-    return [
-        {"d": (now + pd.Timedelta(days=12)).strftime("%Y-%m-%d"), "e": "US Fed Meeting", "i": "Rate decision."},
-        {"d": (now + pd.Timedelta(days=18)).strftime("%Y-%m-%d"), "e": "US CPI Data", "i": "Inflation trigger."},
-        {"d": (now + pd.Timedelta(days=25)).strftime("%Y-%m-%d"), "e": "BoE Meeting", "i": "GBP driver."}
-    ]
+    year, month = now.year, now.month
+    events = []
+
+    def _nth_weekday(y, m, weekday, n):
+        """Return date of the nth weekday (0=Mon) of month m in year y."""
+        first_day = calendar.weekday(y, m, 1)
+        offset = (weekday - first_day) % 7
+        day = 1 + offset + 7 * (n - 1)
+        return datetime.datetime(y, m, day)
+
+    # FOMC: 3rd Wednesday of Jan, Mar, May, Jun, Jul, Sep, Nov, Dec
+    fomc_months = [1, 3, 5, 6, 7, 9, 11, 12]
+    for m in fomc_months:
+        y = year if m >= month else year + 1
+        try:
+            dt = _nth_weekday(y, m, 2, 3)  # 3rd Wednesday
+            if dt > now:
+                events.append({"d": dt.strftime("%Y-%m-%d"), "e": "FOMC Rate Decision",
+                               "i": "Fed Funds rate decision. Key driver for all risk assets."})
+                break
+        except ValueError:
+            continue
+
+    # BoE MPC: 1st Thursday of Feb, Mar, May, Jun, Aug, Sep, Nov, Dec
+    boe_months = [2, 3, 5, 6, 8, 9, 11, 12]
+    for m in boe_months:
+        y = year if m >= month else year + 1
+        try:
+            dt = _nth_weekday(y, m, 3, 1)  # 1st Thursday
+            if dt > now:
+                events.append({"d": dt.strftime("%Y-%m-%d"), "e": "BoE MPC Meeting",
+                               "i": "Bank Rate decision. GBP and gilt driver."})
+                break
+        except ValueError:
+            continue
+
+    # US CPI: typically 12th-14th of each month
+    cpi_m = month + 1 if now.day > 15 else month
+    cpi_y = year
+    if cpi_m > 12:
+        cpi_m, cpi_y = 1, year + 1
+    events.append({"d": f"{cpi_y}-{cpi_m:02d}-13", "e": "US CPI Data",
+                   "i": "Core CPI drives Fed rate expectations. Inflation trigger."})
+
+    # US NFP: 1st Friday of each month
+    nfp_m = month + 1 if now.day > 7 else month
+    nfp_y = year
+    if nfp_m > 12:
+        nfp_m, nfp_y = 1, year + 1
+    try:
+        nfp_dt = _nth_weekday(nfp_y, nfp_m, 4, 1)  # 1st Friday
+        events.append({"d": nfp_dt.strftime("%Y-%m-%d"), "e": "US Non-Farm Payrolls",
+                       "i": "Labour market health. Affects rate cut timeline."})
+    except ValueError:
+        pass
+
+    # UK Budget/Spring Statement: typically late March or late October
+    budget_m = 3 if month <= 3 else 10 if month <= 10 else 3
+    budget_y = year if budget_m >= month else year + 1
+    events.append({"d": f"{budget_y}-{budget_m:02d}-26", "e": "UK Fiscal Statement",
+                   "i": "Chancellor's fiscal policy. Gilt and GBP catalyst."})
+
+    events.sort(key=lambda x: x["d"])
+    return [e for e in events if e["d"] >= now.strftime("%Y-%m-%d")][:5]
 
 def _generate_recommendations(assets, portfolio, risk_level, base_currency="GBP"):
     recs = []
-    is_ucits = base_currency in ("GBP", "EUR") or any(tk.endswith('.L') or tk.endswith('.AS') or tk.endswith('.DE') for tk in assets)
+    is_ucits = base_currency in ("GBP", "EUR") or any(tk.replace('_', '.').endswith('.L') or tk.replace('_', '.').endswith('.AS') or tk.replace('_', '.').endswith('.DE') for tk in assets)
     pb = portfolio.get("portfolio_beta", 1.0)
     sharpe = portfolio.get("sharpe_ratio", 0.0)
     yld = portfolio.get("weighted_dividend_yield", 0.0)
@@ -1174,12 +1531,11 @@ def _generate_recommendations(assets, portfolio, risk_level, base_currency="GBP"
         recs.append({"type": "warning", "icon": "🏗️", "title": "Factor Concentration", "detail": "Low ticker breadth.", "rationale": "Exposure to idiosyncratic company-specific risk is too high.", "action": "Add 2+ Assets"})
 
     # UK GIA / Acc Fund ERI Tax Advisory
-    # Acc (Accumulating) funds in a GIA are still subject to UK dividend tax via
-    # Excess Reportable Income (ERI). Advising clients to switch to Acc to avoid GIA
-    # tax is a compliance error. Flag this if any fund name contains "Acc".
     if base_currency == "GBP":
-        acc_tks = [tk for tk, a in assets.items() if "acc" in (a.get("name") or "").lower()]
-        if acc_tks:
+        acc_gia_tks = [tk for tk, a in assets.items() 
+                       if "acc" in (a.get("name") or "").lower() 
+                       and a.get("account_type") == "GIA"]
+        if acc_gia_tks:
             recs.append({
                 "type": "warning", "icon": "🏦",
                 "title": "GIA Tax Alert: ERI on Acc Funds",
@@ -1189,7 +1545,7 @@ def _generate_recommendations(assets, portfolio, risk_level, base_currency="GBP"
                     "in a GIA as dividend income — even though no cash is distributed. "
                     "Switching to an Acc share class does NOT reduce GIA dividend or income tax. "
                     "Recommended action: Bed & ISA transfer at UK tax year start (before 5 April) "
-                    f"to shelter gains inside an ISA. Affected: {', '.join(acc_tks[:3])}."
+                    f"to shelter gains inside an ISA. Affected: {', '.join(acc_gia_tks[:3])}."
                 ),
                 "action": "Bed & ISA Transfer",
             })
@@ -1686,6 +2042,7 @@ async def _call_cio_llm(
     assets: Dict[str, Any],
     portfolio: Dict[str, Any],
     ideal_blueprint: Dict[str, float],
+    rsi_cache: Dict[str, float] = None,
 ) -> Dict[str, Any]:
     """
     Calls Claude Opus 4.6 (CIO persona) to generate live TAA recommendations.
@@ -1713,7 +2070,7 @@ async def _call_cio_llm(
     asset_lines = []
     for tk, a in assets.items():
         s   = a.get("sentiment", {})
-        rsi = s.get("rsi", _mock_rsi(tk))
+        rsi = s.get("rsi", (rsi_cache or {}).get(tk, _mock_rsi(tk)))
         sig = "OVERBOUGHT" if rsi > 70 else "OVERSOLD" if rsi < 30 else "NEUTRAL"
         cls = ("Growth"    if tk.split(".")[0].upper() in _GROWTH_BASES    else
                "Defensive" if tk.split(".")[0].upper() in _DEFENSIVE_BASES else "Core")
@@ -1747,7 +2104,7 @@ async def _call_cio_llm(
     client = _anthropic.AsyncAnthropic()
     async with client.messages.stream(
         model="claude-opus-4-6",
-        max_tokens=2048,
+        max_tokens=3200,
         thinking={"type": "adaptive"},
         # Cache the static system prompt — ~90% cheaper on repeated calls (5-min TTL)
         system=[{
@@ -1787,10 +2144,11 @@ async def _cio_with_fallback(
     assets: Dict[str, Any],
     portfolio: Dict[str, Any],
     ideal_blueprint: Dict[str, float],
+    rsi_cache: Dict[str, float] = None,
 ) -> Dict[str, Any]:
     """Calls the LLM; falls back silently to the rule-based engine on any error."""
     try:
-        return await _call_cio_llm(holdings, assets, portfolio, ideal_blueprint)
+        return await _call_cio_llm(holdings, assets, portfolio, ideal_blueprint, rsi_cache=rsi_cache)
     except Exception:
         traceback.print_exc()
         desk      = _generate_tactical_desk(holdings, assets, portfolio)
@@ -1850,8 +2208,11 @@ async def analyze_portfolio(request: PortfolioRequest):
                     p = fallbacks[api_ticker]
                 
                 # If it's a London asset and the price is high (>1000), it's likely in pence
-                if api_ticker.endswith(".L") and p > 500:
+                if p is not None and api_ticker.endswith(".L") and p > 500:
                     p /= 100.0
+            
+            # Ensure p is at least 0.0 for value calculation
+            p = p or 0.0
             
             # Convert asset price to base_currency for summary
             fx_to_base = 1.0
@@ -1866,13 +2227,14 @@ async def analyze_portfolio(request: PortfolioRequest):
                 "quantity": holdings[tk], 
                 "value": val_in_base, 
                 "currency": curr,
+                "account_type": request.account_mapping.get(tk, "ISA"),
                 "dividend_yield": _round(info.get("dividendYield")), 
                 "pe_ratio": _round(info.get("trailingPE")), 
                 "beta": _round(info.get("beta")), 
                 "sector": safe_fetch(info, "sector", "N/A"),
                 "institutional_flow_score": round(_to_float(info.get("heldPercentInstitutions", 0.5))*100, 1),
                 "ter": _round(_to_float(info.get("annualReportExpenseRatio") or info.get("totalExpenseRatio"))
-                              or _KNOWN_TER.get(tk.split('.')[0].upper())),
+                              or _KNOWN_TER.get(api_ticker.split('.')[0].upper())),
             }
         
         total_val = sum(a["value"] for a in assets.values())
@@ -1880,27 +2242,39 @@ async def analyze_portfolio(request: PortfolioRequest):
         for a in assets.values(): a["weight"] = round(a["value"]/total_val, 4)
         
         # Clean tickers (strip _ISA etc) for external API history fetch
-        api_tickers = list(set([t.split('_')[0] for t in tickers] + ["SPY"]))
-        full_prices = await _fetch_full_history(api_tickers)
+        api_tickers = list(set([t.split('_')[0] for t in tickers] + ["SPY", "^VIX", "VWRL.L"] + list(GLOBAL_WATCHLIST.keys())))
+        full_prices, ohlc_data = await _fetch_full_history(api_tickers)
+
+        # Pre-compute real RSI for all tickers using OHLC data
+        _rsi_cache: Dict[str, float] = {}
+        for _tk_raw in tickers:
+            _api_tk = _tk_raw.split('_')[0]
+            _ohlc = ohlc_data.get(_api_tk, pd.DataFrame())
+            if not _ohlc.empty and 'Close' in _ohlc.columns and len(_ohlc) >= 15:
+                _rsi_cache[_tk_raw] = _compute_rsi(_ohlc['Close'])
+            else:
+                _rsi_cache[_tk_raw] = _mock_rsi(_tk_raw)
+
         risk_data = _compute_risk_history_from_prices(full_prices, tickers, {tk: assets[tk]["weight"] for tk in tickers})
         sentiments = await asyncio.gather(*[_get_sentiment(t) for t in tickers])
-        
+
         for tk, s in zip(tickers, sentiments):
-            rsi_val = _mock_rsi(tk)
+            rsi_val = _rsi_cache.get(tk, _mock_rsi(tk))
             s["rsi"] = rsi_val
             s["rsi_signal"] = "OVERBOUGHT" if rsi_val > 70 else "OVERSOLD" if rsi_val < 30 else "NEUTRAL"
             assets[tk]["sentiment"] = s
             assets[tk]["risk_contribution_pct"] = round(risk_data.get("risk_contributions", {}).get(tk, 0) * 100, 2)
 
-        blended_ter = sum((_to_float(a.get("ter")) or _KNOWN_TER.get(tk.split('.')[0].upper(), 0.002)) * a["weight"]
+        blended_ter = sum((_to_float(a.get("ter")) or _KNOWN_TER.get(tk.replace('_', '.').split('.')[0].upper(), 0.002)) * a["weight"]
                           for tk, a in assets.items())
         p_summary = {**risk_data["portfolio_risk"], "total_value": round(total_val, 2), "weighted_dividend_yield": round(sum((_to_float(a["dividend_yield"]) or 0)*a["weight"] for a in assets.values()), 4), "portfolio_beta": round(sum((_to_float(a["beta"]) or 1)*a["weight"] for a in assets.values()), 2), "asset_count": len(tickers), "currency": base_curr, "blended_ter": round(blended_ter, 4)}
-        advanced = _get_advanced_intelligence(assets, p_summary, request.risk_level, risk_data, base_curr)
+        advanced = _get_advanced_intelligence(assets, p_summary, request.risk_level, risk_data, base_curr, rsi_cache=_rsi_cache)
+        apex_advisor = _run_apex_advisor(assets, full_prices, ohlc_data, p_summary)
 
         # ── CIO LLM — live TAA (falls back to rule engine when disabled/error) ─
         ideal_bp = advanced.get("ideal_blueprint", {})
         if request.enable_cio_llm:
-            cio = await _cio_with_fallback(holdings, assets, p_summary, ideal_bp)
+            cio = await _cio_with_fallback(holdings, assets, p_summary, ideal_bp, rsi_cache=_rsi_cache)
         else:
             desk = _generate_tactical_desk(holdings, assets, p_summary)
             cio  = {"tactical_desk": desk,
@@ -1938,7 +2312,7 @@ async def analyze_portfolio(request: PortfolioRequest):
             if tk in assets and isinstance(upd, dict):
                 s = assets[tk].get("sentiment", {})
                 s.update({k: v for k, v in upd.items() if v is not None})
-                rsi = float(s.get("rsi", _mock_rsi(tk)))
+                rsi = float(s.get("rsi", _rsi_cache.get(tk, _mock_rsi(tk))))
                 s["rsi_signal"] = "OVERBOUGHT" if rsi > 70 else "OVERSOLD" if rsi < 30 else "NEUTRAL"
                 assets[tk]["sentiment"] = s
 
@@ -1995,9 +2369,18 @@ async def analyze_portfolio(request: PortfolioRequest):
                 )
 
         # Attach summary_hints to advanced_intel and quant_intelligence to market_outlook
-        advanced["summary_hints"] = cio["summary_hints"]
+        advanced["summary_hints"] = cio.get("summary_hints", {})
         market_outlook = _get_market_outlook(assets, p_summary)
-        market_outlook["quant_intelligence"] = cio["quant_intelligence"]
+        market_outlook["quant_intelligence"] = cio.get("quant_intelligence", "")
+
+        # Merge LLM-generated 5-Point Intelligence (override hardcoded fallback when valid)
+        llm_outlook = cio.get("market_outlook")
+        if isinstance(llm_outlook, list) and len(llm_outlook) >= 3:
+            market_outlook["points"] = llm_outlook
+        if cio.get("strategic_commentary"):
+            market_outlook["commentary"] = cio["strategic_commentary"]
+        if cio.get("future_outlook"):
+            market_outlook["future_outlook"] = cio["future_outlook"]
 
         return {
             "portfolio": p_summary, "assets": assets, "risk": risk_data, "advanced_intel": advanced,
@@ -2007,212 +2390,11 @@ async def analyze_portfolio(request: PortfolioRequest):
             "market_outlook": market_outlook,
             "tactical_desk": tactical_desk,
             "tactical_blueprint": tactical_blueprint,
+            "apex_advisor": apex_advisor,
         }
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(500, detail=str(e))
-
-@app.post("/api/parse-transactions")
-async def parse_transactions(req: TransactionRequest):
-    """Parse a UK broker CSV (II, iWeb, HL, AJ Bell, Freetrade), save to Firestore,
-    and return full multi-account P&L analytics."""
-
-    # 1. Parse CSV with II/UK fixes (BOM, DD/MM/YYYY, £ currency, n/a)
-    try:
-        df = await _in_thread(_parse_ii_csv, req.csv_text)
-    except Exception as e:
-        raise HTTPException(400, detail=f"CSV parse error: {e}")
-
-    if df.empty:
-        raise HTTPException(400, detail="No valid rows found after date parsing. "
-                            "Check the Date column is in DD/MM/YYYY format.")
-
-    # 2. Authenticate (separate from save so uid survives a save failure)
-    uid: Optional[str] = None
-    if req.id_token and _FIREBASE_OK:
-        try:
-            decoded = _fb_auth.verify_id_token(req.id_token)
-            uid = decoded["uid"]
-        except Exception as e:
-            print(f"[parse-transactions] Token verification failed: {e}")
-
-    # 3. Persist to Firestore (graceful — never blocks analytics)
-    new_count = dup_count = 0
-    if uid and _FIREBASE_OK:
-        try:
-            new_count, dup_count = await _in_thread(
-                _save_transactions_to_firestore, df, uid, req.account_type
-            )
-        except Exception as e:
-            print(f"[parse-transactions] Firestore save failed: {e}")
-
-    # 4. Load ALL stored transactions for full multi-account analytics
-    #    Ensures GIA upload doesn't lose previously saved ISA data (and vice-versa)
-    if uid and _FIREBASE_OK:
-        acct_dfs = await _in_thread(_load_user_transactions, uid)
-        if not acct_dfs:
-            # Retry once — rare Firestore write-to-read lag
-            await asyncio.sleep(0.3)
-            acct_dfs = await _in_thread(_load_user_transactions, uid)
-        if not acct_dfs:
-            print(f"[parse-transactions] Firestore returned empty for uid={uid}, falling back to CSV")
-            acct_dfs = {req.account_type: df}
-    else:
-        # Unauthenticated — analyse uploaded file only
-        acct_dfs = {req.account_type: df}
-
-    # 5. Run P&L engine per account, then aggregate
-    by_account: Dict[str, Any] = {
-        acct: _run_pnl_engine(acct_df, acct)
-        for acct, acct_df in acct_dfs.items()
-    }
-    by_account["all"] = _aggregate_analytics(by_account)
-
-    # 6. Enrich open positions with live prices + unrealized P&L (best-effort)
-    try:
-        await _enrich_unrealized(by_account)
-    except Exception:
-        pass
-
-    return {
-        "by_account":   by_account,
-        "new_count":    new_count,
-        "dup_count":    dup_count,
-        "account_type": req.account_type,
-    }
-
-
-@app.get("/api/load-ledger")
-async def load_ledger(request: Request):
-    """Load all stored ledger transactions for the authenticated user
-    and return full multi-account analytics."""
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer ") or not _FIREBASE_OK:
-        raise HTTPException(401, detail="Unauthorized")
-
-    try:
-        decoded = _fb_auth.verify_id_token(auth_header[7:])
-        uid = decoded["uid"]
-    except Exception:
-        raise HTTPException(401, detail="Invalid or expired token")
-
-    acct_dfs = await _in_thread(_load_user_transactions, uid)
-    if not acct_dfs:
-        return {"by_account": {"all": {"transaction_count": 0}}}
-
-    by_account: Dict[str, Any] = {
-        acct: _run_pnl_engine(acct_df, acct)
-        for acct, acct_df in acct_dfs.items()
-    }
-    by_account["all"] = _aggregate_analytics(by_account)
-    try:
-        await _enrich_unrealized(by_account)
-    except Exception:
-        pass
-    return {"by_account": by_account}
-
-
-@app.delete("/api/clear-ledger")
-async def clear_ledger(request: Request, account_type: str = Query(default="")):
-    """Delete all (or one account's) saved transactions for the authenticated user."""
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer ") or not _FIREBASE_OK:
-        raise HTTPException(401, detail="Unauthorized")
-    try:
-        decoded = _fb_auth.verify_id_token(auth_header[7:])
-        uid = decoded["uid"]
-    except Exception:
-        raise HTTPException(401, detail="Invalid or expired token")
-
-    def _delete_docs():
-        coll = (
-            _FS_CLIENT.collection("users")
-                      .document(uid)
-                      .collection("transactions")
-        )
-        query = coll.where("account_type", "==", account_type) if account_type else coll
-        deleted = 0
-        while True:
-            docs = list(query.limit(500).stream())
-            if not docs:
-                break
-            batch = _FS_CLIENT.batch()
-            for d in docs:
-                batch.delete(d.reference)
-            batch.commit()
-            deleted += len(docs)
-        return deleted
-
-    try:
-        n = await _in_thread(_delete_docs)
-    except Exception as e:
-        raise HTTPException(500, detail=str(e))
-
-    return {"deleted": n, "account_type": account_type or "all"}
-
-
-async def _enrich_unrealized(by_account: Dict[str, Any]) -> None:
-    """Fetch current prices for all open positions and add unrealized P&L in-place."""
-    # Collect unique tickers that have open positions (skip 'all' aggregate)
-    tickers: set = set()
-    for acct, data in by_account.items():
-        if acct == "all":
-            continue
-        tickers.update(sym for sym in data.get("open_positions", {}) if sym)
-
-    if not tickers:
-        return
-
-    prices: Dict[str, float] = {}
-
-    async def _fetch(sym: str, store_as: Optional[str] = None) -> None:
-        try:
-            info = await _in_thread(lambda s=sym: yf.Ticker(s).info)
-            p = info.get("regularMarketPrice") or info.get("previousClose")
-            if p:
-                # Convert GBX (pence) → GBP, same as /api/quotes endpoint
-                if (info.get("currency") or "") == "GBp":
-                    p = float(p) / 100
-                prices[store_as or sym] = float(p)
-        except Exception:
-            pass
-
-    await asyncio.gather(*[_fetch(s) for s in tickers])
-
-    # Retry any symbol not yet priced using the .L suffix (II CSV symbols lack it)
-    for sym in list(tickers):
-        if sym not in prices and not sym.endswith(".L"):
-            await _fetch(sym + ".L", store_as=sym)
-
-    # Enrich each account
-    all_unrealized = 0.0
-    for acct, data in by_account.items():
-        if acct == "all":
-            continue
-        acct_unrealized = 0.0
-        for sym, pos in data.get("open_positions", {}).items():
-            if sym in prices:
-                mv  = round(prices[sym] * pos["qty"], 2)
-                upnl = round(mv - pos["total_cost"], 2)
-                pos["current_price"]   = prices[sym]
-                pos["market_value"]    = mv
-                pos["unrealized_gain"] = upnl
-                pos["unrealized_pct"]  = round(upnl / pos["total_cost"] * 100 if pos["total_cost"] else 0, 2)
-                acct_unrealized += upnl
-        data["unrealized_total"] = round(acct_unrealized, 2)
-        all_unrealized += acct_unrealized
-
-    # Aggregate into 'all'
-    if "all" in by_account:
-        by_account["all"]["unrealized_total"] = round(all_unrealized, 2)
-        for sym, pos in by_account["all"].get("open_positions", {}).items():
-            if sym in prices:
-                mv  = round(prices[sym] * pos["qty"], 2)
-                upnl = round(mv - pos["total_cost"], 2)
-                pos["current_price"]   = prices[sym]
-                pos["market_value"]    = mv
-                pos["unrealized_gain"] = upnl
-                pos["unrealized_pct"]  = round(upnl / pos["total_cost"] * 100 if pos["total_cost"] else 0, 2)
 
 
 @app.get("/api/quotes")
@@ -2250,6 +2432,87 @@ async def get_quotes(tickers: str = Query(..., description="Comma-separated tick
     return {"quotes": list(results), "timestamp": ts}
 
 
+# ── P&L Desk API routes ───────────────────────────────────────────────────────
+
+@app.post("/api/parse-transactions")
+async def parse_transactions(request: TransactionRequest):
+    """Parse a broker CSV, run P&L engine, optionally persist to Firestore."""
+    try:
+        df = _parse_ii_csv(request.csv_text, request.account_type)
+        if df.empty:
+            raise HTTPException(status_code=400, detail="No valid transactions found in CSV.")
+
+        result = _run_pnl_engine(df, request.account_type)
+        response = {"by_account": {request.account_type: result, "all": result}}
+
+        # Persist to Firestore if auth token provided
+        new_count, dup_count = 0, 0
+        if request.id_token and _FIREBASE_OK:
+            try:
+                decoded = _fb_auth.verify_id_token(request.id_token)
+                uid = decoded["uid"]
+                new_count, dup_count = await _in_thread(
+                    _save_transactions_to_firestore, uid, request.csv_text, request.account_type
+                )
+                # Reload full ledger from Firestore (includes all accounts)
+                full = await _in_thread(_load_user_transactions, uid)
+                response = full
+            except Exception as e:
+                # If Firestore save fails, still return the parsed result
+                pass
+
+        response["new_count"] = new_count
+        response["dup_count"] = dup_count
+        return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/load-ledger")
+async def load_ledger(request: Request):
+    """Load saved transaction data from Firestore for the authenticated user."""
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing auth token.")
+    token = auth_header.split(" ", 1)[1]
+    if not _FIREBASE_OK:
+        raise HTTPException(status_code=503, detail="Firebase not configured.")
+    try:
+        decoded = _fb_auth.verify_id_token(token)
+        uid = decoded["uid"]
+        result = await _in_thread(_load_user_transactions, uid)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Auth failed: {e}")
+
+
+@app.delete("/api/clear-ledger")
+async def clear_ledger(request: Request, account_type: str = ""):
+    """Delete saved transaction data from Firestore."""
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing auth token.")
+    token = auth_header.split(" ", 1)[1]
+    if not _FIREBASE_OK:
+        raise HTTPException(status_code=503, detail="Firebase not configured.")
+    try:
+        decoded = _fb_auth.verify_id_token(token)
+        uid = decoded["uid"]
+        coll = _FS_CLIENT.collection("users").document(uid).collection("transactions")
+        deleted = 0
+        for doc in coll.stream():
+            if account_type and doc.to_dict().get("account_type") != account_type:
+                continue
+            doc.reference.delete()
+            deleted += 1
+        return {"deleted": deleted}
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Auth failed: {e}")
+
+
 @app.get("/health")
 async def health(): return {"status": "ok"}
 
@@ -2260,26 +2523,15 @@ if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
 
-# ── Firebase Cloud Functions wrapper ─────────────────────────────────────────
-try:
-    from firebase_functions import https_fn
-    import firebase_admin as _fb_admin
-    from starlette.testclient import TestClient as _TC   # NOT Client — renamed in Starlette ≥0.21
-    try: _fb_admin.get_app()                             # guard: module-level init may have run first
-    except ValueError: _fb_admin.initialize_app()        # firebase_admin.apps does NOT exist — use get_app()
+# ── Firebase Cloud Function wrapper ──────────────────────────────────────────
+from firebase_functions import https_fn, options
 
-    @https_fn.on_request(region="us-central1", memory=512, timeout_sec=120)
-    def vesper_api(req: https_fn.Request) -> https_fn.Response:
-        client = _TC(app, raise_server_exceptions=False)
-        url = req.path
-        if req.query_string:
-            url = f"{url}?{req.query_string.decode()}"
-        resp = client.request(
-            method=req.method, url=url,
-            headers=dict(req.headers), content=req.get_data(),
-        )
-        return https_fn.Response(
-            response=resp.content, status=resp.status_code, headers=dict(resp.headers),
-        )
-except ImportError:
-    pass  # Running locally — firebase_functions not installed
+@https_fn.on_request(memory=options.MemoryOption.GB_2, timeout_sec=300, region="us-central1")
+def vesper_api(req: https_fn.Request) -> https_fn.Response:
+    from fastapi.testclient import TestClient
+    client = TestClient(app)
+    path = req.path
+    if path.startswith("/vesper_api"): path = path[len("/vesper_api"):]
+    if not path: path = "/"
+    response = client.request(method=req.method, url=path, params=req.args, headers=dict(req.headers), content=req.data)
+    return https_fn.Response(response.content, status=response.status_code, headers=dict(response.headers))

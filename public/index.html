@@ -104,15 +104,15 @@
     /* Scrollbar */
     html[data-theme="light"] ::-webkit-scrollbar-thumb { background: #94a3b8 !important; }
 
-    /* Ledger account tabs */
-    .ledger-tab { color: #64748b; border-color: #334155; background: transparent; }
-    .ledger-tab.active { color: #6ee7b7; border-color: #059669; background: rgb(6 78 59 / 0.3); }
-    .ledger-tab:hover:not(.active) { color: #94a3b8; border-color: #475569; }
     /* Master desk tabs */
     .desk-tab { color: #64748b; border: 1px solid #1e293b; background: transparent;
       padding: 0.375rem 1rem; font-size: 0.75rem; font-weight: 700; border-radius: 9999px; transition: all 0.15s; cursor: pointer; }
     .desk-tab.active { color: #a5b4fc; border-color: #4f46e5; background: rgb(30 27 75 / 0.4); }
     .desk-tab:hover:not(.active) { color: #94a3b8; border-color: #334155; }
+    /* P&L account tabs */
+    .pnl-tab { color: #64748b; border-color: #334155; background: transparent; }
+    .pnl-tab.active { color: #6ee7b7; border-color: #059669; background: rgb(6 78 59 / 0.3); }
+    .pnl-tab:hover:not(.active) { color: #94a3b8; border-color: #475569; }
     /* Intelligence Desk account filter pills */
     .intel-acct-pill { color: #64748b; border: 1px solid #1e293b; background: transparent;
       padding: 0.25rem 0.875rem; font-size: 0.7rem; font-weight: 700; border-radius: 9999px;
@@ -182,6 +182,55 @@
     </div>
   </div>
 
+  <!-- Advisor Tooltip Modal -->
+  <div id="advisor-modal" class="hidden fixed z-[100] left-0 top-0 w-full h-full bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="modal-content !max-w-2xl w-full border-fuchsia-500/50">
+      <div class="flex justify-between items-center mb-6">
+        <div class="flex items-center gap-3">
+          <span id="advisor-modal-icon" class="text-3xl">🧠</span>
+          <div>
+            <h2 id="advisor-modal-title" class="text-xl font-black text-fuchsia-400 uppercase tracking-tight">Strategy Analysis</h2>
+            <p id="advisor-modal-subtitle" class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Technical Breakdown & Advice</p>
+          </div>
+        </div>
+        <button onclick="document.getElementById('advisor-modal').classList.add('hidden')" class="text-slate-500 hover:text-white text-2xl">×</button>
+      </div>
+      
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="space-y-4">
+          <div class="p-4 bg-slate-900/50 rounded-xl border border-slate-800">
+            <p class="text-[10px] font-black text-slate-500 uppercase mb-2">The 'Why'</p>
+            <p id="advisor-modal-why" class="text-sm text-slate-200 font-medium leading-relaxed italic"></p>
+          </div>
+          <div class="p-4 bg-fuchsia-950/20 rounded-xl border border-fuchsia-500/30">
+            <p class="text-[10px] font-black text-fuchsia-400 uppercase mb-2">Recommended Action</p>
+            <p id="advisor-modal-action" class="text-lg font-black text-white uppercase tracking-tighter"></p>
+          </div>
+        </div>
+        
+        <div class="space-y-4">
+          <div class="p-4 bg-slate-900/50 rounded-xl border border-slate-800">
+            <p class="text-[10px] font-black text-slate-500 uppercase mb-3">Evidence Matrix</p>
+            <div id="advisor-modal-evidence" class="grid grid-cols-2 gap-3"></div>
+          </div>
+          <div id="advisor-modal-suggestion-box" class="p-4 bg-indigo-950/20 rounded-xl border border-indigo-500/30">
+            <p class="text-[10px] font-black text-indigo-400 uppercase mb-2">Strategic Pivot</p>
+            <p id="advisor-modal-suggestion" class="text-xs text-slate-300 font-bold"></p>
+          </div>
+        </div>
+      </div>
+      
+      <div class="mt-6 p-4 bg-fuchsia-950/10 rounded-xl border border-fuchsia-500/20">
+        <p class="text-[10px] font-black text-fuchsia-400 uppercase mb-2">Executive Reasoning Report</p>
+        <p id="advisor-modal-report" class="text-sm text-slate-300 leading-relaxed font-medium"></p>
+      </div>
+      
+      <div class="mt-8 pt-6 border-t border-slate-800 flex justify-end">
+        <button onclick="document.getElementById('advisor-modal').classList.add('hidden')" class="px-6 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-black uppercase rounded-lg transition-all">Understood</button>
+      </div>
+    </div>
+  </div>
+
   <header class="sticky top-0 z-20 border-b border-slate-800/70 backdrop-blur bg-slate-950/80 px-4 sm:px-6 py-3 sm:py-4">
     <div class="max-w-6xl mx-auto flex items-center justify-between">
       <div class="flex items-center gap-3 cursor-pointer" onclick="location.reload()">
@@ -216,11 +265,12 @@
     </div>
   </div>
 
+
   <!-- ── Master Desk Tab Bar ───────────────────────────────────────────── -->
-  <div id="desk-tabs" class="hidden sticky z-[9] bg-slate-950/90 border-b border-slate-800/60" style="backdrop-filter:blur(12px);top:100px">
+  <div id="desk-tabs" class="hidden sticky z-[9] bg-slate-950/90 border-b border-slate-800/60" style="backdrop-filter:blur(12px)">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 flex items-center gap-3 h-11">
       <button id="desk-tab-intelligence" onclick="switchDesk('intelligence')" class="desk-tab active">🧠 Intelligence Desk</button>
-      <button id="desk-tab-ledger"       onclick="switchDesk('ledger')"       class="desk-tab">🏛️ Ledger &amp; Tax Desk</button>
+      <button id="desk-tab-pnl"          onclick="switchDesk('pnl')"          class="desk-tab">📊 P&L Desk</button>
     </div>
   </div>
 
@@ -242,24 +292,27 @@
   <main id="main-content" class="hidden max-w-6xl mx-auto px-4 sm:px-6 py-10">
 
     <!-- ══════════════════════════════════════════════════════════════════════
-         LEDGER & TAX DESK (hidden by default, toggled by switchDesk())
+         P&L DESK (hidden by default, toggled by switchDesk())
          ══════════════════════════════════════════════════════════════════════ -->
-    <div id="ledger-view" class="hidden">
+    <div id="pnl-view" class="hidden">
 
-      <!-- Ledger Desk header: title + account filter -->
+      <!-- P&L Desk header: title + account tabs + clear -->
       <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div class="flex items-center gap-3">
-          <h2 class="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-emerald-400 uppercase tracking-tight">Ledger &amp; Tax Desk</h2>
-          <span id="ledger-desk-tx-badge" class="text-[8px] font-black px-2 py-0.5 rounded bg-emerald-950/50 text-emerald-400 border border-emerald-900/50 uppercase">—</span>
+          <h2 class="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-emerald-400 uppercase tracking-tight">P&L Desk</h2>
+          <span id="pnl-desk-tx-badge" class="text-[8px] font-black px-2 py-0.5 rounded bg-emerald-950/50 text-emerald-400 border border-emerald-900/50 uppercase">—</span>
         </div>
         <div class="flex items-center gap-3">
-          <select id="clear-account-select"
-                  class="bg-slate-800 border border-slate-700 text-slate-400 text-[10px] rounded-lg px-2 py-1 focus:outline-none">
-            <option value="">All Accounts</option>
-            <option value="ISA">ISA only</option>
-            <option value="GIA">GIA only</option>
-            <option value="SIPP">SIPP only</option>
-          </select>
+          <div class="flex gap-2 flex-wrap" id="pnl-tabs">
+            <button onclick="switchPnlTab('all')" data-tab="all"
+                    class="pnl-tab active px-4 py-1.5 rounded-full text-xs font-bold border transition-all">All</button>
+            <button onclick="switchPnlTab('ISA')" data-tab="ISA"
+                    class="pnl-tab px-4 py-1.5 rounded-full text-xs font-bold border transition-all">ISA</button>
+            <button onclick="switchPnlTab('GIA')" data-tab="GIA"
+                    class="pnl-tab px-4 py-1.5 rounded-full text-xs font-bold border transition-all" style="display:none">GIA</button>
+            <button onclick="switchPnlTab('SIPP')" data-tab="SIPP"
+                    class="pnl-tab px-4 py-1.5 rounded-full text-xs font-bold border transition-all" style="display:none">SIPP</button>
+          </div>
           <button onclick="clearLedger()"
                   class="text-[10px] font-bold px-3 py-1 rounded-lg bg-red-950/40 border border-red-800/40 text-red-400 hover:bg-red-900/40 transition-all">
             🗑 Clear
@@ -267,104 +320,99 @@
         </div>
       </div>
 
-      <!-- 3 live summary cards: Paid In / Realized Gains / Unrealized Gains -->
-      <div id="ledger-summary-cards" class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6 hidden"></div>
+      <!-- 4 summary cards -->
+      <div id="pnl-summary-cards" class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6 hidden"></div>
 
-      <!-- ── CSV Upload Zone (moved from Intelligence Desk) ───────────────── -->
-      <div id="ledger-upload-zone"
+      <!-- CSV Upload Zone -->
+      <div id="pnl-upload-zone"
            class="border-2 border-dashed border-slate-700/70 rounded-xl p-5 mb-6 text-center group hover:border-indigo-500/60 hover:bg-indigo-950/20 transition-all duration-200"
            ondragover="event.preventDefault(); this.classList.add('border-indigo-500','bg-indigo-950/20')"
            ondragleave="this.classList.remove('border-indigo-500','bg-indigo-950/20')"
            ondrop="event.preventDefault(); this.classList.remove('border-indigo-500','bg-indigo-950/20'); handleTransactionUpload(event.dataTransfer.files[0])">
-        <p class="text-xl mb-1" id="ledger-upload-icon">📂</p>
-        <p class="text-xs font-bold text-slate-400 group-hover:text-indigo-400 transition-colors" id="ledger-upload-label">Drop broker transaction CSV to unlock P&amp;L</p>
-        <p class="text-[10px] text-slate-600 mt-0.5">Supports: Interactive Investor (II), iWeb, HL, AJ Bell, Freetrade</p>
+        <p class="text-xl mb-1" id="pnl-upload-icon">📂</p>
+        <p class="text-xs font-bold text-slate-400 group-hover:text-indigo-400 transition-colors" id="pnl-upload-label">Drop broker transaction CSV to unlock P&L</p>
+        <p class="text-[10px] text-slate-600 mt-0.5">Supports: Interactive Investor (II) CSV exports</p>
         <div class="flex items-center justify-center gap-3 mt-3" onclick="event.stopPropagation()">
           <label class="text-[10px] font-bold text-slate-500 uppercase">Account</label>
-          <select id="ledger-account-select"
+          <select id="pnl-account-select"
                   class="bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
             <option value="ISA">ISA (Tax-Free)</option>
             <option value="GIA">GIA (Taxable)</option>
             <option value="SIPP">SIPP (Pension)</option>
           </select>
-          <button onclick="document.getElementById('ledger-file-input').click()"
+          <button onclick="document.getElementById('pnl-file-input').click()"
                   class="text-xs font-bold px-3 py-1.5 rounded-lg bg-indigo-900/50 border border-indigo-700/50 text-indigo-400 hover:bg-indigo-800/50 transition-all">
             Browse
           </button>
         </div>
-        <input type="file" id="ledger-file-input" class="hidden" accept=".csv"
+        <input type="file" id="pnl-file-input" class="hidden" accept=".csv"
                onchange="handleTransactionUpload(this.files[0])">
       </div>
 
-      <!-- ── Open Positions: Cost Basis Pool ─────────────────────────────── -->
-      <section id="ledger-panel" class="mb-8 hidden">
-        <div class="flex items-center gap-3 mb-4">
-          <h2 class="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-emerald-400 uppercase tracking-tight">Open Positions</h2>
-          <span class="text-[8px] font-black px-2 py-0.5 rounded bg-emerald-950/50 text-emerald-400 border border-emerald-900/50 uppercase" id="ledger-tx-badge">—</span>
-        </div>
-        <!-- Open positions cost basis table -->
+      <!-- Open Positions table -->
+      <section id="pnl-positions-section" class="mb-6 hidden">
         <div class="glass p-5 border-t-2 border-indigo-500/30">
-          <p class="text-xs font-bold text-slate-500 uppercase mb-3">Cost Basis · Live Unrealized P&amp;L</p>
-          <div id="ledger-positions" class="overflow-x-auto"></div>
+          <p class="text-xs font-bold text-slate-500 uppercase mb-3">Open Positions · Cost Basis</p>
+          <div id="pnl-positions" class="overflow-x-auto"></div>
         </div>
       </section>
 
-      <!-- Funding Timeline -->
-      <div id="funding-timeline-section" class="hidden mb-6">
-        <div class="glass p-4 rounded-xl">
-          <div class="flex items-center justify-between mb-3">
-            <h3 class="text-xs font-black text-slate-400 uppercase tracking-widest">Funding Timeline</h3>
-            <span id="funding-total-contrib" class="hidden text-[10px] font-black text-emerald-400 font-mono"></span>
+      <!-- Tax Year table -->
+      <section id="pnl-year-section" class="mb-6 hidden">
+        <div class="glass p-5">
+          <div class="flex items-center justify-between mb-3 cursor-pointer" onclick="togglePnlSection('pnl-year-body')">
+            <p class="text-xs font-bold text-slate-500 uppercase">Year-by-Year Performance</p>
+            <span class="text-slate-600 text-xs" id="pnl-year-toggle">▼</span>
           </div>
-          <div class="overflow-x-auto">
-            <table class="w-full text-xs">
-              <thead>
-                <tr class="border-b border-slate-800">
-                  <th class="text-left py-2 text-slate-500 font-bold uppercase">Date</th>
-                  <th class="text-left py-2 text-slate-500 font-bold uppercase">Type</th>
-                  <th class="text-right py-2 text-slate-500 font-bold uppercase">Amount</th>
-                </tr>
-              </thead>
-              <tbody id="funding-timeline-body"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <!-- ── Performance Analytics Dashboard ─────────────────────────────── -->
-      <section id="performance-metrics" class="mb-8 hidden">
-        <!-- Section header -->
-        <div class="flex items-center justify-between mb-4">
-          <div class="flex items-center gap-3">
-            <h2 class="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-emerald-400 uppercase tracking-tight">Performance Analytics</h2>
-            <span id="perf-tx-badge" class="text-[8px] font-black px-2 py-0.5 rounded bg-emerald-950/50 text-emerald-400 border border-emerald-900/50 uppercase">—</span>
-          </div>
-        </div>
-        <!-- Account tabs -->
-        <div class="flex gap-2 mb-5 flex-wrap" id="ledger-tabs">
-          <button onclick="switchLedgerTab('all')" data-tab="all"
-                  class="ledger-tab active px-4 py-1.5 rounded-full text-xs font-bold border transition-all">All Accounts</button>
-          <button onclick="switchLedgerTab('ISA')" data-tab="ISA"
-                  class="ledger-tab px-4 py-1.5 rounded-full text-xs font-bold border transition-all">ISA</button>
-          <button onclick="switchLedgerTab('GIA')" data-tab="GIA"
-                  class="ledger-tab px-4 py-1.5 rounded-full text-xs font-bold border transition-all">GIA</button>
-          <button onclick="switchLedgerTab('SIPP')" data-tab="SIPP"
-                  class="ledger-tab px-4 py-1.5 rounded-full text-xs font-bold border transition-all">SIPP</button>
-        </div>
-        <!-- Top-line metric cards -->
-        <div id="perf-top-cards" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4"></div>
-        <!-- Realized vs Unrealized summary row -->
-        <div id="perf-realunreal" class="glass p-5 mb-4 hidden"></div>
-        <!-- Earnings breakdown bar -->
-        <div id="perf-breakdown" class="glass p-5 mb-4 hidden"></div>
-        <!-- Year-by-year table -->
-        <div id="perf-year-section" class="glass p-5 hidden">
-          <p class="text-xs font-bold text-slate-500 uppercase mb-3">Year-by-Year Performance</p>
-          <div id="perf-year-table" class="overflow-x-auto"></div>
+          <div id="pnl-year-body" class="overflow-x-auto"></div>
         </div>
       </section>
 
-    </div><!-- /ledger-view -->
+      <!-- Disposal Log -->
+      <section id="pnl-disposal-section" class="mb-6 hidden">
+        <div class="glass p-5">
+          <div class="flex items-center justify-between mb-3 cursor-pointer" onclick="togglePnlSection('pnl-disposal-body')">
+            <p class="text-xs font-bold text-slate-500 uppercase">Disposal Log (CGT)</p>
+            <span class="text-slate-600 text-xs" id="pnl-disposal-toggle">▼</span>
+          </div>
+          <div id="pnl-disposal-body" class="overflow-x-auto hidden"></div>
+        </div>
+      </section>
+
+      <!-- Transfer-in Detail -->
+      <section id="pnl-transfer-section" class="mb-6 hidden">
+        <div class="glass p-5">
+          <div class="flex items-center justify-between mb-3 cursor-pointer" onclick="togglePnlSection('pnl-transfer-body')">
+            <p class="text-xs font-bold text-slate-500 uppercase">Transfer-In Detail</p>
+            <span class="text-slate-600 text-xs" id="pnl-transfer-toggle">▼</span>
+          </div>
+          <div id="pnl-transfer-body" class="overflow-x-auto hidden"></div>
+        </div>
+      </section>
+
+      <!-- Dividend & Interest Detail -->
+      <section id="pnl-dividend-section" class="mb-6 hidden">
+        <div class="glass p-5">
+          <div class="flex items-center justify-between mb-3 cursor-pointer" onclick="togglePnlSection('pnl-dividend-body')">
+            <p class="text-xs font-bold text-slate-500 uppercase">Dividends &amp; Interest</p>
+            <span class="text-slate-600 text-xs" id="pnl-dividend-toggle">▼</span>
+          </div>
+          <div id="pnl-dividend-body" class="overflow-x-auto hidden"></div>
+        </div>
+      </section>
+
+      <!-- Transfer-Out Detail -->
+      <section id="pnl-transfer-out-section" class="mb-6 hidden">
+        <div class="glass p-5">
+          <div class="flex items-center justify-between mb-3 cursor-pointer" onclick="togglePnlSection('pnl-transfer-out-body')">
+            <p class="text-xs font-bold text-slate-500 uppercase">Transfer-Out Detail</p>
+            <span class="text-slate-600 text-xs" id="pnl-transfer-out-toggle">▼</span>
+          </div>
+          <div id="pnl-transfer-out-body" class="overflow-x-auto hidden"></div>
+        </div>
+      </section>
+
+    </div><!-- /pnl-view -->
 
     <!-- ══════════════════════════════════════════════════════════════════════
          INTELLIGENCE DESK (visible by default)
@@ -379,7 +427,7 @@
         <div style="min-width:660px">
 
         <!-- Column header row (sortable) -->
-        <div class="grid grid-cols-[1fr_75px_58px_78px_68px_72px_84px_90px_28px] px-2 pb-1 border-b border-slate-800 mb-1">
+        <div class="grid grid-cols-[1fr_75px_58px_78px_68px_72px_84px_90px_120px_28px] px-2 pb-1 border-b border-slate-800 mb-1">
           <span onclick="sortRows('ticker')" class="text-[10px] font-black text-slate-500 uppercase tracking-widest cursor-pointer hover:text-slate-300 select-none flex items-center gap-1">Ticker <span id="sort-ind-ticker" class="text-slate-700 text-[9px]">↕</span></span>
           <span onclick="sortRows('qty')" class="text-[10px] font-black text-slate-500 uppercase tracking-widest text-right pr-2 cursor-pointer hover:text-slate-300 select-none flex items-center justify-end gap-1">Qty <span id="sort-ind-qty" class="text-slate-700 text-[9px]">↕</span></span>
           <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1">Wrap</span>
@@ -388,6 +436,7 @@
           <span onclick="sortRows('chg-val')" class="text-[10px] font-black text-slate-600 uppercase tracking-widest text-right pr-2 cursor-pointer hover:text-slate-300 select-none flex items-center justify-end gap-1">Chg£ <span id="sort-ind-chg-val" class="text-slate-700 text-[9px]">↕</span></span>
           <span onclick="sortRows('day-pnl')" class="text-[10px] font-black text-slate-600 uppercase tracking-widest text-right pr-2 cursor-pointer hover:text-slate-300 select-none flex items-center justify-end gap-1">Day P&amp;L <span id="sort-ind-day-pnl" class="text-slate-700 text-[9px]">↕</span></span>
           <span onclick="sortRows('total')" class="text-[10px] font-black text-slate-600 uppercase tracking-widest text-right pr-2 cursor-pointer hover:text-slate-300 select-none flex items-center justify-end gap-1">Total <span id="sort-ind-total" class="text-slate-700 text-[9px]">↕</span></span>
+          <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Advisor</span>
           <span></span>
         </div>
 
@@ -395,13 +444,13 @@
         <div id="ticker-rows"></div>
 
         <!-- Totals row — shown after prices are loaded -->
-        <div id="totals-row" class="hidden grid grid-cols-[1fr_75px_58px_78px_68px_72px_84px_90px_28px] px-2 py-1.5 mb-2 border-t-2 border-slate-700/60 bg-slate-900/30">
+        <div id="totals-row" class="hidden grid grid-cols-[1fr_75px_58px_78px_68px_72px_84px_90px_120px_28px] px-2 py-1.5 mb-2 border-t-2 border-slate-700/60 bg-slate-900/30">
           <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Portfolio</span>
           <span></span><span></span><span></span><span></span>
           <span class="text-[10px] font-black font-mono text-right pr-2 text-slate-500">—</span>
           <span id="totals-day-pnl" class="text-[10px] font-black font-mono text-right pr-2 text-slate-500">—</span>
           <span id="totals-total"   class="text-[10px] font-black font-mono text-right pr-2 text-slate-400">—</span>
-          <span></span>
+          <span></span><span></span>
         </div>
         </div></div><!-- /min-width inner · /overflow-x-auto outer -->
 
@@ -500,6 +549,25 @@
           <div class="glass p-8 border-l-4 border-indigo-500"><p class="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-6">Strategic Blueprint</p><div id="blueprint-content" class="space-y-6"></div></div>
           <div class="glass p-8 border-l-4 border-emerald-500"><p class="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-6">Suggested Execution Path</p><div id="blueprint-actions" class="space-y-4"></div></div>
         </div>
+      </section>
+
+      <!-- High-Conviction Execution Report Section -->
+      <section id="quant-execution-report" class="border-t-2 border-emerald-500/30 pt-10 mt-10">
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <h2 class="text-3xl font-black mb-2 text-transparent bg-clip-text bg-gradient-to-r from-white to-emerald-400 uppercase tracking-tight">Institutional Quant Execution Report</h2>
+            <p class="text-slate-500 text-sm italic">High-conviction roadmap derived from cross-factor regime analysis.</p>
+          </div>
+          <span class="text-[8px] font-black px-2 py-0.5 rounded bg-emerald-950/50 text-emerald-400 border border-emerald-900/50 uppercase">Top Tier Data</span>
+        </div>
+        <div id="quant-execution-content" class="space-y-8"></div>
+      </section>
+
+      <!-- Apex Advisor Section -->
+      <section id="apex-advisor-section" class="border-t-2 border-fuchsia-500/30 pt-10">
+        <h2 class="text-3xl font-black mb-2 text-transparent bg-clip-text bg-gradient-to-r from-white to-fuchsia-400 uppercase tracking-tight">Senior Portfolio Quant Advisor</h2>
+        <p class="text-slate-500 text-sm mb-6 italic">High-Conviction Seven-Strategy Matrix & Macro Regime Intelligence.</p>
+        <div id="apex-advisor-content" class="grid grid-cols-1 lg:grid-cols-3 gap-6"></div>
       </section>
 
       <!-- Scenario Analysis — Historical Stress Test -->
@@ -623,6 +691,89 @@
 
     </section>
 
+      </section>
+
+      <!-- Methodology Section -->
+      <section id="methodology-section" class="border-t-2 border-slate-800/50 pt-10 mt-20">
+        <h2 class="text-2xl font-black mb-6 text-slate-400 uppercase tracking-tight">System Methodology</h2>
+        
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
+          <div>
+            <h3 class="text-xs font-black text-indigo-400 uppercase tracking-[0.2em] mb-4">I. The Macro Cycle</h3>
+            <div class="space-y-4">
+              <div class="p-4 bg-slate-900/30 rounded-xl border border-slate-800">
+                <p class="text-xs font-black text-slate-200 uppercase mb-1">Expansion</p>
+                <p class="text-[10px] text-slate-500 leading-relaxed">Markets trending up, low volatility. Primary focus on <span class="text-indigo-400 font-bold">Momentum</span> strategies to capture the ride.</p>
+              </div>
+              <div class="p-4 bg-slate-900/30 rounded-xl border border-slate-800">
+                <p class="text-xs font-black text-slate-200 uppercase mb-1">Peak</p>
+                <p class="text-[10px] text-slate-500 leading-relaxed">High optimism, prices overextended. Primary focus on <span class="text-orange-400 font-bold">Scalping / Profit Taking</span> to lock in gains.</p>
+              </div>
+              <div class="p-4 bg-fuchsia-950/10 rounded-xl border border-fuchsia-900/30">
+                <p class="text-xs font-black text-fuchsia-400 uppercase mb-1">Contraction (High Fear: VIX > 25)</p>
+                <p class="text-[10px] text-slate-500 leading-relaxed">High fear regime detected. Secondary strategies like <span class="text-fuchsia-400 font-bold">Volatility Defense & Mean Reversion</span> are prioritized to protect capital while harvesting snap-back alpha.</p>
+              </div>
+              <div class="p-4 bg-slate-900/30 rounded-xl border border-slate-800">
+                <p class="text-xs font-black text-slate-200 uppercase mb-1">Trough</p>
+                <p class="text-[10px] text-slate-500 leading-relaxed">Maximum pessimism. Primary focus on <span class="text-emerald-400 font-bold">Aggressive Accumulation</span> of high-quality laggards.</p>
+              </div>
+            </div>
+          </div>
+          
+          <div>
+            <h3 class="text-xs font-black text-indigo-400 uppercase tracking-[0.2em] mb-4">II. The 7-Strategy Dictionary</h3>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-[10px]">
+                <thead>
+                  <tr class="text-slate-600 border-b border-slate-800">
+                    <th class="pb-2 font-black uppercase">Strategy</th>
+                    <th class="pb-2 font-black uppercase">Layman's Explanation</th>
+                    <th class="pb-2 font-black uppercase">Signal Evidence</th>
+                  </tr>
+                </thead>
+                <tbody class="text-slate-400 divide-y divide-slate-800/50">
+                  <tr>
+                    <td class="py-3 font-black text-slate-200">Momentum</td>
+                    <td class="py-3 italic">"The Trend is your Friend."</td>
+                    <td class="py-3">Price consistently staying above its 50-day average.</td>
+                  </tr>
+                  <tr>
+                    <td class="py-3 font-black text-slate-200">Mean Reversion</td>
+                    <td class="py-3 italic">"Buying a deep dip for a snap-back."</td>
+                    <td class="py-3">Triggered when a price is "stretched" too far down; RSI < 35 or 30-day perf < -10%.</td>
+                  </tr>
+                  <tr>
+                    <td class="py-3 font-black text-slate-200">Pairs Trading</td>
+                    <td class="py-3 italic">"The Relative Value play."</td>
+                    <td class="py-3">If Tech is up but AI is down, we buy the AI "lagger" expecting it to catch up.</td>
+                  </tr>
+                  <tr>
+                    <td class="py-3 font-black text-slate-200">Volatility</td>
+                    <td class="py-3 italic">"Insurance during Storms."</td>
+                    <td class="py-3">Triggered when the VIX (Fear Gauge) spikes. It moves money into Gold/Cash.</td>
+                  </tr>
+                  <tr>
+                    <td class="py-3 font-black text-slate-200">Scalping</td>
+                    <td class="py-3 italic">"Short-term volatility trading."</td>
+                    <td class="py-3">Using high daily price swings (ATR) to lock in 1-2% gains within hours.</td>
+                  </tr>
+                  <tr>
+                    <td class="py-3 font-black text-slate-200">Arbitrage</td>
+                    <td class="py-3 italic">"The Market Mismatch."</td>
+                    <td class="py-3">Spotting when a UK ETF is priced cheaper than the actual stocks it holds.</td>
+                  </tr>
+                  <tr>
+                    <td class="py-3 font-black text-slate-200">Hedging</td>
+                    <td class="py-3 italic">"Betting against the fall."</td>
+                    <td class="py-3">Using Inverse ETFs or defensive assets to protect capital while sentiment is cold.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
     </div><!-- /intelligence-view -->
   </main>
 
@@ -638,8 +789,7 @@
     let currentImportType = 'ISA';
     let _lastQuotes = {}; // ticker → live price, updated by ticker bar
     let _intelAcctFilter = 'all'; // 'all' | 'ISA' | 'GIA' | 'SIPP'
-    let _activeLedgerTab = 'all'; // tracks active Ledger tab (replaces removed dropdown)
-    window.vesperState = { ISA: null, GIA: null, SIPP: null }; // accumulates per-account uploads (amnesia fix)
+    window.vesperState = { ISA: null, GIA: null, SIPP: null };
     const PALETTE = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6','#f97316','#14b8a6','#ef4444','#a855f7'];
 
     // ── X-Ray look-through tables ──────────────────────────────────────────
@@ -826,23 +976,12 @@
       });
     }
 
-    async function loadLedgerFromFirestore() {
-      try {
-        const user = auth?.currentUser;
-        if (!user) return;
-        const token = await user.getIdToken();
-        const resp = await fetch('/api/load-ledger', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (!resp.ok) return;
-        const data = await resp.json();
-        if ((data.by_account?.all?.transaction_count || 0) > 0) {
-          renderPerformanceDashboard(data);
-        }
-      } catch(e) { console.warn('[Ledger load]', e); }
-    }
 
     async function handleAuth(type) {
+      if (!auth) {
+        document.getElementById('auth-error').textContent = 'Still loading — please wait a moment.';
+        return;
+      }
       const email = document.getElementById('auth-email').value;
       const pass = document.getElementById('auth-password').value;
       try {
@@ -956,7 +1095,7 @@
 
     function addRow(t = '', q = '', acctType = 'ISA') {
       rowIndex++; const id = `row-${rowIndex}`, div = document.createElement('div');
-      div.id = id; div.className = 'grid grid-cols-[1fr_75px_58px_78px_68px_72px_84px_90px_28px] items-center border-b border-slate-800/40 group hover:bg-slate-900/20 transition-colors';
+      div.id = id; div.className = 'grid grid-cols-[1fr_75px_58px_78px_68px_72px_84px_90px_120px_28px] items-center border-b border-slate-800/40 group hover:bg-slate-900/20 transition-colors';
       div.innerHTML = `
         <div class="ticker-ac-wrap relative w-full min-w-0">
           <input type="text" value="${t}" placeholder="e.g. EQQQ.L" class="ticker-input bg-transparent px-2 py-1.5 text-sm font-bold uppercase focus:outline-none focus:bg-slate-900/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 rounded transition-colors w-full" autocomplete="off">
@@ -969,6 +1108,9 @@
         <span data-col="chg-val" data-value="0" class="text-[10px] font-black font-mono text-right pr-2 text-slate-700 select-none">—</span>
         <span data-col="day-pnl" data-value="0" class="text-[10px] font-black font-mono text-right pr-2 text-slate-700 select-none">—</span>
         <span data-col="total"   data-value="0" class="text-[10px] font-black font-mono text-right pr-2 text-slate-700 select-none">—</span>
+        <div data-col="advisor" class="flex justify-center items-center">
+          <span class="text-[8px] font-black px-1.5 py-0.5 rounded bg-slate-800 text-slate-600 border border-slate-700 uppercase">AWAITING</span>
+        </div>
         <button onclick="document.getElementById('${id}').remove()" class="text-slate-800 hover:text-red-500 font-bold text-base transition-colors text-center opacity-0 group-hover:opacity-100">×</button>`;
       const sel = div.querySelector('.account-type-select');
       sel.value = acctType;
@@ -1251,9 +1393,68 @@
       renderTacticalDesk(td || [], p.total_value);
       renderRiskOptimizer(recs || [], p.total_value);
       renderSentimentSummary(a);
+      // Store apex scores before rendering cards so action badges are available
+      window._lastApexScores = data.apex_advisor?.scores || {};
       renderAssetCards(a, ev, r.asset_risk, ai, p);
       renderXRayCharts(a);
       renderBlueprint(ai.ideal_blueprint, a, tb);
+      if (data.apex_advisor) {
+        renderApexAdvisor(data.apex_advisor);
+        renderQuantExecutionReport(data.apex_advisor);
+      }
+      
+      // Populate Advisor Intelligence badges in the builder rows
+      if (data.apex_advisor && data.apex_advisor.scores) {
+        Object.entries(data.apex_advisor.scores).forEach(([tk, logic]) => {
+          // Find matching row(s) in the builder
+          document.querySelectorAll('#ticker-rows > div').forEach(row => {
+            const tInput = row.querySelector('.ticker-input');
+            const acctSel = row.querySelector('.account-type-select');
+            const rowKey = `${tInput.value.trim().toUpperCase()}_${acctSel.value}`;
+            
+            if (rowKey === tk) {
+              const advisorCell = row.querySelector('[data-col="advisor"]');
+              if (advisorCell) {
+                const score = logic.score;
+                const strat = logic.strat;
+                const act = logic.action;
+                const why = logic.why;
+                const prob = logic.probability;
+                const report = logic.detailed_advisor_report;
+                const ev = logic.evidence;
+                const evidence = JSON.stringify(ev).replace(/"/g, '&quot;');
+                
+                let badgeClr = 'bg-slate-800 text-slate-300 border-slate-600';
+                let actionClr = 'text-slate-400';
+                if (score > 80) {
+                  badgeClr = 'bg-fuchsia-600 text-white border-fuchsia-400 shadow-[0_0_8px_rgba(192,38,211,0.4)]';
+                  actionClr = 'text-fuchsia-400';
+                } else if (score > 60) {
+                  badgeClr = 'bg-indigo-600 text-white border-indigo-400';
+                  actionClr = 'text-indigo-400';
+                }
+                
+                advisorCell.innerHTML = `
+                  <div class="flex flex-col items-center gap-1.5 py-1">
+                    <span onclick="showAdvisorTooltip('${tk}', '${strat}', ${score}, '${act}', '${why.replace(/'/g, "\\'")}', '${evidence}', '${report.replace(/'/g, "\\'")}')" 
+                          class="text-[9px] font-black px-2 py-0.5 rounded ${badgeClr} border uppercase cursor-help hover:scale-105 transition-all select-none">
+                      ${strat} ${score}
+                    </span>
+                    <div class="flex flex-col items-center leading-tight">
+                      <span class="text-[8px] font-black ${actionClr} uppercase tracking-tighter">${act}</span>
+                      <span class="text-[7px] text-slate-400 font-bold uppercase mt-0.5">Conviction: ${prob}</span>
+                      <div class="flex gap-1.5 mt-0.5">
+                        <span class="text-[6px] text-slate-500 font-mono">RSI:${ev.rsi}</span>
+                        <span class="text-[6px] text-slate-500 font-mono">ATR:${ev.atr_pct}%</span>
+                        <span class="text-[6px] text-slate-500 font-mono">30D:${ev.perf_30d}</span>
+                      </div>
+                    </div>
+                  </div>`;
+              }
+            }
+          });
+        });
+      }
       
       document.getElementById('results-section').classList.remove('hidden');
       document.getElementById('sub-nav').classList.remove('hidden'); updateStickyTops();
@@ -1697,9 +1898,13 @@
 
     function renderMarketOutlook(mo, ai) {
       const dr = parseFloat(ai?.attribution?.div_ratio) || 1.0;
-      // Use backend-generated commentary (Opus CIO when enabled, data-driven fallback otherwise)
       const commentary = mo.quant_intelligence || 'Awaiting neural synthesis…';
-      document.getElementById('market-outlook').innerHTML = mo.points.map(x => `<div class="p-4 bg-slate-900/50 rounded-xl border border-slate-800 transition-all group hover:border-indigo-500/30"><div class="flex items-center gap-3 mb-2"><div class="text-xl group-hover:scale-110 transition-transform">${x.i}</div><div><p class="text-[10px] font-bold text-slate-600 uppercase tracking-widest">${x.l}</p><p class="text-xs font-black text-indigo-400 uppercase">${x.v}</p></div></div><p class="text-[10px] leading-relaxed text-slate-500 font-medium">${boldTerms(x.d)}</p></div>`).join('') + `<div class="mt-6 space-y-4"><div class="p-4 bg-indigo-950/20 border-l-4 border-indigo-500 rounded-r-xl"><p class="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-2 font-black">Quant Intelligence · DR ${dr.toFixed(2)}</p><p class="text-sm text-slate-300 leading-relaxed">${boldTerms(commentary)}</p></div><div class="p-4 bg-violet-950/20 border-l-4 border-violet-500 rounded-r-xl"><p class="text-xs font-bold text-violet-400 uppercase tracking-widest mb-2 font-black">Strategic Outlook</p><p class="text-sm text-slate-300 leading-relaxed">${boldTerms(mo.future_outlook)}</p></div></div>`;
+      const strategicComm = mo.commentary || '';
+      const pointsHtml = mo.points.map(x => `<div class="p-4 bg-slate-900/50 rounded-xl border border-slate-800 transition-all group hover:border-indigo-500/30"><div class="flex items-center gap-3 mb-2"><div class="text-xl group-hover:scale-110 transition-transform">${x.i}</div><div><p class="text-[10px] font-bold text-slate-600 uppercase tracking-widest">${x.l}</p><p class="text-xs font-black text-indigo-400 uppercase">${x.v}</p></div></div><p class="text-[10px] leading-relaxed text-slate-500 font-medium">${boldTerms(x.d)}</p></div>`).join('');
+      const quantHtml = `<div class="p-4 bg-indigo-950/20 border-l-4 border-indigo-500 rounded-r-xl"><p class="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-2 font-black">Quant Intelligence · DR ${dr.toFixed(2)}</p><p class="text-sm text-slate-300 leading-relaxed">${boldTerms(commentary)}</p></div>`;
+      const commHtml = strategicComm ? `<div class="p-4 bg-emerald-950/20 border-l-4 border-emerald-500 rounded-r-xl"><p class="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-2 font-black">Strategic Commentary</p><p class="text-sm text-slate-300 leading-relaxed">${boldTerms(strategicComm)}</p></div>` : '';
+      const futureHtml = mo.future_outlook ? `<div class="p-4 bg-violet-950/20 border-l-4 border-violet-500 rounded-r-xl"><p class="text-xs font-bold text-violet-400 uppercase tracking-widest mb-2 font-black">Strategic Outlook</p><p class="text-sm text-slate-300 leading-relaxed">${boldTerms(mo.future_outlook)}</p></div>` : '';
+      document.getElementById('market-outlook').innerHTML = pointsHtml + `<div class="mt-6 space-y-4">${quantHtml}${commHtml}${futureHtml}</div>`;
     }
 
     function renderFutureValue(fv, tv, currency) {
@@ -1834,6 +2039,8 @@
     }
 
     function renderAssetCards(a, ev, asset_risk, ai, p) {
+      // Pre-fetch apex advisor data for action badges
+      const apexScores = window._lastApexScores || {};
       document.getElementById('asset-cards').innerHTML = Object.entries(a).map(([tk, asset], i) => {
         const c = PALETTE[i % PALETTE.length], b = sentimentBadge(asset.sentiment?.label);
         const safety = ai.div_safety[tk] || 0;
@@ -1845,6 +2052,15 @@
         const betaV = parseFloat(asset.beta); const betaClr = isNaN(betaV) ? 'text-slate-500' : (betaV >= 0.8 && betaV <= 1.2) ? 'text-emerald-400' : betaV > 1.2 ? 'text-amber-400' : 'text-indigo-400';
         const betaHint = isNaN(betaV) ? 'N/A' : betaV > 1.2 ? 'Aggressive' : betaV < 0.8 ? 'Defensive' : 'Neutral';
         const evts = ev[tk] || {}, evtItems = Object.entries(evts).filter(([k,v]) => v).map(([k,v]) => `<div class="flex justify-between text-[9px] py-0.5 border-b border-slate-800/30 last:border-0"><span class="text-slate-500 font-black uppercase tracking-tighter">${k.replace(/_/g,' ')}</span><span class="text-slate-300 font-black font-mono">${v}</span></div>`).join('');
+        // Account type extraction from composite key
+        const displayTicker = tk.split('_')[0];
+        const acctType = tk.includes('_') ? tk.split('_').slice(1).join('_') : '';
+        const acctBadgeColors = { ISA: 'text-emerald-400 bg-emerald-950/30 border-emerald-800', GIA: 'text-amber-400 bg-amber-950/30 border-amber-800', SIPP: 'text-indigo-400 bg-indigo-950/30 border-indigo-800' };
+        const acctBadgeCls = acctBadgeColors[acctType] || '';
+        // Apex action badge
+        const apexLogic = apexScores[tk];
+        const actInstr = apexLogic?.action_instruction || '';
+        const actBadgeCls = actInstr.startsWith('BUY') ? 'text-emerald-400 bg-emerald-950/40 border-emerald-700' : actInstr.startsWith('HEDGE') || actInstr.startsWith('TRIM') ? 'text-red-400 bg-red-950/40 border-red-700' : 'text-slate-400 bg-slate-900/40 border-slate-700';
         const headlines = (asset.sentiment?.headlines || []).slice(0,5).map(h => `<li class="text-[9px] text-slate-500 leading-tight mb-2 flex gap-2 font-medium"><span>•</span><span class="line-clamp-2">${typeof h === 'object' ? h.title : h}</span></li>`).join('') || '<li class="text-[9px] text-slate-700 italic font-bold uppercase tracking-widest text-center py-2">No signals detected.</li>';
         const cardId = `card-details-${tk.replace(/\W/g,'_')}`;
         const _base = tk.split('.')[0].toUpperCase();
@@ -1853,7 +2069,12 @@
         return `<div class="glass p-5 border-t-2 transition-all hover:shadow-2xl" data-sector="${cardSector}" data-region="${cardRegion}" style="border-top-color: ${c}">
           <div class="flex justify-between mb-3">
             <div>
-              <div class="flex items-center gap-2 mb-1.5"><span class="text-[10px] font-black px-2 py-0.5 rounded shadow-sm" style="background:${c}22;color:${c}">${tk}</span><span class="text-[9px] font-black px-2 py-0.5 rounded border shadow-sm ${b.cls}">${b.text}</span></div>
+              <div class="flex items-center gap-2 mb-1.5 flex-wrap">
+                <span class="text-[10px] font-black px-2 py-0.5 rounded shadow-sm" style="background:${c}22;color:${c}">${displayTicker}</span>
+                ${acctType ? `<span class="text-[8px] font-black px-1.5 py-0.5 rounded border ${acctBadgeCls} uppercase">${acctType}</span>` : ''}
+                <span class="text-[9px] font-black px-2 py-0.5 rounded border shadow-sm ${b.cls}">${b.text}</span>
+                ${actInstr ? `<span class="text-[8px] font-black px-2 py-0.5 rounded border ${actBadgeCls} uppercase whitespace-nowrap">${actInstr}</span>` : ''}
+              </div>
               <div class="font-bold text-sm text-slate-200 line-clamp-2 leading-tight">${asset.name}</div>
               <p class="text-[9px] text-slate-600 font-black uppercase mt-0.5">${asset.sector !== 'N/A' ? asset.sector : ''} · ${asset.currency}</p>
             </div>
@@ -1861,16 +2082,6 @@
               <div class="text-lg font-black tnum text-slate-100">${fmt(asset.price, 'currency', asset.currency)}</div>
               <p class="text-[8px] font-black ${safetyClr} uppercase tracking-tighter mt-0.5">Safety ${safety}/100</p>
               <p class="text-[8px] ${safetyClr} font-bold">${safetyHint}</p>
-            </div>
-          </div>
-          <div class="grid grid-cols-2 gap-1.5 text-xs mb-2">
-            <div class="bg-slate-900/50 p-2 rounded border border-slate-800">
-              <p class="text-slate-600 text-[8px] font-black uppercase">Qty / Value</p>
-              <p class="text-[10px] font-black text-slate-200">${asset.quantity} · ${fmt(asset.value, 'currency', p.currency)}</p>
-            </div>
-            <div class="bg-slate-900/50 p-2 rounded border border-slate-800">
-              <p class="text-slate-600 text-[8px] font-black uppercase">Risk Contrib</p>
-              <p class="text-[10px] font-black text-slate-200">${asset.risk_contribution_pct}% of vol</p>
             </div>
           </div>
           <button onclick="const d=document.getElementById('${cardId}');const open=!d.classList.contains('hidden');d.classList.toggle('hidden');this.innerHTML=open?'▼ <span>Show Details</span>':'▲ <span>Hide Details</span>'" class="w-full flex items-center justify-center gap-1 py-1.5 text-[8px] font-black uppercase tracking-widest text-slate-600 hover:text-indigo-400 border border-slate-800 hover:border-indigo-500/40 rounded-lg transition-all mb-1">▼ <span>Show Details</span></button>
@@ -2049,6 +2260,241 @@
         : '';
 
       document.getElementById('blueprint-actions').innerHTML = actionCards + exportBtn;
+    }
+
+    function showAdvisorTooltip(tk, strat, score, action, why, evidenceStr, report) {
+      const evidence = JSON.parse(evidenceStr);
+      document.getElementById('advisor-modal-title').textContent = `${tk} Analysis`;
+      document.getElementById('advisor-modal-action').textContent = action;
+      document.getElementById('advisor-modal-why').textContent = why;
+      document.getElementById('advisor-modal-report').textContent = report;
+      
+      const evidenceEl = document.getElementById('advisor-modal-evidence');
+      evidenceEl.innerHTML = Object.entries(evidence).map(([k, v]) => `
+        <div class="bg-slate-950/50 p-2 rounded-lg border border-slate-800/50">
+          <p class="text-[7px] text-slate-600 font-black uppercase mb-0.5">${k.replace('_', ' ')}</p>
+          <p class="text-[10px] font-black text-slate-300 font-mono">${v}</p>
+        </div>
+      `).join('');
+      
+      // Pivot suggestion logic
+      const suggestBox = document.getElementById('advisor-modal-suggestion-box');
+      const suggestEl = document.getElementById('advisor-modal-suggestion');
+      
+      if (score < 60) {
+        suggestBox.classList.remove('hidden');
+        if (strat === 'Volatility') suggestEl.textContent = "Current position is weak in this regime. Consider rotating to VIXL.L (VIX Futures) for volatility-linked gains.";
+        else if (strat === 'Mean Reversion') suggestEl.textContent = "Current position lacks snap-back momentum. I500.L (S&P 500 Swap) offers a cleaner play on mean reversion.";
+        else suggestEl.textContent = "Strategy score is low. Rotate to IGLN.L (Physical Gold) to preserve capital during high-VIX Contraction.";
+      } else {
+        suggestBox.classList.add('hidden');
+      }
+      
+      document.getElementById('advisor-modal').classList.remove('hidden');
+    }
+
+    function renderQuantExecutionReport(advisorData) {
+      if (!advisorData) return;
+      const { cycle_indicator, vix, act_now, scores } = advisorData;
+      
+      // 1. Macro Check
+      const priorityStrategy = cycle_indicator === 'Contraction' ? 'Volatility Defense & Mean Reversion' : 'Momentum & Trend Following';
+      const regimeHtml = `
+        <div class="glass p-6 border-l-4 border-emerald-500">
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-full bg-emerald-950/50 border border-emerald-500/30 flex items-center justify-center text-xl">🛡️</div>
+            <div>
+              <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Regime Check</p>
+              <p class="text-lg font-black text-white uppercase">${cycle_indicator} (VIX: ${vix})</p>
+              <p class="text-xs font-bold text-emerald-400 mt-1">Priority Strategy: ${priorityStrategy}</p>
+            </div>
+          </div>
+        </div>
+      `;
+
+      // 2. Unified Matrix Table — with ACT NOW badges merged inline
+      const actNowSet = new Set(act_now.map(item => item.ticker));
+      const actNowMap = {};
+      act_now.forEach(item => { actNowMap[item.ticker] = item; });
+
+      const rows = Object.entries(scores).map(([tk, logic]) => {
+        const ev = logic.evidence;
+        const ticker = tk.split('_')[0];
+        const acct = tk.includes('_') ? tk.split('_').slice(1).join('_') : '';
+        const acctColors = { ISA: 'text-emerald-400 bg-emerald-950/30 border-emerald-800', GIA: 'text-amber-400 bg-amber-950/30 border-amber-800', SIPP: 'text-indigo-400 bg-indigo-950/30 border-indigo-800' };
+        const acctCls = acctColors[acct] || 'text-slate-500 bg-slate-900/30 border-slate-800';
+        const sentClr = ev.sentiment > 0.3 ? 'text-emerald-400' : ev.sentiment < -0.3 ? 'text-red-400' : 'text-slate-400';
+        const exStatus = logic.exhaustion_status || ev.exhaustion || 'Neutral';
+        const exClr = exStatus === 'Bull Trap' || exStatus === 'Blow-off Top' ? 'text-red-500' : exStatus === 'Deep Exhaustion' || exStatus === 'Oversold' ? 'text-emerald-500' : exStatus === 'Overextended' ? 'text-amber-400' : 'text-slate-500';
+        const actInstr = logic.action_instruction || 'HOLD';
+        const actClr = actInstr.startsWith('BUY') ? 'text-emerald-400 bg-emerald-950/40 border-emerald-700' : actInstr.startsWith('HEDGE') || actInstr.startsWith('TRIM') ? 'text-red-400 bg-red-950/40 border-red-700' : 'text-slate-400 bg-slate-900/40 border-slate-700';
+        const prob = logic.probability || '50%';
+        const probNum = parseInt(prob);
+        const probClr = probNum >= 80 ? 'text-emerald-400 font-black' : probNum >= 60 ? 'text-amber-400' : 'text-slate-500';
+        const atrPct = ev.atr_pct != null ? ev.atr_pct.toFixed(2) + '%' : '—';
+        const rowBorder = actInstr.startsWith('BUY') ? 'border-l-2 border-l-emerald-500' : actInstr.startsWith('HEDGE') || actInstr.startsWith('TRIM') ? 'border-l-2 border-l-red-500' : 'border-l-2 border-l-slate-700';
+        const isActNow = actNowSet.has(tk);
+        const actNowBadge = isActNow ? ' <span class="ml-1 px-1.5 py-0.5 text-[7px] font-black uppercase rounded bg-fuchsia-950/50 text-fuchsia-400 border border-fuchsia-500/40 animate-pulse">⚡ Act Now</span>' : '';
+        const rowId = `exec-detail-${tk.replace(/[^a-zA-Z0-9]/g, '_')}`;
+
+        let detailRow = '';
+        if (isActNow) {
+          const actNowItem = actNowMap[tk];
+          const report = logic.detailed_advisor_report || '';
+          const action = actNowItem?.action || actInstr;
+          detailRow = `
+            <tr id="${rowId}" class="hidden bg-fuchsia-950/10 border-l-2 border-l-fuchsia-500">
+              <td colspan="9" class="px-4 py-3">
+                <div class="flex items-start gap-3">
+                  <div class="w-6 h-6 mt-0.5 rounded-full bg-fuchsia-950/50 border border-fuchsia-500/30 flex items-center justify-center text-xs flex-shrink-0">⚡</div>
+                  <div class="flex-1 min-w-0">
+                    <p class="text-[9px] font-black text-fuchsia-400 uppercase tracking-widest mb-1">72-Hour Action — ${action}</p>
+                    <p class="text-[11px] text-slate-300 leading-relaxed">${report}</p>
+                  </div>
+                </div>
+              </td>
+            </tr>
+          `;
+        }
+
+        return `
+          <tr class="${rowBorder} hover:bg-slate-900/20 transition-colors text-[11px] ${isActNow ? 'cursor-pointer' : ''}" ${isActNow ? `onclick="document.getElementById('${rowId}').classList.toggle('hidden')"` : ''}>
+            <td class="py-3 pl-3 font-mono font-bold text-slate-200">${ticker}${actNowBadge}</td>
+            <td class="py-3">${acct ? `<span class="text-[8px] font-black px-1.5 py-0.5 rounded border ${acctCls} uppercase">${acct}</span>` : ''}</td>
+            <td class="py-3"><span class="px-2 py-0.5 rounded text-[8px] font-black border uppercase whitespace-nowrap ${actClr}">${actInstr}</span></td>
+            <td class="py-3 text-right font-mono text-slate-400">${ev.rsi}</td>
+            <td class="py-3 text-right font-mono text-slate-500">${atrPct}</td>
+            <td class="py-3 text-right font-mono ${sentClr}">${ev.sentiment > 0 ? '+' : ''}${ev.sentiment}</td>
+            <td class="py-3 text-right"><span class="font-black text-[9px] uppercase ${exClr}">${exStatus}</span></td>
+            <td class="py-3 text-right font-mono ${probClr}">${prob}</td>
+            <td class="py-3 text-right pr-3 font-black text-emerald-500 uppercase text-[9px]">${logic.logic_tag || 'Standard'}</td>
+          </tr>
+          ${detailRow}
+        `;
+      }).join('');
+
+      const tableHtml = `
+        <div class="glass overflow-hidden border-t-2 border-slate-800">
+          <div class="p-4 flex items-center justify-between border-b border-slate-800">
+            <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Unified Execution Matrix</p>
+            ${act_now.length ? `<span class="text-[8px] font-black px-2 py-0.5 rounded-full bg-fuchsia-950/40 text-fuchsia-400 border border-fuchsia-500/30">${act_now.length} Act-Now Signal${act_now.length > 1 ? 's' : ''}</span>` : ''}
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead>
+                <tr class="text-slate-600 bg-slate-900/40 text-[9px]">
+                  <th class="py-3 pl-3 font-black uppercase">Asset</th>
+                  <th class="py-3 font-black uppercase">Acct</th>
+                  <th class="py-3 font-black uppercase">Action</th>
+                  <th class="py-3 font-black uppercase text-right">RSI</th>
+                  <th class="py-3 font-black uppercase text-right">ATR</th>
+                  <th class="py-3 font-black uppercase text-right">Sent.</th>
+                  <th class="py-3 font-black uppercase text-right">Exhaustion</th>
+                  <th class="py-3 font-black uppercase text-right">Conv.</th>
+                  <th class="py-3 font-black uppercase text-right pr-3 text-emerald-400">Logic</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-800/30">
+                ${rows}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('quant-execution-content').innerHTML = regimeHtml + tableHtml;
+    }
+
+    function renderApexAdvisor(advisorData) {
+      if (!advisorData) return;
+      
+      const { cycle_indicator, vix, act_now, scores, watchlist } = advisorData;
+      
+      const cycleColors = {
+        "Contraction": "text-red-500",
+        "Trough": "text-orange-500",
+        "Expansion": "text-emerald-500",
+        "Peak": "text-amber-500"
+      };
+      const cycleClr = cycleColors[cycle_indicator] || "text-slate-300";
+      
+      // Cycle Indicator UI
+      let cycleHtml = `
+        <div class="glass p-6 border-t-2 border-fuchsia-500/40 hover:bg-slate-900/20 transition-colors h-full">
+          <p class="text-xs font-bold text-slate-500 uppercase mb-1">Macro Regime Cycle</p>
+          <p class="text-[10px] text-slate-600 mb-4">Based on SPY 200MA and ^VIX (${vix})</p>
+          <div class="flex flex-col items-center justify-center mt-6">
+            <div class="text-3xl font-black ${cycleClr} uppercase tracking-widest animate-pulse">${cycle_indicator}</div>
+            <p class="text-[10px] font-bold text-slate-500 mt-2 uppercase tracking-widest">Current Status: High Fear (VIX > 25)</p>
+            <div class="mt-6 p-3 bg-slate-950/50 rounded-lg border border-slate-800 text-[10px] text-slate-400 leading-relaxed italic">
+              Strategy Focus: Volatility Defense & Mean Reversion. Prioritizing capital preservation over momentum ride.
+            </div>
+          </div>
+        </div>
+      `;
+      
+      // Act Now List
+      let actNowCards = act_now.map(item => {
+        const fullLogic = scores[item.ticker];
+        return `
+        <div class="p-4 bg-fuchsia-950/10 rounded-xl border border-fuchsia-500/20 mb-4 hover:border-fuchsia-500/40 transition-all">
+          <div class="flex justify-between items-start mb-2">
+            <div>
+              <span class="text-sm font-black text-slate-200">${item.ticker}</span>
+              <p class="text-[9px] text-slate-500 uppercase font-bold mt-0.5">${item.strat} · <span class="text-emerald-400">${fullLogic.probability} Prob.</span></p>
+            </div>
+            <span class="text-[10px] font-black text-fuchsia-400 bg-fuchsia-900/20 px-2 py-1 rounded border border-fuchsia-900/50 uppercase">${fullLogic.score}/100</span>
+          </div>
+          <p class="text-[10px] text-slate-400 leading-relaxed mb-3">${fullLogic.reasoning}</p>
+          <div class="p-2 bg-fuchsia-500/10 rounded border border-fuchsia-500/30 text-center">
+            <span class="text-[10px] font-black text-white uppercase">${fullLogic.action_instruction}</span>
+          </div>
+        </div>`;
+      }).join('');
+      
+      if (!act_now.length) {
+        actNowCards = '<p class="text-xs text-slate-500 italic mt-4 text-center">No high-conviction signals at this time.</p>';
+      }
+      
+      let actNowHtml = `
+        <div class="glass p-6 border-l-4 border-fuchsia-500 h-full">
+          <p class="text-xs font-bold text-slate-500 uppercase mb-1">"Act Now" Opportunities</p>
+          <p class="text-[10px] text-slate-600 mb-4">High Conviction Trades Triggered</p>
+          <div class="mt-4">
+            ${actNowCards}
+          </div>
+        </div>
+      `;
+      
+      // Global Watchlist Suggestions
+      const highWatchlist = Object.entries(watchlist)
+        .filter(([tk, data]) => data.score > 70)
+        .sort((a, b) => b[1].score - a[1].score)
+        .slice(0, 3);
+        
+      let watchlistHtml = `
+        <div class="glass p-6 border-t-2 border-indigo-500/40 h-full">
+          <p class="text-xs font-bold text-slate-500 uppercase mb-1">External Suggestion Pivot</p>
+          <p class="text-[10px] text-slate-600 mb-4">Alpha generation beyond current holdings</p>
+          <div class="mt-4 space-y-4">
+            ${highWatchlist.map(([tk, data]) => `
+              <div class="p-3 bg-indigo-950/10 rounded-lg border border-indigo-500/20 hover:border-indigo-500/40 transition-all">
+                <div class="flex justify-between items-center mb-2">
+                  <p class="text-xs font-black text-slate-200">${tk}</p>
+                  <span class="text-[9px] font-black text-indigo-400">${data.probability} Prob.</span>
+                </div>
+                <p class="text-[9px] text-slate-500 leading-relaxed mb-2">${data.reasoning}</p>
+                <p class="text-[9px] text-indigo-300 font-bold mb-2 italic">Advantage: ${data.comparative_advantage}</p>
+                <div class="p-1.5 bg-indigo-500/10 rounded border border-indigo-500/30 text-center">
+                  <span class="text-[9px] font-black text-white uppercase">${data.action_instruction}</span>
+                </div>
+              </div>
+            `).join('') || '<p class="text-[10px] text-slate-700 italic">Scanning global markets...</p>'}
+          </div>
+        </div>
+      `;
+
+      document.getElementById('apex-advisor-content').innerHTML = cycleHtml + actNowHtml + watchlistHtml;
     }
 
     // ── Dividend Calendar ───────────────────────────────────────────────────
@@ -2334,9 +2780,9 @@
 
       // Cache live prices for unrealized gain calculation
       quotes.forEach(q => { if (q.price > 0) _lastQuotes[q.ticker] = q.price; });
-      updateLedgerUnrealized();
       renderAccountValueBanners();
       renderAccountHoldings();
+      updatePnlUnrealized();
     }
 
 
@@ -2356,44 +2802,6 @@
       if (subNavEl)   subNavEl.style.top   = (headerH + tickerH + deskH) + 'px';
     }
     window.addEventListener('resize', updateStickyTops);
-// 1. Global State Object to persist data between desk switches
-window.vesperGlobal = {
-    holdings: {},    // Map of Ticker_Account -> Qty
-    prices: {},      // Cached live prices
-    currentView: 'intelligence'
-};
-// 2. The Amnesia-Proof Switcher
-function switchDesk(desk) {
-    window.vesperGlobal.currentView = desk;
-    
-    // Toggle views using CSS 'hidden' class to preserve DOM state
-    document.getElementById('intelligence-view').classList.toggle('hidden', desk !== 'intelligence');
-    document.getElementById('ledger-view').classList.toggle('hidden', desk !== 'ledger');
-    
-    // Update tab styling
-    document.getElementById('desk-tab-intelligence').classList.toggle('active', desk === 'intelligence');
-    document.getElementById('desk-tab-ledger').classList.toggle('active', desk === 'ledger');
-    
-    // Sub-nav should only show on intelligence desk if we have results
-    const hasResults = !document.getElementById('results-section').classList.contains('hidden');
-    document.getElementById('sub-nav').classList.toggle('hidden', !(desk === 'intelligence' && hasResults));
-    
-    updateStickyTops();
-}
-
-// 3. Unified Data Sync (Call this after any CSV upload or manual change)
-function syncGlobalHoldings() {
-    const rows = document.querySelectorAll('#ticker-rows > div');
-    rows.forEach(row => {
-        const tk = row.querySelector('.ticker-input')?.value.trim().toUpperCase();
-        const qty = parseFloat(row.querySelector('.qty-input')?.value) || 0;
-        const acct = row.querySelector('.account-type-select')?.value || 'ISA';
-        if (tk && qty > 0) {
-            window.vesperGlobal.holdings[`${tk}_${acct}`] = qty;
-        }
-    });
-}
-
     function setIntelFilter(acct) {
       _intelAcctFilter = acct;
       const label = acct === 'all' ? 'All Portfolio' : acct;
@@ -2411,504 +2819,13 @@ function syncGlobalHoldings() {
       pollHealth();
     });
 
-    // ── Transaction Ledger ────────────────────────────────────────────────────
 
-    async function handleTransactionUpload(file) {
-      if (!file || !file.name.toLowerCase().endsWith('.csv')) {
-        showToast('File must be a .csv', 'error'); return;
-      }
-      const accountType = document.getElementById('ledger-account-select').value;
-      document.getElementById('ledger-upload-icon').textContent = '⏳';
-      document.getElementById('ledger-upload-label').textContent = 'Parsing transactions…';
-
-      let text;
-      try { text = await file.text(); }
-      catch(e) {
-        text = await new Promise((res, rej) => {
-          const r = new FileReader();
-          r.onload = e => res(e.target.result);
-          r.onerror = rej;
-          r.readAsText(file);
-        });
-      }
-
-      // Optional Firebase token — if absent, backend processes CSV-only (local mode)
-      let idToken = '';
-      try { if (auth?.currentUser) idToken = await auth.currentUser.getIdToken(true); } catch(e) {}
-
-      try {
-        const resp = await fetch('/api/parse-transactions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ csv_text: text, account_type: accountType, id_token: idToken }),
-        });
-        if (!resp.ok) {
-          const err = await resp.json().catch(() => ({ detail: resp.statusText }));
-          throw new Error(err.detail || resp.statusText);
-        }
-        const data = await resp.json();
-
-        // ── Amnesia fix: accumulate per-account data in vesperState ──────────
-        // The server only returns the account just uploaded when Firebase is unavailable.
-        // vesperState preserves all previously uploaded accounts so switching from
-        // ISA → GIA upload doesn't wipe ISA data.
-        if (data.by_account) {
-          ['ISA', 'GIA', 'SIPP'].forEach(acct => {
-            if (data.by_account[acct]) window.vesperState[acct] = data.by_account[acct];
-          });
-          // Rebuild a proper 'all' view from all loaded accounts client-side
-          const consolidated = renderConsolidatedView();
-          data.by_account = Object.assign({}, data.by_account, window.vesperState);
-          if (consolidated) data.by_account.all = consolidated;
-        }
-
-        renderPerformanceDashboard(data);
-        const total = data.by_account?.all?.transaction_count || 0;
-        document.getElementById('ledger-upload-icon').textContent = '✅';
-        document.getElementById('ledger-upload-label').textContent = `${total} total transactions loaded`;
-        const saved = idToken
-          ? `${data.new_count ?? 0} saved to cloud. ${data.dup_count ?? 0} duplicates skipped.`
-          : `${accountType} parsed locally (no cloud sync — sign in to persist).`;
-        showToast(saved, 'success');
-        document.getElementById('ledger-file-input').value = '';
-      } catch(e) {
-        document.getElementById('ledger-upload-icon').textContent = '❌';
-        document.getElementById('ledger-upload-label').textContent = `Error: ${e.message}`;
-        showToast(`Ledger error: ${e.message}`, 'error');
-      }
-    }
-
-    /**
-     * Client-side merge of all accounts in window.vesperState → 'all' view.
-     * Mirrors the backend's _aggregate_analytics() so the 'All Accounts' tab
-     * is always correct even when Firebase is unavailable (local mode).
-     */
-    function renderConsolidatedView() {
-      const accounts = Object.values(window.vesperState).filter(a => a !== null);
-      if (accounts.length === 0) return null;
-      if (accounts.length === 1) return { ...accounts[0], account_type: 'all' };
-
-      // Merge open positions
-      const mergedPos = {};
-      accounts.forEach(a => {
-        Object.entries(a.open_positions || {}).forEach(([sym, p]) => {
-          if (!mergedPos[sym]) mergedPos[sym] = { qty: 0, cost: 0 };
-          mergedPos[sym].qty  += p.qty;
-          mergedPos[sym].cost += p.total_cost;
-        });
-      });
-      const open_positions = {};
-      Object.entries(mergedPos).forEach(([sym, p]) => {
-        if (p.qty > 0.001) {
-          open_positions[sym] = {
-            qty:        Math.round(p.qty  * 10000) / 10000,
-            avg_cost:   Math.round((p.cost / p.qty) * 10000) / 10000,
-            total_cost: Math.round(p.cost * 100)   / 100,
-          };
-        }
-      });
-
-      // Sum scalars
-      const r2 = v => Math.round(v * 100) / 100;
-      const total_paid_in               = accounts.reduce((s, a) => s + (a.total_paid_in               || 0), 0);
-      const total_earnings              = accounts.reduce((s, a) => s + (a.total_earnings              || 0), 0);
-      const total_personal_contribution = accounts.reduce((s, a) => s + (a.total_personal_contribution || 0), 0);
-      const transaction_count           = accounts.reduce((s, a) => s + (a.transaction_count           || 0), 0);
-      const total_book_cost             = Object.values(open_positions).reduce((s, p) => s + p.total_cost, 0);
-      const all_time_ror                = total_paid_in > 0 ? total_earnings / total_paid_in * 100 : 0;
-
-      // Merge by-year maps
-      function sumByYear(...dicts) {
-        const out = {};
-        dicts.forEach(d => Object.entries(d || {}).forEach(([yr, v]) => { out[yr] = (out[yr] || 0) + v; }));
-        return out;
-      }
-      const all_cg = sumByYear(...accounts.map(a => a.capital_gains?.by_year  || {}));
-      const all_dv = sumByYear(...accounts.map(a => a.dividends?.by_year      || {}));
-      const all_in = sumByYear(...accounts.map(a => a.interest?.by_year       || {}));
-      const curYr  = String(new Date().getFullYear());
-
-      // Merge cash timelines and sort
-      const cash_timeline = accounts.flatMap(a => a.cash_timeline || [])
-        .sort((a, b) => a.date.localeCompare(b.date));
-
-      // Merge yearly summaries
-      const allYears = new Set(accounts.flatMap(a => Object.keys(a.yearly || {})));
-      const yearly = {};
-      [...allYears].sort().forEach(yr => {
-        const g = accounts.reduce((s, a) => s + (a.yearly?.[yr]?.realized_gains || 0), 0);
-        const d = accounts.reduce((s, a) => s + (a.yearly?.[yr]?.dividends      || 0), 0);
-        const i = accounts.reduce((s, a) => s + (a.yearly?.[yr]?.interest       || 0), 0);
-        yearly[yr] = { realized_gains: r2(g), dividends: r2(d), interest: r2(i),
-                       net_profit: r2(g + d + i), ror: 0, top_3_holdings: [] };
-      });
-
-      return {
-        account_type:                'all',
-        total_paid_in:               r2(total_paid_in),
-        total_earnings:              r2(total_earnings),
-        all_time_ror:                r2(all_time_ror),
-        total_book_cost:             r2(total_book_cost),
-        total_personal_contribution: r2(total_personal_contribution),
-        capital_gains: {
-          ytd: r2(all_cg[curYr] || 0),
-          total: r2(Object.values(all_cg).reduce((s, v) => s + v, 0)),
-          by_year: all_cg,
-        },
-        dividends: { total: r2(Object.values(all_dv).reduce((s, v) => s + v, 0)), by_year: all_dv },
-        interest:  { total: r2(Object.values(all_in).reduce((s, v) => s + v, 0)), by_year: all_in },
-        open_positions,
-        cash_timeline,
-        yearly,
-        transaction_count,
-      };
-    }
-
-    // ── Performance Dashboard ──────────────────────────────────────────────
-
-    let _ledgerData = null;
-
-    function calculateTotalPortfolio() {
-      // Returns the current 'all accounts' view.
-      // renderConsolidatedView() keeps it fresh after every upload in local mode.
-      return _ledgerData?.by_account?.all || renderConsolidatedView() || null;
-    }
-
-    function renderPerformanceDashboard(data) {
-      _ledgerData = data;
-      const total = data.by_account?.all?.transaction_count || 0;
-      document.getElementById('perf-tx-badge').textContent = `${total} transactions`;
-      // Show/hide tabs based on data presence
-      ['ISA', 'GIA', 'SIPP'].forEach(acct => {
-        const btn = document.querySelector(`[data-tab="${acct}"]`);
-        const hasData = (data.by_account?.[acct]?.transaction_count || 0) > 0;
-        if (btn) btn.style.display = hasData ? '' : 'none';
-      });
-      document.getElementById('performance-metrics').classList.remove('hidden');
-      switchLedgerTab('all');
-
-      // Show open positions panel
-      document.getElementById('ledger-panel').classList.remove('hidden');
-      document.getElementById('ledger-tx-badge').textContent = `${total} transactions`;
-      const deskBadge = document.getElementById('ledger-desk-tx-badge');
-      if (deskBadge) deskBadge.textContent = `${total} transactions`;
-      updateLedgerUnrealized(); // always runs now — no legacy crash before it
-    }
-
-    function switchLedgerTab(account) {
-      document.querySelectorAll('.ledger-tab').forEach(t =>
-        t.classList.toggle('active', t.dataset.tab === account));
-      _activeLedgerTab = account;
-      const d = _ledgerData?.by_account?.[account];
-      if (!d) return;
-      renderTopCards(d);
-      renderRealUnreal(d);
-      renderEarningsBar(d);
-      renderYearTable(d);
-      renderLedgerSummaryCards(d);
-      renderOpenPositionsTable(d);
-      renderFundingTimeline(d);
-    }
-
-    function renderTopCards(d) {
-      const fmt = v => '£' + Number(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      const rorColor  = d.all_time_ror >= 0 ? 'text-emerald-400' : 'text-red-400';
-      const rorBorder = d.all_time_ror >= 0 ? 'border-emerald-500/40' : 'border-red-500/40';
-      const ytd = d.capital_gains?.ytd || 0;
-      const ytdColor = ytd >= 0 ? 'text-emerald-500' : 'text-red-400';
-      document.getElementById('perf-top-cards').innerHTML = `
-        <div class="glass p-5 border-t-2 border-indigo-500/40">
-          <div class="text-2xl mb-1">💷</div>
-          <div class="text-2xl font-black text-slate-200 font-mono">${fmt(d.total_paid_in)}</div>
-          <p class="text-xs font-bold text-slate-500 uppercase mt-1">Net Capital Deployed</p>
-          <p class="text-[10px] text-slate-600 mt-1">Buys minus sell proceeds (no double-counting)</p>
-        </div>
-        <div class="glass p-5 border-t-2 border-emerald-500/40">
-          <div class="text-2xl mb-1">📊</div>
-          <div class="text-2xl font-black text-emerald-400 font-mono">${fmt(d.total_earnings)}</div>
-          <p class="text-xs font-bold text-slate-500 uppercase mt-1">Total Realized Earnings</p>
-          <div class="mt-2 pt-2 border-t border-slate-800/60 flex justify-between text-[10px]">
-            <span class="text-slate-500">YTD realized gains</span>
-            <span class="font-mono font-bold ${ytdColor}">${ytd >= 0 ? '+' : ''}${fmt(ytd)}</span>
-          </div>
-        </div>
-        <div class="glass p-5 border-t-2 ${rorBorder}">
-          <div class="text-2xl mb-1">📈</div>
-          <div class="text-2xl font-black ${rorColor} font-mono">${d.all_time_ror >= 0 ? '+' : ''}${d.all_time_ror.toFixed(2)}%</div>
-          <p class="text-xs font-bold text-slate-500 uppercase mt-1">All-Time Rate of Return</p>
-          <p class="text-[10px] text-slate-600 mt-1">Total realized earnings ÷ net capital</p>
-        </div>
-      `;
-    }
-
-    function renderRealUnreal(d) {
-      const el = document.getElementById('perf-realunreal');
-      const realized = d.total_earnings || 0;
-      // Compute live unrealized from _lastQuotes; fall back to backend value
-      const pos = d.open_positions || {};
-      let liveEquity = 0, hasAny = false;
-      Object.entries(pos).forEach(([sym, p]) => {
-        const lp = _livePrice(sym);
-        if (lp !== null) { liveEquity += lp * p.qty; hasAny = true; }
-        else if (p.market_value !== undefined) { liveEquity += p.market_value; hasAny = true; }
-      });
-      const bookCost = d.total_book_cost ??
-        Object.values(pos).reduce((s, p) => s + (p.total_cost || 0), 0);
-      const unrealized = hasAny ? liveEquity - bookCost : (d.unrealized_total ?? null);
-      if (unrealized === null) { el.classList.add('hidden'); return; }
-      el.classList.remove('hidden');
-      const fmt = v => '£' + Number(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      const total = realized + unrealized;
-      const rCls = realized   >= 0 ? 'text-emerald-400' : 'text-red-400';
-      const uCls = unrealized >= 0 ? 'text-emerald-400' : 'text-red-400';
-      const tCls = total      >= 0 ? 'text-emerald-400' : 'text-red-400';
-      el.innerHTML = `
-        <p class="text-xs font-bold text-slate-500 uppercase mb-3">Realized vs Unrealized Gains</p>
-        <div class="grid grid-cols-3 gap-4 text-center">
-          <div>
-            <div class="text-lg font-black font-mono ${rCls}">${realized >= 0 ? '+' : ''}${fmt(realized)}</div>
-            <p class="text-[10px] font-bold text-slate-500 uppercase mt-1">Realized (all-time)</p>
-          </div>
-          <div class="border-x border-slate-800">
-            <div class="text-lg font-black font-mono ${uCls}">${unrealized >= 0 ? '+' : ''}${fmt(unrealized)}</div>
-            <p class="text-[10px] font-bold text-slate-500 uppercase mt-1">Unrealized (open)</p>
-          </div>
-          <div>
-            <div class="text-lg font-black font-mono ${tCls}">${total >= 0 ? '+' : ''}${fmt(total)}</div>
-            <p class="text-[10px] font-bold text-slate-500 uppercase mt-1">Total P&amp;L</p>
-          </div>
-        </div>
-      `;
-    }
-
-    async function clearLedger() {
-      const acct = document.getElementById('clear-account-select').value;
-      const label = acct || 'ALL accounts';
-      if (!confirm(`Delete all saved transactions for ${label}? This cannot be undone.`)) return;
-      try {
-        const user = auth?.currentUser;
-        if (!user) { showToast('Please sign in first.', 'error'); return; }
-        const token = await user.getIdToken();
-        const url = acct ? `/api/clear-ledger?account_type=${acct}` : '/api/clear-ledger';
-        const resp = await fetch(url, {
-          method: 'DELETE',
-          headers: { 'Authorization': `Bearer ${token}` },
-        });
-        if (!resp.ok) throw new Error((await resp.json().catch(() => ({}))).detail || resp.statusText);
-        const { deleted } = await resp.json();
-        showToast(`Cleared ${deleted} transactions${acct ? ` from ${acct}` : ''}.`, 'success');
-        // Reset UI
-        _ledgerData = null;
-        document.getElementById('performance-metrics').classList.add('hidden');
-        document.getElementById('ledger-panel').classList.add('hidden');
-        document.getElementById('ledger-upload-icon').textContent = '📂';
-        document.getElementById('ledger-upload-label').textContent = 'Drop broker transaction CSV to unlock P&L';
-      } catch(e) {
-        showToast(`Clear failed: ${e.message}`, 'error');
-      }
-    }
-
-    function renderEarningsBar(d) {
-      const gains = d.capital_gains?.total || 0;
-      const divs  = d.dividends?.total    || 0;
-      const ints  = d.interest?.total     || 0;
-      const total = gains + divs + ints;
-      const el = document.getElementById('perf-breakdown');
-      if (total <= 0) { el.classList.add('hidden'); return; }
-      el.classList.remove('hidden');
-      const pct = v => ((v / total) * 100).toFixed(1);
-      const fmt = v => '£' + Number(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      el.innerHTML = `
-        <p class="text-xs font-bold text-slate-500 uppercase mb-3">Earnings Breakdown</p>
-        <div class="flex rounded-lg overflow-hidden h-6 mb-3" style="gap:2px">
-          ${gains > 0 ? `<div style="width:${pct(gains)}%" class="bg-emerald-500 transition-all" title="Capital Gains ${pct(gains)}%"></div>` : ''}
-          ${divs  > 0 ? `<div style="width:${pct(divs)}%"  class="bg-blue-500 transition-all"    title="Dividends ${pct(divs)}%"></div>` : ''}
-          ${ints  > 0 ? `<div style="width:${pct(ints)}%"  class="bg-violet-500 transition-all"  title="Interest ${pct(ints)}%"></div>` : ''}
-        </div>
-        <div class="flex flex-wrap gap-4 text-[10px]">
-          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block"></span>
-            <span class="font-bold text-slate-400">Capital Gains</span>
-            <span class="font-mono text-slate-300">${fmt(gains)} (${pct(gains)}%)</span></span>
-          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-blue-500 inline-block"></span>
-            <span class="font-bold text-slate-400">Dividends</span>
-            <span class="font-mono text-slate-300">${fmt(divs)} (${pct(divs)}%)</span></span>
-          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-violet-500 inline-block"></span>
-            <span class="font-bold text-slate-400">Interest</span>
-            <span class="font-mono text-slate-300">${fmt(ints)} (${pct(ints)}%)</span></span>
-        </div>
-      `;
-    }
-
-    function renderYearTable(d) {
-      const yearly = d.yearly || {};
-      const years = Object.keys(yearly).sort().reverse();
-      const sect = document.getElementById('perf-year-section');
-      if (years.length === 0) { sect.classList.add('hidden'); return; }
-      sect.classList.remove('hidden');
-      const fmt = v => '£' + Number(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      const thisYear = String(new Date().getFullYear());
-      document.getElementById('perf-year-table').innerHTML = `
-        <table class="w-full text-xs min-w-[560px]">
-          <thead><tr class="text-[10px] font-bold text-slate-500 uppercase border-b border-slate-800">
-            <th class="text-left pb-2 pr-4">Year</th>
-            <th class="text-right pb-2 pr-4">RoR</th>
-            <th class="text-right pb-2 pr-4">Net Profit</th>
-            <th class="text-right pb-2 pr-4">Realized Gains</th>
-            <th class="text-right pb-2 pr-4">Dividends</th>
-            <th class="text-right pb-2 pr-4">Interest</th>
-            <th class="text-left pb-2">Top 3</th>
-          </tr></thead>
-          <tbody class="divide-y divide-slate-800/40">
-            ${years.map(yr => {
-              const y = yearly[yr];
-              const isYTD   = yr === thisYear;
-              const rorCls  = y.ror >= 0 ? 'text-emerald-400' : 'text-red-400';
-              const npCls   = y.net_profit >= 0 ? 'text-emerald-400' : 'text-red-400';
-              const top3    = (y.top_3_holdings || []).map(h => h.symbol).join(', ') || '—';
-              const rowCls  = isYTD ? 'bg-indigo-950/20' : '';
-              return `<tr class="${rowCls}">
-                <td class="py-2 pr-4 font-mono font-bold text-slate-200">
-                  ${yr}${isYTD ? ' <span class="text-[8px] font-black text-indigo-400 ml-1 align-middle">YTD</span>' : ''}
-                </td>
-                <td class="py-2 pr-4 text-right font-mono font-bold ${rorCls}">${y.ror !== 0 ? (y.ror >= 0 ? '+' : '') + y.ror.toFixed(2) + '%' : '—'}</td>
-                <td class="py-2 pr-4 text-right font-mono ${npCls}">${fmt(y.net_profit)}</td>
-                <td class="py-2 pr-4 text-right font-mono text-emerald-600">${fmt(y.realized_gains)}</td>
-                <td class="py-2 pr-4 text-right font-mono text-blue-400">${fmt(y.dividends)}</td>
-                <td class="py-2 pr-4 text-right font-mono text-violet-400">${fmt(y.interest)}</td>
-                <td class="py-2 text-slate-500 font-mono">${top3}</td>
-              </tr>`;
-            }).join('')}
-          </tbody>
-        </table>
-      `;
-    }
-
-    // ── Live-enriched Ledger Desk functions ──────────────────────────────────
-
-    function updateLedgerUnrealized() {
-      if (!_ledgerData) return;
-      const d = (_activeLedgerTab === 'all')
-        ? _ledgerData.by_account?.all
-        : _ledgerData.by_account?.[_activeLedgerTab];
-      if (!d) return;
-      renderLedgerSummaryCards(d);
-      renderOpenPositionsTable(d);
-    }
 
     function _livePrice(sym) {
       // Try exact match, then with .L suffix (for LSE tickers in II CSVs)
       if (_lastQuotes[sym] > 0) return _lastQuotes[sym];
       if (_lastQuotes[sym + '.L'] > 0) return _lastQuotes[sym + '.L'];
       return null;
-    }
-
-    function renderLedgerSummaryCards(d) {
-      const el = document.getElementById('ledger-summary-cards');
-      if (!el) return;
-      const fmt = v => '£' + Number(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      const pos = d.open_positions || {};
-
-      // Live equity value: prefer _lastQuotes, fall back to backend market_value
-      let liveEquity = 0, anyLive = false, anyFallback = false;
-      Object.entries(pos).forEach(([sym, p]) => {
-        const lp = _livePrice(sym);
-        if (lp !== null) { liveEquity += lp * p.qty; anyLive = true; }
-        else if (p.market_value !== undefined) { liveEquity += p.market_value; anyFallback = true; }
-      });
-
-      // Book cost: use backend field or compute from positions
-      const bookCost = d.total_book_cost ??
-        Object.values(pos).reduce((s, p) => s + (p.total_cost || 0), 0);
-
-      // Cash: prefer CSV-derived backend cash_balance; fall back to manual Intelligence tab inputs
-      const cash = d.cash_balance !== undefined && d.cash_balance > 0
-        ? d.cash_balance
-        : (() => {
-            const acct = _activeLedgerTab || 'all';
-            const cashISA  = parseFloat(document.getElementById('cash-isa')?.value)  || 0;
-            const cashGIA  = parseFloat(document.getElementById('cash-gia')?.value)  || 0;
-            const cashSIPP = parseFloat(document.getElementById('cash-sipp')?.value) || 0;
-            return acct === 'ISA' ? cashISA : acct === 'GIA' ? cashGIA : acct === 'SIPP' ? cashSIPP : cashISA + cashGIA + cashSIPP;
-          })();
-
-      const totalValue    = liveEquity + cash;
-      const unrealPnL     = liveEquity - bookCost;
-      const realizedGains = d.total_earnings || 0;
-
-      const uColor  = unrealPnL >= 0 ? 'text-emerald-400' : 'text-red-400';
-      const uBorder = unrealPnL >= 0 ? 'border-emerald-500/40' : 'border-red-500/40';
-      const rColor  = realizedGains >= 0 ? 'text-emerald-400' : 'text-red-400';
-      const priceTag = anyLive ? (anyFallback ? 'Mixed' : 'Live') : (anyFallback ? 'Stale' : '—');
-      const tagColor = anyLive ? 'text-emerald-500 bg-emerald-950/50 border-emerald-900/50'
-                               : 'text-amber-500 bg-amber-950/50 border-amber-900/50';
-
-      el.innerHTML = `
-        <div class="glass p-5 border-t-2 border-indigo-500/40">
-          <div class="flex items-start justify-between mb-1">
-            <span class="text-2xl">🏦</span>
-            <span class="text-[8px] font-black px-1.5 py-0.5 rounded ${tagColor} border uppercase">${priceTag}</span>
-          </div>
-          <div class="text-2xl font-black text-slate-200 font-mono">${fmt(totalValue)}</div>
-          <p class="text-xs font-bold text-slate-500 uppercase mt-1">Total Account Value</p>
-          <p class="text-[10px] text-slate-600 mt-1">Equities ${fmt(liveEquity)} + cash ${fmt(cash)}</p>
-        </div>
-        <div class="glass p-5 border-t-2 border-amber-500/40">
-          <div class="text-2xl mb-1">📋</div>
-          <div class="text-2xl font-black text-amber-400 font-mono">${fmt(bookCost)}</div>
-          <p class="text-xs font-bold text-slate-500 uppercase mt-1">Total Book Cost</p>
-          <p class="text-[10px] text-slate-600 mt-1">Cost basis of all open positions</p>
-        </div>
-        <div class="glass p-5 border-t-2 ${uBorder}">
-          <div class="text-2xl mb-1">📈</div>
-          <div class="text-2xl font-black ${uColor} font-mono">${unrealPnL >= 0 ? '+' : ''}${fmt(unrealPnL)}</div>
-          <p class="text-xs font-bold text-slate-500 uppercase mt-1">Unrealized P&amp;L</p>
-          <p class="text-[10px] text-slate-600 mt-1">Live equities − book cost</p>
-        </div>
-        <div class="glass p-5 border-t-2 border-emerald-500/40">
-          <div class="text-2xl mb-1">📊</div>
-          <div class="text-2xl font-black ${rColor} font-mono">${realizedGains >= 0 ? '+' : ''}${fmt(realizedGains)}</div>
-          <p class="text-xs font-bold text-slate-500 uppercase mt-1">Realized Gains</p>
-          <p class="text-[10px] text-slate-600 mt-1">Cap gains + dividends + interest</p>
-        </div>
-        ${d.total_personal_contribution > 0 ? `
-        <div class="glass p-5 border-t-2 border-indigo-500/30 col-span-full md:col-span-1">
-          <div class="text-2xl mb-1">💷</div>
-          <div class="text-2xl font-black text-indigo-300 font-mono">${fmt(d.total_personal_contribution)}</div>
-          <p class="text-xs font-bold text-slate-500 uppercase mt-1">Total Contributed</p>
-          <p class="text-[10px] text-slate-600 mt-1">Sum of all cash deposits &amp; transfers in</p>
-        </div>` : ''}
-      `;
-      el.classList.remove('hidden');
-    }
-
-    function renderFundingTimeline(d) {
-      const section = document.getElementById('funding-timeline-section');
-      const tbody   = document.getElementById('funding-timeline-body');
-      if (!section || !tbody) return;
-      const rows = d.cash_timeline || [];
-      if (!rows.length) { section.classList.add('hidden'); return; }
-      const fmt = v => '£' + Number(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      const OUTFLOW_TYPES = new Set(['Transfer Out', 'Withdrawal']);
-      tbody.innerHTML = rows.map(r => {
-        const isOut = OUTFLOW_TYPES.has(r.type);
-        return `<tr class="border-b border-slate-800/50">
-          <td class="py-2 text-slate-400 font-mono">${r.date}</td>
-          <td class="py-2 ${isOut ? 'text-red-400' : 'text-emerald-400'} font-bold">${r.type}</td>
-          <td class="py-2 text-right font-mono text-slate-200">${fmt(r.amount)}</td>
-        </tr>`;
-      }).join('');
-      // Show total personal contribution if available
-      const totalContrib = d.total_personal_contribution;
-      const contribEl = document.getElementById('funding-total-contrib');
-      if (contribEl) {
-        if (totalContrib > 0) {
-          contribEl.textContent = `Total Contributed: ${fmt(totalContrib)}`;
-          contribEl.classList.remove('hidden');
-        } else {
-          contribEl.classList.add('hidden');
-        }
-      }
-      section.classList.remove('hidden');
     }
 
     function renderAccountValueBanners() {
@@ -3006,137 +2923,561 @@ function syncGlobalHoldings() {
       el.style.display = 'block';
     }
 
-    function renderOpenPositionsTable(d) {
-      const el = document.getElementById('ledger-positions');
+    // ── P&L Desk ─────────────────────────────────────────────────────────────
+
+    let _ledgerData = null;
+    let _activePnlTab = 'all';
+
+    function switchDesk(desk) {
+      document.getElementById('intelligence-view').classList.toggle('hidden', desk !== 'intelligence');
+      document.getElementById('pnl-view').classList.toggle('hidden', desk !== 'pnl');
+      document.getElementById('desk-tab-intelligence').classList.toggle('active', desk === 'intelligence');
+      document.getElementById('desk-tab-pnl').classList.toggle('active', desk === 'pnl');
+      // Sub-nav only shows on intelligence desk when results exist
+      const hasResults = !document.getElementById('results-section').classList.contains('hidden');
+      document.getElementById('sub-nav').classList.toggle('hidden', !(desk === 'intelligence' && hasResults));
+      updateStickyTops();
+    }
+
+    function taxYear(dt) {
+      const d = dt instanceof Date ? dt : new Date(dt);
+      const y = d.getFullYear(), m = d.getMonth() + 1, day = d.getDate();
+      if (m > 4 || (m === 4 && day >= 6))
+        return `${y}/${String((y + 1) % 100).padStart(2, '0')}`;
+      return `${y - 1}/${String(y % 100).padStart(2, '0')}`;
+    }
+    function currentTaxYear() { return taxYear(new Date()); }
+
+    function togglePnlSection(bodyId) {
+      const body = document.getElementById(bodyId);
+      if (!body) return;
+      body.classList.toggle('hidden');
+      const toggleId = bodyId.replace('-body', '-toggle');
+      const toggle = document.getElementById(toggleId);
+      if (toggle) toggle.textContent = body.classList.contains('hidden') ? '▼' : '▲';
+    }
+
+    async function handleTransactionUpload(file) {
+      if (!file || !file.name.toLowerCase().endsWith('.csv')) {
+        showToast('File must be a .csv', 'error'); return;
+      }
+      const accountType = document.getElementById('pnl-account-select').value;
+      document.getElementById('pnl-upload-icon').textContent = '⏳';
+      document.getElementById('pnl-upload-label').textContent = 'Parsing transactions…';
+
+      let text;
+      try { text = await file.text(); }
+      catch(e) {
+        text = await new Promise((res, rej) => {
+          const r = new FileReader();
+          r.onload = e => res(e.target.result);
+          r.onerror = rej;
+          r.readAsText(file);
+        });
+      }
+
+      let idToken = '';
+      try { if (auth?.currentUser) idToken = await auth.currentUser.getIdToken(true); } catch(e) {}
+
+      try {
+        const resp = await fetch('/api/parse-transactions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ csv_text: text, account_type: accountType, id_token: idToken }),
+        });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+          throw new Error(err.detail || resp.statusText);
+        }
+        const data = await resp.json();
+
+        // ── Amnesia fix: accumulate per-account data in vesperState ──────────
+        if (data.by_account) {
+          ['ISA', 'GIA', 'SIPP'].forEach(acct => {
+            if (data.by_account[acct]) window.vesperState[acct] = data.by_account[acct];
+          });
+          // Rebuild a proper 'all' view from all loaded accounts client-side
+          const consolidated = renderConsolidatedView();
+          data.by_account = Object.assign({}, data.by_account, window.vesperState);
+          if (consolidated) data.by_account.all = consolidated;
+        }
+
+        renderPnlDashboard(data);
+        const total = data.by_account?.all?.transaction_count || 0;
+        document.getElementById('pnl-upload-icon').textContent = '✅';
+        document.getElementById('pnl-upload-label').textContent = `${total} total transactions loaded`;
+        const saved = idToken
+          ? `${data.new_count ?? 0} saved to cloud. ${data.dup_count ?? 0} duplicates skipped.`
+          : `${accountType} parsed locally (no cloud sync).`;
+        showToast(saved, 'success');
+        _setPnlSyncBadge(!!idToken);
+        document.getElementById('pnl-file-input').value = '';
+      } catch(e) {
+        document.getElementById('pnl-upload-icon').textContent = '❌';
+        document.getElementById('pnl-upload-label').textContent = `Error: ${e.message}`;
+        showToast(`P&L error: ${e.message}`, 'error');
+      }
+    }
+
+    function _setPnlSyncBadge(synced) {
+      let badge = document.getElementById('pnl-sync-badge');
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.id = 'pnl-sync-badge';
+        badge.className = 'text-[8px] font-black px-2 py-0.5 rounded uppercase ml-2';
+        const label = document.getElementById('pnl-upload-label');
+        if (label) label.parentNode.appendChild(badge);
+      }
+      if (synced) {
+        badge.className = 'text-[8px] font-black px-2 py-0.5 rounded uppercase ml-2 text-emerald-400 bg-emerald-950/30 border border-emerald-800';
+        badge.textContent = '☁ Cloud Synced';
+      } else {
+        badge.className = 'text-[8px] font-black px-2 py-0.5 rounded uppercase ml-2 text-amber-400 bg-amber-950/30 border border-amber-800';
+        badge.textContent = '⚠ Local Only';
+      }
+    }
+
+    async function loadLedgerFromFirestore() {
+      try {
+        const user = auth?.currentUser;
+        if (!user) return;
+        const token = await user.getIdToken();
+        const resp = await fetch('/api/load-ledger', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if ((data.by_account?.all?.transaction_count || 0) > 0) {
+          renderPnlDashboard(data);
+          _setPnlSyncBadge(true);
+        }
+      } catch(e) { console.warn('[P&L load]', e); }
+    }
+
+    async function clearLedger() {
+      if (!confirm('Delete all saved transaction data? This cannot be undone.')) return;
+      try {
+        const user = auth?.currentUser;
+        if (!user) { showToast('Please sign in first.', 'error'); return; }
+        const token = await user.getIdToken();
+        const resp = await fetch('/api/clear-ledger', {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!resp.ok) throw new Error((await resp.json().catch(() => ({}))).detail || resp.statusText);
+        const { deleted } = await resp.json();
+        showToast(`Cleared ${deleted} transactions.`, 'success');
+        _ledgerData = null;
+        // Reset UI
+        document.getElementById('pnl-summary-cards').classList.add('hidden');
+        document.getElementById('pnl-positions-section').classList.add('hidden');
+        document.getElementById('pnl-year-section').classList.add('hidden');
+        document.getElementById('pnl-disposal-section').classList.add('hidden');
+        document.getElementById('pnl-transfer-section').classList.add('hidden');
+        document.getElementById('pnl-dividend-section').classList.add('hidden');
+        document.getElementById('pnl-transfer-out-section').classList.add('hidden');
+        document.getElementById('pnl-upload-icon').textContent = '📂';
+        document.getElementById('pnl-upload-label').textContent = 'Drop broker transaction CSV to unlock P&L';
+        document.getElementById('pnl-desk-tx-badge').textContent = '—';
+      } catch(e) {
+        showToast(`Clear failed: ${e.message}`, 'error');
+      }
+    }
+
+    /**
+     * Client-side merge of all accounts in window.vesperState → 'all' view.
+     * Mirrors the backend's _aggregate_analytics() so the 'All Accounts' tab
+     * is always correct even when Firebase is unavailable (local mode).
+     */
+    function renderConsolidatedView() {
+      const accounts = Object.values(window.vesperState).filter(a => a !== null);
+      if (accounts.length === 0) return null;
+      if (accounts.length === 1) return { ...accounts[0], account_type: 'all' };
+
+      // Merge open positions (keep accounts separate via composite keys)
+      const open_positions = {};
+      accounts.forEach(a => {
+        const acct = a.account_type;
+        Object.entries(a.open_positions || {}).forEach(([sym, p]) => {
+          if (p.qty > 0.001) {
+            const key = `${sym}_${acct}`;
+            open_positions[key] = {
+              qty:        Math.round(p.qty  * 10000) / 10000,
+              avg_cost:   Math.round(p.avg_cost * 10000) / 10000,
+              total_cost: Math.round(p.total_cost * 100)   / 100,
+              account_type: acct,
+              symbol: sym
+            };
+          }
+        });
+      });
+
+      // Sum scalars
+      const r2 = v => Math.round(v * 100) / 100;
+      const total_paid_in               = accounts.reduce((s, a) => s + (a.total_paid_in               || 0), 0);
+      const total_earnings              = accounts.reduce((s, a) => s + (a.total_earnings              || 0), 0);
+      const total_personal_contribution = accounts.reduce((s, a) => s + (a.total_personal_contribution || 0), 0);
+      const transaction_count           = accounts.reduce((s, a) => s + (a.transaction_count           || 0), 0);
+      const total_book_cost             = Object.values(open_positions).reduce((s, p) => s + p.total_cost, 0);
+      const all_time_ror                = total_paid_in > 0 ? total_earnings / total_paid_in * 100 : 0;
+
+      // Merge by-year maps
+      function sumByYear(...dicts) {
+        const out = {};
+        dicts.forEach(d => Object.entries(d || {}).forEach(([yr, v]) => { out[yr] = (out[yr] || 0) + v; }));
+        return out;
+      }
+      const all_cg = sumByYear(...accounts.map(a => a.capital_gains?.by_year  || {}));
+      const all_dv = sumByYear(...accounts.map(a => a.dividends?.by_year      || {}));
+      const all_in = sumByYear(...accounts.map(a => a.interest?.by_year       || {}));
+      const curYr  = currentTaxYear();
+
+      // Merge cash timelines and sort
+      const cash_timeline = accounts.flatMap(a => a.cash_timeline || [])
+        .sort((a, b) => a.date.localeCompare(b.date));
+
+      // Merge yearly summaries
+      const allYears = new Set(accounts.flatMap(a => Object.keys(a.yearly || {})));
+      const yearly = {};
+      [...allYears].sort().forEach(yr => {
+        const g = accounts.reduce((s, a) => s + (a.yearly?.[yr]?.realized_gains || 0), 0);
+        const d = accounts.reduce((s, a) => s + (a.yearly?.[yr]?.dividends      || 0), 0);
+        const i = accounts.reduce((s, a) => s + (a.yearly?.[yr]?.interest       || 0), 0);
+        yearly[yr] = { realized_gains: r2(g), dividends: r2(d), interest: r2(i),
+                       net_profit: r2(g + d + i), ror: 0, top_3_holdings: [] };
+      });
+
+      return {
+        account_type:                'all',
+        total_paid_in:               r2(total_paid_in),
+        total_earnings:              r2(total_earnings),
+        all_time_ror:                r2(all_time_ror),
+        total_book_cost:             r2(total_book_cost),
+        total_personal_contribution: r2(total_personal_contribution),
+        capital_gains: {
+          ytd: r2(all_cg[curYr] || 0),
+          total: r2(Object.values(all_cg).reduce((s, v) => s + v, 0)),
+          by_year: all_cg,
+        },
+        dividends: { total: r2(Object.values(all_dv).reduce((s, v) => s + v, 0)), by_year: all_dv },
+        interest:  { total: r2(Object.values(all_in).reduce((s, v) => s + v, 0)), by_year: all_in },
+        open_positions,
+        cash_timeline,
+        yearly,
+        transaction_count,
+      };
+    }
+
+    function renderPnlDashboard(data) {
+      _ledgerData = data;
+      const total = data.by_account?.all?.transaction_count || 0;
+      document.getElementById('pnl-desk-tx-badge').textContent = `${total} transactions`;
+      // Show/hide account tabs based on data presence
+      ['ISA', 'GIA', 'SIPP'].forEach(acct => {
+        const btn = document.querySelector(`#pnl-tabs [data-tab="${acct}"]`);
+        const hasData = (data.by_account?.[acct]?.transaction_count || 0) > 0;
+        if (btn) btn.style.display = hasData ? '' : 'none';
+      });
+      switchPnlTab('all');
+    }
+
+    function switchPnlTab(account) {
+      document.querySelectorAll('.pnl-tab').forEach(t =>
+        t.classList.toggle('active', t.dataset.tab === account));
+      _activePnlTab = account;
+      const d = _ledgerData?.by_account?.[account];
+      if (!d) return;
+      renderPnlSummaryCards(d);
+      renderOpenPositionsTable(d);
+      renderYearTable(d);
+      renderDisposalLog(d);
+      renderTransferInDetail(d);
+      renderDividendDetail(d);
+      renderTransferOutDetail(d);
+    }
+
+    function renderPnlSummaryCards(d) {
+      const el = document.getElementById('pnl-summary-cards');
       if (!el) return;
       const fmt = v => '£' + Number(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       const pos = d.open_positions || {};
+
+      // Live equity from _lastQuotes
+      let liveEquity = 0, anyLive = false;
+      Object.entries(pos).forEach(([key, p]) => {
+        const sym = p.symbol || key;
+        const lp = _livePrice(sym);
+        if (lp !== null) { liveEquity += lp * p.qty; anyLive = true; }
+      });
+
+      const bookCost = d.total_book_cost || 0;
+      const unrealPnL = anyLive ? liveEquity - bookCost : null;
+      const realizedGains = d.total_earnings || 0;
+      const totalContrib = d.total_personal_contribution || 0;
+
+      const uColor  = unrealPnL !== null ? (unrealPnL >= 0 ? 'text-emerald-400' : 'text-red-400') : 'text-slate-500';
+      const uBorder = unrealPnL !== null ? (unrealPnL >= 0 ? 'border-emerald-500/40' : 'border-red-500/40') : 'border-slate-700/40';
+      const rColor  = realizedGains >= 0 ? 'text-emerald-400' : 'text-red-400';
+      const priceTag = anyLive ? 'Live' : '—';
+      const tagColor = anyLive ? 'text-emerald-500 bg-emerald-950/50 border-emerald-900/50'
+                               : 'text-slate-500 bg-slate-900/50 border-slate-700/50';
+
+      el.innerHTML = `
+        <div class="glass p-5 border-t-2 border-indigo-500/40">
+          <div class="text-2xl mb-1">💷</div>
+          <div class="text-2xl font-black text-indigo-300 font-mono">${fmt(totalContrib)}</div>
+          <p class="text-xs font-bold text-slate-500 uppercase mt-1">Total Contributed</p>
+          <p class="text-[10px] text-slate-600 mt-1">Subscriptions &amp; transfers in</p>
+        </div>
+        <div class="glass p-5 border-t-2 border-amber-500/40">
+          <div class="text-2xl mb-1">📋</div>
+          <div class="text-2xl font-black text-amber-400 font-mono">${fmt(bookCost)}</div>
+          <p class="text-xs font-bold text-slate-500 uppercase mt-1">Total Book Cost</p>
+          <p class="text-[10px] text-slate-600 mt-1">Cost basis of open positions</p>
+        </div>
+        <div class="glass p-5 border-t-2 ${uBorder}">
+          <div class="flex items-start justify-between mb-1">
+            <span class="text-2xl">📈</span>
+            <span class="text-[8px] font-black px-1.5 py-0.5 rounded ${tagColor} border uppercase">${priceTag}</span>
+          </div>
+          <div class="text-2xl font-black ${uColor} font-mono">${unrealPnL !== null ? (unrealPnL >= 0 ? '+' : '') + fmt(unrealPnL) : '—'}</div>
+          <p class="text-xs font-bold text-slate-500 uppercase mt-1">Unrealized P&amp;L</p>
+          <p class="text-[10px] text-slate-600 mt-1">${anyLive ? 'Live equities − book cost' : 'Waiting for live prices'}</p>
+        </div>
+        <div class="glass p-5 border-t-2 border-emerald-500/40">
+          <div class="text-2xl mb-1">📊</div>
+          <div class="text-2xl font-black ${rColor} font-mono">${realizedGains >= 0 ? '+' : ''}${fmt(realizedGains)}</div>
+          <p class="text-xs font-bold text-slate-500 uppercase mt-1">Realized Gains</p>
+          <p class="text-[10px] text-slate-600 mt-1">Cap gains + dividends + interest</p>
+        </div>
+      `;
+      el.classList.remove('hidden');
+    }
+
+    function renderOpenPositionsTable(d) {
+      const pos = d.open_positions || {};
       const posKeys = Object.keys(pos).sort();
-      if (posKeys.length === 0) {
-        el.innerHTML = '<p class="text-xs text-slate-600 italic">No open positions — all trades fully closed.</p>';
-        return;
-      }
-      const hasAnyLive = posKeys.some(s => _livePrice(s) !== null);
-      el.innerHTML = `<table class="w-full text-xs min-w-[640px]">
-        <thead><tr class="text-[10px] font-bold text-slate-500 uppercase border-b border-slate-800">
+      const sect = document.getElementById('pnl-positions-section');
+      const el = document.getElementById('pnl-positions');
+      if (posKeys.length === 0) { sect.classList.add('hidden'); return; }
+      sect.classList.remove('hidden');
+      const fmt = v => '£' + Number(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const hasLive = posKeys.some(s => _livePrice(s) !== null);
+      el.innerHTML = `<table class="w-full text-xs min-w-[${hasLive ? 560 : 420}px]">
+        <thead><tr class="text-[10px] font-bold text-slate-500 uppercase border-b border-slate-800 pb-2">
           <th class="text-left pb-2 pr-4">Symbol</th>
           <th class="text-right pb-2 pr-4">Qty</th>
           <th class="text-right pb-2 pr-4">Avg Cost</th>
-          <th class="text-right pb-2 pr-4">Total Paid</th>
-          ${hasAnyLive ? '<th class="text-right pb-2 pr-4">Live Price</th><th class="text-right pb-2 pr-4">Cur. Value</th><th class="text-right pb-2">Unrealized</th>' : '<th class="text-right pb-2">Unrealized</th>'}
+          <th class="text-right pb-2 pr-4">Cost Basis</th>
+          ${hasLive ? '<th class="text-right pb-2 pr-4">Mkt Value</th><th class="text-right pb-2">Unrealized</th>' : ''}
         </tr></thead>
         <tbody class="divide-y divide-slate-800/40">
-          ${posKeys.map(sym => {
-            const p = pos[sym];
+          ${posKeys.map(key => {
+            const p = pos[key];
+            const sym = p.symbol || key;
+            const acct = p.account_type;
             const lp = _livePrice(sym);
-            const curVal = lp !== null ? lp * p.qty : (p.market_value ?? null);
-            const unreal = lp !== null ? (lp - p.avg_cost) * p.qty : (p.unrealized_gain ?? null);
-            const upct   = lp !== null
-              ? ((p.avg_cost > 0) ? (lp - p.avg_cost) / p.avg_cost * 100 : 0)
-              : (p.unrealized_pct ?? null);
-            const uCls   = (unreal ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400';
-            const sym2   = lp !== null ? sym : (p.market_value !== undefined ? sym : sym);
-            const lpFmt  = lp !== null ? fmt(lp) : '—';
-            const cvFmt  = curVal !== null ? fmt(curVal) : '—';
-            const urFmt  = unreal !== null
-              ? `<span class="${uCls} font-bold">${unreal >= 0 ? '+' : ''}${fmt(unreal)}</span>`
-                + (upct !== null ? `<br><span class="text-[9px] ${uCls}">${upct >= 0 ? '+' : ''}${upct.toFixed(2)}%</span>` : '')
+            const curVal = lp !== null ? lp * p.qty : null;
+            const unreal = lp !== null ? (lp - p.avg_cost) * p.qty : null;
+            const upct   = lp !== null && p.avg_cost > 0 ? ((lp / p.avg_cost) - 1) * 100 : null;
+            const cls    = (unreal ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400';
+            const unrStr = unreal !== null
+              ? (unreal >= 0 ? '+' : '') + fmt(unreal) + (upct !== null ? ` (${upct >= 0 ? '+' : ''}${upct.toFixed(1)}%)` : '')
               : '—';
+            const displaySym = acct && _activePnlTab === 'all' ? `${sym} <span class="text-[9px] text-slate-500 font-black uppercase">[${acct}]</span>` : sym;
             return `<tr>
-              <td class="py-1.5 pr-4 font-mono font-bold text-slate-200">${sym}</td>
-              <td class="py-1.5 pr-4 text-right text-slate-400 font-mono">${p.qty}</td>
+              <td class="py-1.5 pr-4 font-mono font-bold text-slate-200">${displaySym}</td>
+              <td class="py-1.5 pr-4 text-right text-slate-400 font-mono">${Number(p.qty).toLocaleString('en-GB')}</td>
               <td class="py-1.5 pr-4 text-right font-mono text-slate-400">${fmt(p.avg_cost)}</td>
               <td class="py-1.5 pr-4 text-right font-mono text-amber-400">${fmt(p.total_cost)}</td>
-              ${hasAnyLive ? `<td class="py-1.5 pr-4 text-right font-mono text-slate-300">${lpFmt}</td>
-              <td class="py-1.5 pr-4 text-right font-mono text-slate-300">${cvFmt}</td>` : ''}
-              <td class="py-1.5 text-right font-mono leading-tight">${urFmt}</td>
+              ${hasLive ? `<td class="py-1.5 pr-4 text-right font-mono text-slate-300">${curVal !== null ? fmt(curVal) : '—'}</td>
+              <td class="py-1.5 text-right font-mono font-bold ${cls}">${unrStr}</td>` : ''}
             </tr>`;
           }).join('')}
         </tbody>
       </table>`;
     }
 
-    function renderLegacyLedgerCards(d) {
+    function renderYearTable(d) {
+      const yearly = d.yearly || {};
+      const years = Object.keys(yearly).sort().reverse();
+      const sect = document.getElementById('pnl-year-section');
+      if (years.length === 0) { sect.classList.add('hidden'); return; }
+      sect.classList.remove('hidden');
       const fmt = v => '£' + Number(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      const sign = v => (v >= 0 ? '+' : '');
-      const cg = d.capital_gains || {};
-      const dv = d.dividends || {};
-      const it = d.interest || {};
-      const cards = [
-        {
-          icon: '💰', label: 'Realized Gains (YTD / Total)',
-          value: fmt(cg.total || 0),
-          meta: `YTD: ${sign(cg.ytd || 0)}${fmt(cg.ytd || 0)}`,
-          border: (cg.total || 0) >= 0 ? 'border-emerald-500/40' : 'border-red-500/40',
-          valColor: (cg.total || 0) >= 0 ? 'text-emerald-400' : 'text-red-400',
-          byYear: cg.by_year || {},
-        },
-        {
-          icon: '🏦', label: 'Dividends Collected',
-          value: fmt(dv.total || 0),
-          meta: (() => { const e = Object.entries(dv.by_year || {}); const l = e[e.length-1]; return l ? `${l[0]}: ${fmt(l[1])}` : ''; })(),
-          border: 'border-amber-500/40', valColor: 'text-amber-400', byYear: dv.by_year || {},
-        },
-        {
-          icon: '📈', label: 'Interest Earned',
-          value: fmt(it.total || 0),
-          meta: (() => { const e = Object.entries(it.by_year || {}); const l = e[e.length-1]; return l ? `${l[0]}: ${fmt(l[1])}` : ''; })(),
-          border: 'border-slate-500/40', valColor: 'text-slate-300', byYear: it.by_year || {},
-        },
-      ];
-      document.getElementById('ledger-metrics').innerHTML = cards.map(c => `
-        <div class="glass p-5 border-t-2 ${c.border}">
-          <div class="flex justify-between items-start mb-2">
-            <span class="text-2xl">${c.icon}</span>
-            <span class="text-[8px] font-black px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 uppercase">Lifetime</span>
+      const thisYear = currentTaxYear();
+      document.getElementById('pnl-year-body').innerHTML = `
+        <table class="w-full text-xs min-w-[600px]">
+          <thead><tr class="text-[10px] font-bold text-slate-500 uppercase border-b border-slate-800">
+            <th class="text-left pb-2 pr-3">Tax Year</th>
+            <th class="text-right pb-2 pr-3">Net Profit</th>
+            <th class="text-right pb-2 pr-3">Proceeds</th>
+            <th class="text-right pb-2 pr-3">Allow. Cost</th>
+            <th class="text-right pb-2 pr-3">Gains</th>
+            <th class="text-right pb-2 pr-3">Losses</th>
+            <th class="text-right pb-2 pr-3">Dividends</th>
+            <th class="text-right pb-2">Interest</th>
+          </tr></thead>
+          <tbody class="divide-y divide-slate-800/40">
+            ${years.map(yr => {
+              const y = yearly[yr];
+              const isYTD = yr === thisYear;
+              const npCls = y.net_profit >= 0 ? 'text-emerald-400' : 'text-red-400';
+              const rowCls = isYTD ? 'bg-indigo-950/20' : '';
+              return `<tr class="${rowCls}">
+                <td class="py-2 pr-3 font-mono font-bold text-slate-200">
+                  ${yr}${isYTD ? ' <span class="text-[8px] font-black text-indigo-400 ml-1 align-middle">YTD</span>' : ''}
+                </td>
+                <td class="py-2 pr-3 text-right font-mono ${npCls}">${fmt(y.net_profit)}</td>
+                <td class="py-2 pr-3 text-right font-mono text-slate-300">${fmt(y.total_proceeds || 0)}</td>
+                <td class="py-2 pr-3 text-right font-mono text-slate-400">${fmt(y.total_allowable_cost || 0)}</td>
+                <td class="py-2 pr-3 text-right font-mono text-emerald-400">${fmt(y.gains || 0)}</td>
+                <td class="py-2 pr-3 text-right font-mono text-red-400">${fmt(y.losses || 0)}</td>
+                <td class="py-2 pr-3 text-right font-mono text-blue-400">${fmt(y.dividends)}</td>
+                <td class="py-2 text-right font-mono text-violet-400">${fmt(y.interest)}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>`;
+    }
+
+    function renderDisposalLog(d) {
+      const disposals = d.disposals || [];
+      const sect = document.getElementById('pnl-disposal-section');
+      if (disposals.length === 0) { sect.classList.add('hidden'); return; }
+      sect.classList.remove('hidden');
+      const fmt = v => '£' + Number(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      document.getElementById('pnl-disposal-body').innerHTML = `
+        <table class="w-full text-xs min-w-[640px]">
+          <thead><tr class="text-[10px] font-bold text-slate-500 uppercase border-b border-slate-800">
+            <th class="text-left pb-2 pr-3">Date</th>
+            <th class="text-left pb-2 pr-3">Tax Year</th>
+            <th class="text-left pb-2 pr-3">Symbol</th>
+            <th class="text-right pb-2 pr-3">Qty</th>
+            <th class="text-right pb-2 pr-3">Proceeds</th>
+            <th class="text-right pb-2 pr-3">Allow. Cost</th>
+            <th class="text-right pb-2">Gain/Loss</th>
+          </tr></thead>
+          <tbody class="divide-y divide-slate-800/40">
+            ${disposals.map(r => {
+              const cls = r.gain >= 0 ? 'text-emerald-400' : 'text-red-400';
+              return `<tr>
+                <td class="py-1.5 pr-3 font-mono text-slate-300">${r.date}</td>
+                <td class="py-1.5 pr-3 font-mono text-slate-400">${r.tax_year}</td>
+                <td class="py-1.5 pr-3 font-mono text-slate-200 font-bold">${r.symbol}</td>
+                <td class="py-1.5 pr-3 text-right font-mono text-slate-300">${Number(r.qty).toLocaleString('en-GB')}</td>
+                <td class="py-1.5 pr-3 text-right font-mono text-slate-200">${fmt(r.proceeds)}</td>
+                <td class="py-1.5 pr-3 text-right font-mono text-slate-400">${fmt(r.allowable_cost)}</td>
+                <td class="py-1.5 text-right font-mono font-bold ${cls}">${fmt(r.gain)}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>`;
+    }
+
+    function renderTransferInDetail(d) {
+      const transfers = d.transfer_in_detail || [];
+      const sect = document.getElementById('pnl-transfer-section');
+      if (transfers.length === 0) { sect.classList.add('hidden'); return; }
+      sect.classList.remove('hidden');
+      const fmt = v => '£' + Number(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      document.getElementById('pnl-transfer-body').innerHTML = `
+        <table class="w-full text-xs min-w-[560px]">
+          <thead><tr class="text-[10px] font-bold text-slate-500 uppercase border-b border-slate-800">
+            <th class="text-left pb-2 pr-3">Date</th>
+            <th class="text-left pb-2 pr-3">Tax Year</th>
+            <th class="text-left pb-2 pr-3">Symbol</th>
+            <th class="text-right pb-2 pr-3">Amount</th>
+            <th class="text-left pb-2 pr-3">Type</th>
+            <th class="text-left pb-2">Description</th>
+          </tr></thead>
+          <tbody class="divide-y divide-slate-800/40">
+            ${transfers.map(r => `<tr>
+              <td class="py-1.5 pr-3 font-mono text-slate-300">${r.date}</td>
+              <td class="py-1.5 pr-3 font-mono text-slate-400">${r.tax_year}</td>
+              <td class="py-1.5 pr-3 font-mono text-slate-200 font-bold">${r.symbol}</td>
+              <td class="py-1.5 pr-3 text-right font-mono text-blue-400">${fmt(r.amount)}</td>
+              <td class="py-1.5 pr-3 font-mono text-amber-400">${r.type}</td>
+              <td class="py-1.5 font-mono text-slate-500 truncate max-w-[200px]">${r.description || '—'}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>`;
+    }
+
+    function renderDividendDetail(d) {
+      const dividends = d.dividend_detail || [];
+      const interest_by_year = d.interest?.by_year || {};
+      const sect = document.getElementById('pnl-dividend-section');
+      if (dividends.length === 0 && Object.keys(interest_by_year).length === 0) { sect.classList.add('hidden'); return; }
+      sect.classList.remove('hidden');
+      const fmt = v => '£' + Number(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      document.getElementById('pnl-dividend-body').innerHTML = `
+        <table class="w-full text-xs min-w-[480px]">
+          <thead><tr class="text-[10px] font-bold text-slate-500 uppercase border-b border-slate-800">
+            <th class="text-left pb-2 pr-3">Date</th>
+            <th class="text-left pb-2 pr-3">Tax Year</th>
+            <th class="text-left pb-2 pr-3">Source</th>
+            <th class="text-right pb-2 pr-3">Amount</th>
+            <th class="text-left pb-2">Type</th>
+          </tr></thead>
+          <tbody class="divide-y divide-slate-800/40">
+            ${dividends.map(r => `<tr>
+              <td class="py-1.5 pr-3 font-mono text-slate-300">${r.date}</td>
+              <td class="py-1.5 pr-3 font-mono text-slate-400">${r.tax_year}</td>
+              <td class="py-1.5 pr-3 font-mono text-slate-200 font-bold">${r.symbol}</td>
+              <td class="py-1.5 pr-3 text-right font-mono text-blue-400">${fmt(r.amount)}</td>
+              <td class="py-1.5 font-mono text-slate-500">${r.type}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+        <div class="mt-3 pt-3 border-t border-slate-800/50">
+          <p class="text-[10px] font-bold text-slate-500 uppercase mb-1">Totals</p>
+          <div class="flex gap-6 text-xs">
+            <span class="text-blue-400 font-mono">Dividends: ${fmt(d.dividends?.total || 0)}</span>
+            <span class="text-violet-400 font-mono">Interest: ${fmt(d.interest?.total || 0)}</span>
           </div>
-          <div class="text-2xl font-black ${c.valColor} font-mono">${c.value}</div>
-          <p class="text-xs font-bold text-slate-500 uppercase mt-1">${c.label}</p>
-          ${c.meta ? `<p class="text-[10px] font-mono text-slate-500 mt-1">${c.meta}</p>` : ''}
-        </div>
-      `).join('');
-      const pos = d.open_positions || {};
-      const posKeys = Object.keys(pos).sort();
-      const lfmt = v => '£' + Number(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      // Show P&L columns if any live price OR any backend-enriched value is available
-      const hasLive = posKeys.some(s => _livePrice(s) !== null || pos[s].unrealized_gain !== undefined);
-      document.getElementById('ledger-positions').innerHTML = posKeys.length === 0
-        ? '<p class="text-xs text-slate-600 italic">No open positions — all trades fully closed.</p>'
-        : `<table class="w-full text-xs min-w-[${hasLive ? 560 : 420}px]">
-            <thead><tr class="text-[10px] font-bold text-slate-500 uppercase border-b border-slate-800 pb-2">
-              <th class="text-left pb-2 pr-4">Symbol</th>
-              <th class="text-right pb-2 pr-4">Qty</th>
-              <th class="text-right pb-2 pr-4">Avg Cost</th>
-              <th class="text-right pb-2 pr-4">Cost Basis</th>
-              ${hasLive ? '<th class="text-right pb-2 pr-4">Mkt Value</th><th class="text-right pb-2">Unrealized</th>' : ''}
-            </tr></thead>
-            <tbody class="divide-y divide-slate-800/40">
-              ${posKeys.map(sym => {
-                const p = pos[sym];
-                // Prefer live price; fall back to backend-enriched values
-                const lp      = _livePrice(sym);
-                const curVal  = lp !== null ? lp * p.qty : (p.market_value ?? null);
-                const unreal  = lp !== null ? (lp - p.avg_cost) * p.qty
-                                            : (p.unrealized_gain ?? null);
-                const upct    = lp !== null && p.avg_cost > 0
-                                ? ((lp / p.avg_cost) - 1) * 100
-                                : (p.unrealized_pct ?? null);
-                const upnlCls = (unreal ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400';
-                const unrStr  = unreal !== null
-                  ? (unreal >= 0 ? '+' : '') + lfmt(unreal)
-                    + (upct !== null ? ` (${upct >= 0 ? '+' : ''}${upct.toFixed(1)}%)` : '')
-                  : '—';
-                return `<tr>
-                  <td class="py-1.5 pr-4 font-mono font-bold text-slate-200">${sym}</td>
-                  <td class="py-1.5 pr-4 text-right text-slate-400 font-mono">${p.qty}</td>
-                  <td class="py-1.5 pr-4 text-right font-mono text-slate-400">${lfmt(p.avg_cost)}</td>
-                  <td class="py-1.5 pr-4 text-right font-mono text-amber-400">${lfmt(p.total_cost)}</td>
-                  ${hasLive ? `<td class="py-1.5 pr-4 text-right font-mono text-slate-300">${curVal !== null ? lfmt(curVal) : '—'}</td>
-                  <td class="py-1.5 text-right font-mono font-bold ${upnlCls}">${unrStr}</td>` : ''}
-                </tr>`;
-              }).join('')}
-            </tbody>
-          </table>`;
+        </div>`;
+    }
+
+    function renderTransferOutDetail(d) {
+      const rows = d.transfer_out_detail || [];
+      const sect = document.getElementById('pnl-transfer-out-section');
+      if (rows.length === 0) { sect.classList.add('hidden'); return; }
+      sect.classList.remove('hidden');
+      const fmt = v => '£' + Number(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      document.getElementById('pnl-transfer-out-body').innerHTML = `
+        <table class="w-full text-xs min-w-[560px]">
+          <thead><tr class="text-[10px] font-bold text-slate-500 uppercase border-b border-slate-800">
+            <th class="text-left pb-2 pr-3">Date</th>
+            <th class="text-left pb-2 pr-3">Tax Year</th>
+            <th class="text-left pb-2 pr-3">Symbol</th>
+            <th class="text-right pb-2 pr-3">Amount</th>
+            <th class="text-left pb-2">Description</th>
+          </tr></thead>
+          <tbody class="divide-y divide-slate-800/40">
+            ${rows.map(r => `<tr>
+              <td class="py-1.5 pr-3 font-mono text-slate-300">${r.date}</td>
+              <td class="py-1.5 pr-3 font-mono text-slate-400">${r.tax_year}</td>
+              <td class="py-1.5 pr-3 font-mono text-slate-200 font-bold">${r.symbol}</td>
+              <td class="py-1.5 pr-3 text-right font-mono text-red-400">${fmt(r.amount)}</td>
+              <td class="py-1.5 font-mono text-slate-500 truncate max-w-[200px]">${r.description || '—'}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+        <div class="mt-3 pt-3 border-t border-slate-800/50 flex justify-between text-xs">
+          <span class="text-slate-500 font-bold">Total Transferred Out</span>
+          <span class="text-red-400 font-mono font-bold">${fmt(rows.reduce((s,r) => s + r.amount, 0))}</span>
+        </div>`;
+    }
+
+    function updatePnlUnrealized() {
+      if (!_ledgerData) return;
+      const d = (_activePnlTab === 'all')
+        ? _ledgerData.by_account?.all
+        : _ledgerData.by_account?.[_activePnlTab];
+      if (!d) return;
+      renderPnlSummaryCards(d);
+      renderOpenPositionsTable(d);
     }
 
   </script>

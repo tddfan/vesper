@@ -978,6 +978,10 @@
 
 
     async function handleAuth(type) {
+      if (!auth) {
+        document.getElementById('auth-error').textContent = 'Still loading — please wait a moment.';
+        return;
+      }
       const email = document.getElementById('auth-email').value;
       const pass = document.getElementById('auth-password').value;
       try {
@@ -1894,9 +1898,13 @@
 
     function renderMarketOutlook(mo, ai) {
       const dr = parseFloat(ai?.attribution?.div_ratio) || 1.0;
-      // Use backend-generated commentary (Opus CIO when enabled, data-driven fallback otherwise)
       const commentary = mo.quant_intelligence || 'Awaiting neural synthesis…';
-      document.getElementById('market-outlook').innerHTML = mo.points.map(x => `<div class="p-4 bg-slate-900/50 rounded-xl border border-slate-800 transition-all group hover:border-indigo-500/30"><div class="flex items-center gap-3 mb-2"><div class="text-xl group-hover:scale-110 transition-transform">${x.i}</div><div><p class="text-[10px] font-bold text-slate-600 uppercase tracking-widest">${x.l}</p><p class="text-xs font-black text-indigo-400 uppercase">${x.v}</p></div></div><p class="text-[10px] leading-relaxed text-slate-500 font-medium">${boldTerms(x.d)}</p></div>`).join('') + `<div class="mt-6 space-y-4"><div class="p-4 bg-indigo-950/20 border-l-4 border-indigo-500 rounded-r-xl"><p class="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-2 font-black">Quant Intelligence · DR ${dr.toFixed(2)}</p><p class="text-sm text-slate-300 leading-relaxed">${boldTerms(commentary)}</p></div><div class="p-4 bg-violet-950/20 border-l-4 border-violet-500 rounded-r-xl"><p class="text-xs font-bold text-violet-400 uppercase tracking-widest mb-2 font-black">Strategic Outlook</p><p class="text-sm text-slate-300 leading-relaxed">${boldTerms(mo.future_outlook)}</p></div></div>`;
+      const strategicComm = mo.commentary || '';
+      const pointsHtml = mo.points.map(x => `<div class="p-4 bg-slate-900/50 rounded-xl border border-slate-800 transition-all group hover:border-indigo-500/30"><div class="flex items-center gap-3 mb-2"><div class="text-xl group-hover:scale-110 transition-transform">${x.i}</div><div><p class="text-[10px] font-bold text-slate-600 uppercase tracking-widest">${x.l}</p><p class="text-xs font-black text-indigo-400 uppercase">${x.v}</p></div></div><p class="text-[10px] leading-relaxed text-slate-500 font-medium">${boldTerms(x.d)}</p></div>`).join('');
+      const quantHtml = `<div class="p-4 bg-indigo-950/20 border-l-4 border-indigo-500 rounded-r-xl"><p class="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-2 font-black">Quant Intelligence · DR ${dr.toFixed(2)}</p><p class="text-sm text-slate-300 leading-relaxed">${boldTerms(commentary)}</p></div>`;
+      const commHtml = strategicComm ? `<div class="p-4 bg-emerald-950/20 border-l-4 border-emerald-500 rounded-r-xl"><p class="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-2 font-black">Strategic Commentary</p><p class="text-sm text-slate-300 leading-relaxed">${boldTerms(strategicComm)}</p></div>` : '';
+      const futureHtml = mo.future_outlook ? `<div class="p-4 bg-violet-950/20 border-l-4 border-violet-500 rounded-r-xl"><p class="text-xs font-bold text-violet-400 uppercase tracking-widest mb-2 font-black">Strategic Outlook</p><p class="text-sm text-slate-300 leading-relaxed">${boldTerms(mo.future_outlook)}</p></div>` : '';
+      document.getElementById('market-outlook').innerHTML = pointsHtml + `<div class="mt-6 space-y-4">${quantHtml}${commHtml}${futureHtml}</div>`;
     }
 
     function renderFutureValue(fv, tv, currency) {
@@ -2304,7 +2312,11 @@
         </div>
       `;
 
-      // 2. Unified Matrix Table
+      // 2. Unified Matrix Table — with ACT NOW badges merged inline
+      const actNowSet = new Set(act_now.map(item => item.ticker));
+      const actNowMap = {};
+      act_now.forEach(item => { actNowMap[item.ticker] = item; });
+
       const rows = Object.entries(scores).map(([tk, logic]) => {
         const ev = logic.evidence;
         const ticker = tk.split('_')[0];
@@ -2321,10 +2333,33 @@
         const probClr = probNum >= 80 ? 'text-emerald-400 font-black' : probNum >= 60 ? 'text-amber-400' : 'text-slate-500';
         const atrPct = ev.atr_pct != null ? ev.atr_pct.toFixed(2) + '%' : '—';
         const rowBorder = actInstr.startsWith('BUY') ? 'border-l-2 border-l-emerald-500' : actInstr.startsWith('HEDGE') || actInstr.startsWith('TRIM') ? 'border-l-2 border-l-red-500' : 'border-l-2 border-l-slate-700';
+        const isActNow = actNowSet.has(tk);
+        const actNowBadge = isActNow ? ' <span class="ml-1 px-1.5 py-0.5 text-[7px] font-black uppercase rounded bg-fuchsia-950/50 text-fuchsia-400 border border-fuchsia-500/40 animate-pulse">⚡ Act Now</span>' : '';
+        const rowId = `exec-detail-${tk.replace(/[^a-zA-Z0-9]/g, '_')}`;
+
+        let detailRow = '';
+        if (isActNow) {
+          const actNowItem = actNowMap[tk];
+          const report = logic.detailed_advisor_report || '';
+          const action = actNowItem?.action || actInstr;
+          detailRow = `
+            <tr id="${rowId}" class="hidden bg-fuchsia-950/10 border-l-2 border-l-fuchsia-500">
+              <td colspan="9" class="px-4 py-3">
+                <div class="flex items-start gap-3">
+                  <div class="w-6 h-6 mt-0.5 rounded-full bg-fuchsia-950/50 border border-fuchsia-500/30 flex items-center justify-center text-xs flex-shrink-0">⚡</div>
+                  <div class="flex-1 min-w-0">
+                    <p class="text-[9px] font-black text-fuchsia-400 uppercase tracking-widest mb-1">72-Hour Action — ${action}</p>
+                    <p class="text-[11px] text-slate-300 leading-relaxed">${report}</p>
+                  </div>
+                </div>
+              </td>
+            </tr>
+          `;
+        }
 
         return `
-          <tr class="${rowBorder} hover:bg-slate-900/20 transition-colors text-[11px]">
-            <td class="py-3 pl-3 font-mono font-bold text-slate-200">${ticker}</td>
+          <tr class="${rowBorder} hover:bg-slate-900/20 transition-colors text-[11px] ${isActNow ? 'cursor-pointer' : ''}" ${isActNow ? `onclick="document.getElementById('${rowId}').classList.toggle('hidden')"` : ''}>
+            <td class="py-3 pl-3 font-mono font-bold text-slate-200">${ticker}${actNowBadge}</td>
             <td class="py-3">${acct ? `<span class="text-[8px] font-black px-1.5 py-0.5 rounded border ${acctCls} uppercase">${acct}</span>` : ''}</td>
             <td class="py-3"><span class="px-2 py-0.5 rounded text-[8px] font-black border uppercase whitespace-nowrap ${actClr}">${actInstr}</span></td>
             <td class="py-3 text-right font-mono text-slate-400">${ev.rsi}</td>
@@ -2334,12 +2369,16 @@
             <td class="py-3 text-right font-mono ${probClr}">${prob}</td>
             <td class="py-3 text-right pr-3 font-black text-emerald-500 uppercase text-[9px]">${logic.logic_tag || 'Standard'}</td>
           </tr>
+          ${detailRow}
         `;
       }).join('');
 
       const tableHtml = `
         <div class="glass overflow-hidden border-t-2 border-slate-800">
-          <p class="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-800">Unified Execution Matrix</p>
+          <div class="p-4 flex items-center justify-between border-b border-slate-800">
+            <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Unified Execution Matrix</p>
+            ${act_now.length ? `<span class="text-[8px] font-black px-2 py-0.5 rounded-full bg-fuchsia-950/40 text-fuchsia-400 border border-fuchsia-500/30">${act_now.length} Act-Now Signal${act_now.length > 1 ? 's' : ''}</span>` : ''}
+          </div>
           <div class="overflow-x-auto">
             <table class="w-full text-left text-xs">
               <thead>
@@ -2363,32 +2402,7 @@
         </div>
       `;
 
-      // 3. Roadmap (Act Now - 72 Hours)
-      const top3 = act_now.slice(0, 3);
-      const roadmapHtml = `
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div class="p-6 bg-indigo-950/20 rounded-2xl border border-indigo-500/30 relative overflow-hidden">
-            <span class="absolute -right-4 -bottom-4 text-6xl opacity-10 font-black">01</span>
-            <p class="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-2">Act Now (72h)</p>
-            <p class="text-sm font-black text-white uppercase mb-2">${top3[0]?.action || 'Preserve Capital'}</p>
-            <p class="text-[10px] text-slate-400 leading-relaxed">${top3[0] ? scores[top3[0].ticker].detailed_advisor_report : 'Maintain 20% cash buffer.'}</p>
-          </div>
-          <div class="p-6 bg-indigo-950/20 rounded-2xl border border-indigo-500/30 relative overflow-hidden">
-            <span class="absolute -right-4 -bottom-4 text-6xl opacity-10 font-black">02</span>
-            <p class="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-2">Act Now (72h)</p>
-            <p class="text-sm font-black text-white uppercase mb-2">${top3[1]?.action || 'Benchmark Check'}</p>
-            <p class="text-[10px] text-slate-400 leading-relaxed">${top3[1] ? scores[top3[1].ticker].detailed_advisor_report : 'Monitor global benchmark decoupling.'}</p>
-          </div>
-          <div class="p-6 bg-indigo-950/20 rounded-2xl border border-indigo-500/30 relative overflow-hidden">
-            <span class="absolute -right-4 -bottom-4 text-6xl opacity-10 font-black">03</span>
-            <p class="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-2">Act Now (72h)</p>
-            <p class="text-sm font-black text-white uppercase mb-2">${top3[2]?.action || 'Neutralize Beta'}</p>
-            <p class="text-[10px] text-slate-400 leading-relaxed">${top3[2] ? scores[top3[2].ticker].detailed_advisor_report : 'Calibrate inverse trackers to beta.'}</p>
-          </div>
-        </div>
-      `;
-
-      document.getElementById('quant-execution-content').innerHTML = regimeHtml + tableHtml + roadmapHtml;
+      document.getElementById('quant-execution-content').innerHTML = regimeHtml + tableHtml;
     }
 
     function renderApexAdvisor(advisorData) {
@@ -2996,11 +3010,30 @@
           ? `${data.new_count ?? 0} saved to cloud. ${data.dup_count ?? 0} duplicates skipped.`
           : `${accountType} parsed locally (no cloud sync).`;
         showToast(saved, 'success');
+        _setPnlSyncBadge(!!idToken);
         document.getElementById('pnl-file-input').value = '';
       } catch(e) {
         document.getElementById('pnl-upload-icon').textContent = '❌';
         document.getElementById('pnl-upload-label').textContent = `Error: ${e.message}`;
         showToast(`P&L error: ${e.message}`, 'error');
+      }
+    }
+
+    function _setPnlSyncBadge(synced) {
+      let badge = document.getElementById('pnl-sync-badge');
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.id = 'pnl-sync-badge';
+        badge.className = 'text-[8px] font-black px-2 py-0.5 rounded uppercase ml-2';
+        const label = document.getElementById('pnl-upload-label');
+        if (label) label.parentNode.appendChild(badge);
+      }
+      if (synced) {
+        badge.className = 'text-[8px] font-black px-2 py-0.5 rounded uppercase ml-2 text-emerald-400 bg-emerald-950/30 border border-emerald-800';
+        badge.textContent = '☁ Cloud Synced';
+      } else {
+        badge.className = 'text-[8px] font-black px-2 py-0.5 rounded uppercase ml-2 text-amber-400 bg-amber-950/30 border border-amber-800';
+        badge.textContent = '⚠ Local Only';
       }
     }
 
@@ -3016,6 +3049,7 @@
         const data = await resp.json();
         if ((data.by_account?.all?.transaction_count || 0) > 0) {
           renderPnlDashboard(data);
+          _setPnlSyncBadge(true);
         }
       } catch(e) { console.warn('[P&L load]', e); }
     }
