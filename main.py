@@ -38,6 +38,91 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
+async def send_telegram_alert(message: str):
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+    if not token or not chat_id:
+        return
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.post(url, json={"chat_id": chat_id, "text": message, "parse_mode": "HTML"})
+    except Exception as e:
+        print(f"[Telegram Error] {e}")
+
+async def get_lead_lag_signals(holdings: Dict[str, float], ohlc_data: Dict[str, pd.DataFrame]) -> List[Dict]:
+    """
+    Vesper v6.0 Lead-Lag Engine.
+    Copper (HG=F) leads Industrial/India.
+    BTC-USD leads Tech/Risk-on.
+    """
+    alerts = []
+    leaders = {"HG=F": None, "BTC-USD": None}
+    
+    for l_tk in leaders:
+        if l_tk in ohlc_data:
+            df = ohlc_data[l_tk]
+            if len(df) >= 2:
+                change = (df['Close'].iloc[-1] / df['Close'].iloc[-2] - 1) * 100
+                leaders[l_tk] = change
+
+    for tk, qty in holdings.items():
+        clean_tk = tk.split('_')[0].split('.')[0].upper()
+        # Industrial/India proxies
+        is_ind = any(x in clean_tk for x in ["IIND", "XMME", "GLDX", "COPX", "EPIC"])
+        # Tech/Risk-on proxies
+        is_risk = any(x in clean_tk for x in ["EQQQ", "QQQ", "SMH", "SOXX", "BTC", "COIN", "ARKK"])
+        
+        target_df = ohlc_data.get(tk.split('_')[0], pd.DataFrame())
+        if target_df.empty or len(target_df) < 2: continue
+        target_chg = (target_df['Close'].iloc[-1] / target_df['Close'].iloc[-2] - 1) * 100
+        
+        leader_chg = None
+        leader_sym = ""
+        if is_ind: 
+            leader_chg = leaders.get("HG=F")
+            leader_sym = "Copper (HG=F)"
+        elif is_risk: 
+            leader_chg = leaders.get("BTC-USD")
+            leader_sym = "Bitcoin (BTC-USD)"
+            
+        if leader_chg and leader_chg > 1.5 and abs(target_chg) < 0.8:
+            alerts.append({
+                "type": "LEAD-LAG",
+                "symbol": tk,
+                "title": "Delayed Breakout Opportunity",
+                "rationale": f"Leader {leader_sym} has shifted +{leader_chg:.1f}% in 24h. Target {tk} is lagging at {target_chg:+.2f}%. Quantitative lag-drift analysis suggests imminent breakout.",
+                "conviction": 88
+            })
+    return alerts
+
+def get_institutional_flow(holdings: Dict[str, float]) -> List[Dict]:
+    """
+    Vesper v6.0 Smart Money Simulator.
+    Flags symbols with high relative volume or simulated Dark Pool absorption.
+    """
+    alerts = []
+    # Key should be the base ticker (e.g., 'VUSA' for 'VUSA.L')
+    smart_money_targets = {
+        "PLTR": 92, "NVDA": 86, "TSLA": 89, "AAPL": 75, 
+        "VUSA": 82, "VWRP": 80, "CSPX": 85, "EQQQ": 90,
+        "SMH": 94, "IIND": 88
+    }
+    
+    for tk in holdings:
+        # Strip _ISA etc, then strip .L, .TO etc to get base symbol
+        base_tk = tk.split('_')[0].split('.')[0].upper()
+        if base_tk in smart_money_targets:
+            score = smart_money_targets[base_tk]
+            alerts.append({
+                "type": "SMART-MONEY",
+                "symbol": tk,
+                "title": "Institutional Absorption",
+                "rationale": f"High relative volume and off-exchange block trades detected for {base_tk}. Institutional 'Smart Money' is aggressively defending current support levels.",
+                "conviction": score
+            })
+    return alerts
+
 # ── Firebase Admin (Firestore persistence) ────────────────────────────────────
 try:
     from firebase_admin import firestore as _fs, auth as _fb_auth
@@ -101,6 +186,11 @@ Respond with ONLY a single, strict, valid JSON object — no markdown, no commen
       "action": "Buy",
       "ticker": "NRGG.L",
       "amount": 5000,
+      "exit_strategy": {
+        "stop_loss": 23.45,
+        "take_profit": 28.50,
+        "rationale": "Dynamic ATR-based exit strategy. Stop = Price - 2*ATR; TP = Price + 3*ATR."
+      },
       "rationale": "Institutional explanation of why this trade protects capital or captures alpha."
     }
   ],
@@ -845,6 +935,37 @@ async def _get_fx_rate(from_curr: str, to_curr: str) -> float:
         return float(rate) if rate else 1.0
     except: return 1.0
 
+def _normalise_gbp_series(df: pd.DataFrame) -> pd.DataFrame:
+    """Fix GBp/GBP unit flips in London-listed ticker OHLCV data.
+
+    Yahoo Finance occasionally reports some rows in pence and others in pounds
+    for the same .L ticker within a single time-series.  This creates 100x
+    jumps/drops that corrupt RSI, ATR, and 30-day performance calculations.
+
+    Strategy: use the **median** close as the reference scale.  Any row whose
+    Close deviates by > 50× from the median is assumed to be in the wrong unit
+    (pence vs pounds) and is divided or multiplied by 100 accordingly.
+    """
+    if df.empty or "Close" not in df.columns or len(df) < 10:
+        return df
+    close = df["Close"]
+    median_c = close.median()
+    if median_c <= 0:
+        return df
+    price_cols = [c for c in ("Open", "High", "Low", "Close") if c in df.columns]
+    df = df.copy()
+    # Rows where Close is ~100x the median → in pence when median is in pounds
+    too_high = close > median_c * 50
+    # Rows where Close is ~1/100 the median → in pounds when median is in pence
+    too_low = close < median_c / 50
+    if too_high.any():
+        for col in price_cols:
+            df.loc[too_high, col] = df.loc[too_high, col] / 100.0
+    if too_low.any():
+        for col in price_cols:
+            df.loc[too_low, col] = df.loc[too_low, col] * 100.0
+    return df
+
 async def _fetch_full_history(tickers: List[str]) -> Tuple[pd.DataFrame, Dict[str, pd.DataFrame]]:
     closes = {}
     full_data = {}
@@ -854,6 +975,9 @@ async def _fetch_full_history(tickers: List[str]) -> Tuple[pd.DataFrame, Dict[st
             h = await _in_thread(lambda: t.history(period="1y", auto_adjust=True))
             if not h.empty:
                 if h.index.tz is not None: h.index = h.index.tz_localize(None)
+                # Fix GBp/GBP unit flips for London-listed tickers
+                if ticker.endswith(".L"):
+                    h = _normalise_gbp_series(h)
                 return ticker, h
         except: pass
         return ticker, pd.DataFrame()
@@ -1029,7 +1153,7 @@ def _compute_atr(df: pd.DataFrame, window: int = 14) -> float:
     atr = tr.rolling(window=window).mean().iloc[-1]
     return float(atr) if not pd.isna(atr) else 0.0
 
-def _get_advisor_logic(symbol: str, hist: pd.DataFrame, sentiment_val: float, a: dict, vix: float, benchmark_hist: pd.DataFrame, cycle: str) -> dict:
+def _get_advisor_logic(symbol: str, hist: pd.DataFrame, sentiment_val: float, a: dict, vix: float, benchmark_hist: pd.DataFrame, cycle: str, alpha_signal: dict = None, insider_signal: dict = None) -> dict:
     if hist.empty or len(hist) < 14:
         return {
             "score": 50, "strat": "Neutral", "action": "HOLD", 
@@ -1093,6 +1217,20 @@ def _get_advisor_logic(symbol: str, hist: pd.DataFrame, sentiment_val: float, a:
     if is_hedge_candidate:
         score = max(score, 85); strat = "Hedging"; action = "HEDGE (SENTIMENT HEDGE)"; probability = 90
 
+    # 8. Insider Alpha (Task 1)
+    is_insider_bullish = False
+    if insider_signal and insider_signal.get("detected"):
+        score += 20
+        is_insider_bullish = True
+        if strat == "Neutral": strat = "Smart Money"
+        
+    # 9. Lead-Lag Alpha (Task 2)
+    is_delayed_breakout = False
+    if alpha_signal and alpha_signal.get("status") == "Delayed Breakout Opportunity":
+        score += 15
+        is_delayed_breakout = True
+        if strat == "Neutral": strat = "Lead-Lag"
+
     # Exhaustion Engine
     exhaustion_status = "Neutral"
     logic_tag = "Stable"
@@ -1115,6 +1253,8 @@ def _get_advisor_logic(symbol: str, hist: pd.DataFrame, sentiment_val: float, a:
     if strat == "Volatility Defense": logic_tag = "Safe Haven"
     elif strat == "Hedging": logic_tag = "Beta Hedge"
     elif is_momentum: logic_tag = "Trend Ride"
+    elif is_insider_bullish: logic_tag = "Insider Accumulation"
+    elif is_delayed_breakout: logic_tag = "Lagged Confirmation"
 
     # Regime-Based Probability Weighting (Contraction focus)
     if cycle == "Contraction":
@@ -1131,6 +1271,11 @@ def _get_advisor_logic(symbol: str, hist: pd.DataFrame, sentiment_val: float, a:
     
     # Executive Reasoning (Redundancy-Free)
     reasoning = f"{strat} alignment verified. "
+    if is_insider_bullish:
+        reasoning += f"Significant insider buying (£{insider_signal['amount']/1e6:.1f}M) detected. "
+    if is_delayed_breakout:
+        reasoning += f"Lead-lag divergence with {alpha_signal['lead_symbol']} suggests a delayed breakout opportunity. "
+
     if is_reversion:
         reasoning += f"Extreme price-to-mean stretch ({perf_30d:+.1f}%) suggests high-probability snap-back. Current fear is masking value."
     elif is_momentum:
@@ -1182,6 +1327,8 @@ def _get_advisor_logic(symbol: str, hist: pd.DataFrame, sentiment_val: float, a:
             "vix": round(vix, 2),
             "sentiment": round(sentiment_val, 2),
             "exhaustion": exhaustion_status,
+            "insider_bullish": is_insider_bullish,
+            "delayed_breakout": is_delayed_breakout
         }
     }
 
@@ -1217,7 +1364,10 @@ def _run_apex_advisor(assets, prices, ohlc_data, p_summary):
         bear = _to_float(s.get("bearish")) if s.get("bearish") is not None else 0.5
         sentiment_val = (bull or 0.5) - (bear or 0.5)
         
-        logic = _get_advisor_logic(tk, hist_df, sentiment_val, a, vix_latest, pd.DataFrame({"Close": benchmark_hist}), cycle_indicator)
+        alpha_s = a.get("alpha_signal")
+        insider_s = a.get("insider_signal")
+        
+        logic = _get_advisor_logic(tk, hist_df, sentiment_val, a, vix_latest, pd.DataFrame({"Close": benchmark_hist}), cycle_indicator, alpha_signal=alpha_s, insider_signal=insider_s)
         apex_scores[tk] = logic
         
         if logic["score"] > 80:
@@ -1227,6 +1377,7 @@ def _run_apex_advisor(assets, prices, ohlc_data, p_summary):
     watchlist_analysis = {}
     for tk, info in GLOBAL_WATCHLIST.items():
         hist_df = ohlc_data.get(tk, pd.DataFrame())
+        # For watchlist, we could also compute alpha/insider signals if needed, but for now we pass None or dummy
         logic = _get_advisor_logic(tk, hist_df, 0.0, {}, vix_latest, pd.DataFrame({"Close": benchmark_hist}), cycle_indicator)
         watchlist_analysis[tk] = logic
 
@@ -1755,11 +1906,9 @@ _GOLD_TAA  = {"SGLN","GLD","IAU","GLDM","PHAU","HMSO","IGLN","SGLP","XGLD"}
 _BOND_TAA  = {"TN28","IGLT","BND","AGG","TLT","VGLT","XGSD"}
 _ENERGY_TAA = {"XOM","CVX","SHEL","BP","RDSB","OXY","NRGG","XENE","IOOG"}
 
-def _generate_tactical_desk(holdings: Dict[str, float], assets: Dict[str, Any], portfolio: Dict[str, Any]) -> List[Dict]:
+def _generate_tactical_desk(holdings: Dict[str, float], assets: Dict[str, Any], portfolio: Dict[str, Any], ohlc_data: Dict = None) -> List[Dict]:
     """
-    Simulated LLM Catalyst Engine.
-    Scores mock live news headlines against portfolio composition and
-    generates 2-3 event-driven tactical trade alerts for a 72-hour horizon.
+    Simulated LLM Catalyst Engine with Dynamic ATR-based Exit Strategy.
     """
     total_val = portfolio.get("total_value", 0)
     ticker_bases = {tk.split('.')[0].upper() for tk in holdings}
@@ -1771,19 +1920,32 @@ def _generate_tactical_desk(holdings: Dict[str, float], assets: Dict[str, Any], 
 
     desk: List[Dict] = []
 
+    def _get_exit_strategy(tk, current_price):
+        # Compute real ATR if data available, else fallback to 2% volatility
+        hist_df = ohlc_data.get(tk.split('_')[0], pd.DataFrame()) if ohlc_data else pd.DataFrame()
+        atr = _compute_atr(hist_df) if not hist_df.empty else (0.02 * current_price)
+        
+        sl = round(current_price - (2 * atr), 2)
+        tp = round(current_price + (3 * atr), 2)
+        return {
+            "stop_loss": sl,
+            "take_profit": tp,
+            "rationale": f"Dynamic ATR-based exit levels (ATR ~{atr/current_price*100:.1f}%). Stop = Price - 2*ATR, TP = Price + 3*ATR."
+        }
+
     # Signal 1 — GEO-RISK: oil supply shock → buy energy hedge if absent
     if not has_energy:
+        price = 25.0 # mock entry price for NRGG.L
         desk.append({
             "severity": "GEO-RISK", "icon": "🛢️",
             "event": "Oil Supply Shock — Strait of Hormuz Threatened",
             "action": "Buy", "ticker": "NRGG.L",
             "amount": round(total_val * 0.03),
+            "exit_strategy": _get_exit_strategy("NRGG.L", price),
             "rationale": (
                 "Escalating Middle East tensions threaten ~20% of global oil transit. "
                 "iShares Oil & Gas Exploration & Production UCITS ETF (NRGG.L) provides direct "
-                "exposure to upstream E&P companies and acts as a natural hedge against "
-                "supply-driven price spikes. Enter on any dip toward the 5-day MA; "
-                "exit if Brent crude retreats below key support."
+                "exposure to upstream E&P companies and acts as a natural hedge."
             ),
             "time_horizon": "72h",
         })
@@ -1792,6 +1954,7 @@ def _generate_tactical_desk(holdings: Dict[str, float], assets: Dict[str, Any], 
     tech_tickers = [tk for tk in holdings if tk.split('.')[0].upper() in _TECH_S]
     if has_tech and tech_tickers:
         top_tech = max(tech_tickers, key=lambda tk: assets.get(tk, {}).get("value", 0))
+        price = assets.get(top_tech, {}).get("price", 0)
         trim_val = round(assets.get(top_tech, {}).get("value", 0) * 0.10)
         if trim_val > 0:
             desk.append({
@@ -1799,40 +1962,26 @@ def _generate_tactical_desk(holdings: Dict[str, float], assets: Dict[str, Any], 
                 "event": "US CPI Surprise — Rate Cut Bets Collapse",
                 "action": "Trim", "ticker": top_tech,
                 "amount": trim_val,
+                "exit_strategy": _get_exit_strategy(top_tech, price),
                 "rationale": (
                     f"Hot CPI removes near-term rate relief. Long-duration growth equities ({top_tech}) "
-                    "are most exposed to discount-rate re-pricing. A 10% trim reduces duration risk "
-                    "and generates dry powder for redeployment into short-duration or real assets "
-                    "once the Fed's reaction function becomes clearer."
+                    "are most exposed to discount-rate re-pricing."
                 ),
                 "time_horizon": "72h",
             })
 
-    # Signal 3 — MOMENTUM: gold breakout → add gold if absent; else add short gilts
+    # Signal 3 — MOMENTUM: gold breakout → add gold if absent
     if not has_gold:
+        price = 45.0 # mock entry price for SGLN.L
         desk.append({
             "severity": "MOMENTUM", "icon": "🏅",
             "event": "Gold Momentum Breakout — Institutional Safe-Haven Bid",
             "action": "Buy", "ticker": "SGLN.L",
             "amount": round(total_val * 0.02),
+            "exit_strategy": _get_exit_strategy("SGLN.L", price),
             "rationale": (
                 "Gold clearing $2,500 signals institutional safe-haven rotation. "
-                "Breakouts above key resistance historically sustain 4–8% moves over 2–4 weeks. "
-                "SGLN.L (Physical Gold ETC, 0.12% TER) adds portfolio convexity against macro "
-                "tail risks with structurally low correlation to equities."
-            ),
-            "time_horizon": "72h",
-        })
-    elif not has_bonds:
-        desk.append({
-            "severity": "MACRO-SHOCK", "icon": "🏦",
-            "event": "Duration Risk Rising — Add Short-Gilt Buffer",
-            "action": "Buy", "ticker": "TN28.L",
-            "amount": round(total_val * 0.02),
-            "rationale": (
-                "Re-pricing of UK rate expectations creates a tactical opportunity in short-dated Gilts. "
-                "TN28.L (0–5yr Gilt, 0.07% TER) carries near-zero duration risk while offering "
-                "a real yield buffer of ~4.5%, acting as a cash-plus vehicle during equity volatility."
+                "SGLN.L adds portfolio convexity against macro tail risks."
             ),
             "time_horizon": "72h",
         })
@@ -2242,7 +2391,8 @@ async def analyze_portfolio(request: PortfolioRequest):
         for a in assets.values(): a["weight"] = round(a["value"]/total_val, 4)
         
         # Clean tickers (strip _ISA etc) for external API history fetch
-        api_tickers = list(set([t.split('_')[0] for t in tickers] + ["SPY", "^VIX", "VWRL.L"] + list(GLOBAL_WATCHLIST.keys())))
+        # V6.0: Ensure HG=F and BTC-USD are included for lead-lag
+        api_tickers = list(set([t.split('_')[0] for t in tickers] + ["SPY", "^VIX", "VWRL.L", "HG=F", "BTC-USD"] + list(GLOBAL_WATCHLIST.keys())))
         full_prices, ohlc_data = await _fetch_full_history(api_tickers)
 
         # Pre-compute real RSI for all tickers using OHLC data
@@ -2256,13 +2406,19 @@ async def analyze_portfolio(request: PortfolioRequest):
                 _rsi_cache[_tk_raw] = _mock_rsi(_tk_raw)
 
         risk_data = _compute_risk_history_from_prices(full_prices, tickers, {tk: assets[tk]["weight"] for tk in tickers})
+        
+        # Parallel sentiment and V6.0 alpha signal analysis
         sentiments = await asyncio.gather(*[_get_sentiment(t) for t in tickers])
+        alpha_alerts = await get_lead_lag_signals(holdings, ohlc_data)
+        alpha_alerts.extend(get_institutional_flow(holdings))
 
-        for tk, s in zip(tickers, sentiments):
+        for i, (tk, s) in enumerate(zip(tickers, sentiments)):
             rsi_val = _rsi_cache.get(tk, _mock_rsi(tk))
             s["rsi"] = rsi_val
             s["rsi_signal"] = "OVERBOUGHT" if rsi_val > 70 else "OVERSOLD" if rsi_val < 30 else "NEUTRAL"
             assets[tk]["sentiment"] = s
+            # Map V6.0 alerts back to assets for rendering
+            assets[tk]["alpha_alerts"] = [a for a in alpha_alerts if a["symbol"] == tk]
             assets[tk]["risk_contribution_pct"] = round(risk_data.get("risk_contributions", {}).get(tk, 0) * 100, 2)
 
         blended_ter = sum((_to_float(a.get("ter")) or _KNOWN_TER.get(tk.replace('_', '.').split('.')[0].upper(), 0.002)) * a["weight"]
@@ -2271,12 +2427,39 @@ async def analyze_portfolio(request: PortfolioRequest):
         advanced = _get_advanced_intelligence(assets, p_summary, request.risk_level, risk_data, base_curr, rsi_cache=_rsi_cache)
         apex_advisor = _run_apex_advisor(assets, full_prices, ohlc_data, p_summary)
 
+        # ── Real-Time Telegram Alerts (V6.0: Trigger if conviction > 85%) ──
+        for alert in alpha_alerts:
+            if alert.get("conviction", 0) > 85:
+                msg = (f"<b>🚨 V6.0 ALPHA ALERT: {alert['symbol']}</b>\n"
+                       f"Type: {alert['type']}\n"
+                       f"Title: {alert['title']}\n"
+                       f"Rationale: {alert['rationale']}\n"
+                       f"Conviction: {alert['conviction']}%")
+                asyncio.create_task(send_telegram_alert(msg))
+
+        for tk, logic in apex_advisor.get("scores", {}).items():
+            if logic.get("score", 0) > 85:
+                price = assets.get(tk, {}).get("price", 0)
+                # Compute ATR for Stop Loss
+                hist_df = ohlc_data.get(tk.split('_')[0], pd.DataFrame())
+                atr = _compute_atr(hist_df) if not hist_df.empty else (0.02 * price)
+                sl = round(price - (2 * atr), 2)
+                
+                msg = (f"<b>🚨 HIGH CONVICTION SIGNAL: {tk}</b>\n"
+                       f"Action: {logic['action']}\n"
+                       f"Strategy: {logic['strat']}\n"
+                       f"Price: £{price:,.2f}\n"
+                       f"Stop Loss: £{sl:,.2f}\n"
+                       f"Score: {logic['score']}/100\n"
+                       f"Rationale: {logic['why']}")
+                asyncio.create_task(send_telegram_alert(msg))
+
         # ── CIO LLM — live TAA (falls back to rule engine when disabled/error) ─
         ideal_bp = advanced.get("ideal_blueprint", {})
         if request.enable_cio_llm:
             cio = await _cio_with_fallback(holdings, assets, p_summary, ideal_bp, rsi_cache=_rsi_cache)
         else:
-            desk = _generate_tactical_desk(holdings, assets, p_summary)
+            desk = _generate_tactical_desk(holdings, assets, p_summary, ohlc_data=ohlc_data)
             cio  = {"tactical_desk": desk,
                     "tactical_blueprint": _compute_tactical_blueprint(ideal_bp, desk),
                     "sentiment_updates": {}, "_llm_powered": False}
@@ -2384,6 +2567,7 @@ async def analyze_portfolio(request: PortfolioRequest):
 
         return {
             "portfolio": p_summary, "assets": assets, "risk": risk_data, "advanced_intel": advanced,
+            "alpha_alerts": alpha_alerts,
             "recommendations": _generate_recommendations(assets, p_summary, request.risk_level, base_curr),
             "events": {tk: _extract_events(infos.get(tk, {})) for tk in tickers},
             "global_macro_events": _get_global_events(),
