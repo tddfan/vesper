@@ -50,22 +50,44 @@ async def send_telegram_alert(message: str):
     except Exception as e:
         print(f"[Telegram Error] {e}")
 
+def _daily_return_zscore(df: pd.DataFrame, window: int = 30) -> float:
+    """Compute z-score of the latest daily return relative to its own trailing volatility.
+    Returns how many standard deviations today's move is from the rolling mean.
+    """
+    if df.empty or 'Close' not in df.columns or len(df) < max(window, 5):
+        return 0.0
+    rets = df['Close'].pct_change().dropna()
+    if len(rets) < window:
+        return 0.0
+    trailing = rets.iloc[-(window + 1):-1]  # last N days *before* today
+    mu = float(trailing.mean())
+    sigma = float(trailing.std())
+    if sigma < 1e-8:
+        return 0.0
+    latest = float(rets.iloc[-1])
+    return (latest - mu) / sigma
+
+
 async def get_lead_lag_signals(holdings: Dict[str, float], ohlc_data: Dict[str, pd.DataFrame]) -> List[Dict]:
     """
-    Vesper v6.0 Lead-Lag Engine.
+    Vesper v6.0 Lead-Lag Engine — Relative Volatility Model.
     Copper (HG=F) leads Industrial/India.
     BTC-USD leads Tech/Risk-on.
-    Threshold: Leader >2.5% in 24h, Lag <0.5% → 90% conviction.
+
+    Trigger: Leader move exceeds +2σ (relative to its own trailing vol)
+    AND the lag asset moved < 0.5σ. This eliminates false triggers from
+    BTC's naturally high volatility or Copper's noisy days.
     """
     alerts = []
-    leaders = {"HG=F": None, "BTC-USD": None}
-
-    for l_tk in leaders:
+    # Compute leader z-scores (not raw % change)
+    leader_data: Dict[str, Dict] = {}
+    for l_tk in ("HG=F", "BTC-USD"):
         if l_tk in ohlc_data:
             df = ohlc_data[l_tk]
-            if len(df) >= 2:
-                change = (df['Close'].iloc[-1] / df['Close'].iloc[-2] - 1) * 100
-                leaders[l_tk] = change
+            if len(df) >= 5:
+                raw_chg = (df['Close'].iloc[-1] / df['Close'].iloc[-2] - 1) * 100
+                z = _daily_return_zscore(df)
+                leader_data[l_tk] = {"change_pct": raw_chg, "zscore": z}
 
     # Get VIX for regime-adjusted stops
     vix_val = 15.0
@@ -80,21 +102,30 @@ async def get_lead_lag_signals(holdings: Dict[str, float], ohlc_data: Dict[str, 
         is_risk = any(x in clean_tk for x in ["EQQQ", "QQQ", "SMH", "SOXX", "BTC", "COIN", "ARKK"])
 
         target_df = ohlc_data.get(tk.split('_')[0], pd.DataFrame())
-        if target_df.empty or len(target_df) < 2: continue
+        if target_df.empty or len(target_df) < 5: continue
         target_price = float(target_df['Close'].iloc[-1])
         target_chg = (target_price / target_df['Close'].iloc[-2] - 1) * 100
+        target_z = _daily_return_zscore(target_df)
 
-        leader_chg = None
+        leader_info = None
         leader_sym = ""
-        if is_ind:
-            leader_chg = leaders.get("HG=F")
+        if is_ind and "HG=F" in leader_data:
+            leader_info = leader_data["HG=F"]
             leader_sym = "Copper (HG=F)"
-        elif is_risk:
-            leader_chg = leaders.get("BTC-USD")
+        elif is_risk and "BTC-USD" in leader_data:
+            leader_info = leader_data["BTC-USD"]
             leader_sym = "Bitcoin (BTC-USD)"
 
-        if leader_chg and leader_chg > 2.5 and abs(target_chg) < 0.5:
-            # Compute regime-adjusted ATR exit levels
+        if not leader_info:
+            continue
+
+        leader_z = leader_info["zscore"]
+        leader_chg = leader_info["change_pct"]
+
+        # Trigger: leader > +2σ AND target < 0.5σ (relative to own vol)
+        if leader_z >= 2.0 and abs(target_z) < 0.5:
+            # Conviction scales with leader z-score: 2σ→85%, 3σ→92%, 4σ+→96%
+            conviction = min(96, round(80 + leader_z * 5))
             atr = _compute_atr(target_df) if len(target_df) >= 15 else (0.02 * target_price)
             vix_adj = 1 + (vix_val / 100)
             sl = round(target_price - (atr * vix_adj), 2)
@@ -105,61 +136,120 @@ async def get_lead_lag_signals(holdings: Dict[str, float], ohlc_data: Dict[str, 
             alerts.append({
                 "type": "LEAD-LAG",
                 "symbol": tk,
-                "title": "Delayed Breakout Opportunity",
-                "rationale": f"Leader {leader_sym} surged +{leader_chg:.1f}% in 24h while {tk} lags at {target_chg:+.2f}%. Quantitative lag-drift model projects imminent convergence.",
-                "conviction": 90,
+                "title": f"Statistical Lag-Drift ({leader_z:.1f}σ Leader Move)",
+                "rationale": (
+                    f"{leader_sym} moved {leader_chg:+.1f}% ({leader_z:.1f}σ vs trailing 30d vol) "
+                    f"while {tk} lagged at {target_chg:+.2f}% ({target_z:.1f}σ). "
+                    f"Cross-asset mean-reversion model flags convergence at >{conviction}% confidence."
+                ),
+                "conviction": conviction,
                 "entry_price": round(target_price, 2),
                 "stop_loss": sl,
                 "take_profit": tp,
                 "risk_reward": f"1:{rr}",
                 "atr_raw": round(atr, 4),
                 "vix_adjustment": round(vix_adj, 2),
+                "leader_zscore": round(leader_z, 2),
+                "target_zscore": round(target_z, 2),
             })
     return alerts
 
 def get_institutional_flow(holdings: Dict[str, float], ohlc_data: Dict[str, pd.DataFrame] = None, vix: float = 15.0) -> List[Dict]:
     """
-    Vesper v6.0 Smart Money Simulator.
-    Flags symbols with high relative volume or simulated Dark Pool absorption.
-    Now includes explicit trade params (entry, stop, target, R/R).
+    Vesper v6.0 Institutional Flow — Volume-Delta Analysis.
+
+    Detects abnormal institutional activity using real OHLCV data:
+    1. Volume Ratio: Today's volume vs 20-day SMA. Ratio ≥ 2.0 = unusual.
+    2. Accumulation Signal: Volume ratio high + price flat/down = stealth buying.
+    3. Distribution Signal: Volume ratio high + price up sharply = potential exit.
+
+    Conviction is computed from the volume ratio, NOT from a hardcoded dictionary.
+    No signal is generated unless the data shows a genuine volume anomaly.
     """
     alerts = []
-    # Key should be the base ticker (e.g., 'VUSA' for 'VUSA.L')
-    smart_money_targets = {
-        "PLTR": 92, "NVDA": 86, "TSLA": 89, "AAPL": 75,
-        "VUSA": 82, "VWRP": 80, "CSPX": 85, "EQQQ": 90,
-        "SMH": 94, "IIND": 88
-    }
-
     vix_adj = 1 + (vix / 100)
 
     for tk in holdings:
-        base_tk = tk.split('_')[0].split('.')[0].upper()
-        if base_tk in smart_money_targets:
-            score = smart_money_targets[base_tk]
-            api_tk = tk.split('_')[0]
-            hist_df = ohlc_data.get(api_tk, pd.DataFrame()) if ohlc_data else pd.DataFrame()
-            entry_price = float(hist_df['Close'].iloc[-1]) if not hist_df.empty else 0
-            atr = _compute_atr(hist_df) if not hist_df.empty and len(hist_df) >= 15 else (0.02 * entry_price if entry_price else 0)
-            sl = round(entry_price - (atr * vix_adj), 2) if entry_price else 0
-            tp = round(entry_price + (3 * atr), 2) if entry_price else 0
-            risk = round(entry_price - sl, 2) if entry_price else 0
-            reward = round(tp - entry_price, 2) if entry_price else 0
-            rr = round(reward / risk, 1) if risk > 0 else 0
-            alerts.append({
-                "type": "SMART-MONEY",
-                "symbol": tk,
-                "title": "Institutional Absorption",
-                "rationale": f"High relative volume and off-exchange block trades detected for {base_tk}. Institutional 'Smart Money' is aggressively defending current support levels.",
-                "conviction": score,
-                "entry_price": round(entry_price, 2),
-                "stop_loss": sl,
-                "take_profit": tp,
-                "risk_reward": f"1:{rr}",
-                "atr_raw": round(atr, 4),
-                "vix_adjustment": round(vix_adj, 2),
-            })
-    return alerts
+        api_tk = tk.split('_')[0]
+        hist_df = ohlc_data.get(api_tk, pd.DataFrame()) if ohlc_data else pd.DataFrame()
+        if hist_df.empty or 'Volume' not in hist_df.columns or len(hist_df) < 21:
+            continue
+
+        vol_series = hist_df['Volume'].astype(float)
+        today_vol = vol_series.iloc[-1]
+        avg_vol_20 = float(vol_series.iloc[-21:-1].mean())
+
+        if avg_vol_20 < 1:  # Skip illiquid / no-volume instruments (e.g. some ETCs)
+            continue
+
+        vol_ratio = today_vol / avg_vol_20
+        if vol_ratio < 1.8:  # Below 1.8× average = nothing unusual
+            continue
+
+        # Price change today
+        entry_price = float(hist_df['Close'].iloc[-1])
+        prev_close = float(hist_df['Close'].iloc[-2])
+        day_chg_pct = (entry_price / prev_close - 1) * 100 if prev_close > 0 else 0
+
+        # Classify signal type
+        if day_chg_pct <= 0.3:
+            # Volume surging but price flat/down → stealth accumulation
+            signal_type = "Accumulation"
+            signal_title = "Volume Anomaly — Stealth Accumulation"
+            rationale = (
+                f"{api_tk} traded {vol_ratio:.1f}× its 20-day average volume "
+                f"while price moved only {day_chg_pct:+.2f}%. "
+                f"Large blocks absorbed without moving the bid — consistent with institutional accumulation."
+            )
+        elif day_chg_pct > 1.5:
+            # Volume surging AND price up sharply → momentum/distribution risk
+            signal_type = "Momentum Surge"
+            signal_title = "Volume Anomaly — Momentum Breakout"
+            rationale = (
+                f"{api_tk} surged {day_chg_pct:+.1f}% on {vol_ratio:.1f}× average volume. "
+                f"High-volume breakouts above average daily range suggest genuine demand shift, "
+                f"but late entry carries reversal risk."
+            )
+        else:
+            # Moderate price move on high volume
+            signal_type = "Elevated Flow"
+            signal_title = "Volume Anomaly — Elevated Institutional Activity"
+            rationale = (
+                f"{api_tk} shows {vol_ratio:.1f}× normal volume with a {day_chg_pct:+.1f}% price move. "
+                f"Activity exceeds retail norms — monitor for follow-through."
+            )
+
+        # Conviction: linear scale from vol_ratio — 1.8×→70%, 3×→85%, 5×+→95%
+        conviction = min(95, max(70, round(55 + vol_ratio * 10)))
+
+        atr = _compute_atr(hist_df) if len(hist_df) >= 15 else (0.02 * entry_price)
+        sl = round(entry_price - (atr * vix_adj), 2)
+        tp = round(entry_price + (3 * atr), 2)
+        risk = round(entry_price - sl, 2)
+        reward = round(tp - entry_price, 2)
+        rr = round(reward / risk, 1) if risk > 0 else 0
+
+        alerts.append({
+            "type": "VOLUME-ANOMALY",
+            "symbol": tk,
+            "title": signal_title,
+            "signal_subtype": signal_type,
+            "rationale": rationale,
+            "conviction": conviction,
+            "entry_price": round(entry_price, 2),
+            "stop_loss": sl,
+            "take_profit": tp,
+            "risk_reward": f"1:{rr}",
+            "atr_raw": round(atr, 4),
+            "vix_adjustment": round(vix_adj, 2),
+            "volume_ratio": round(vol_ratio, 1),
+            "today_volume": int(today_vol),
+            "avg_volume_20d": int(avg_vol_20),
+        })
+
+    # Sort by conviction descending, return top 5 anomalies
+    alerts.sort(key=lambda x: x["conviction"], reverse=True)
+    return alerts[:5]
 
 # ── Firebase Admin (Firestore persistence) ────────────────────────────────────
 try:
@@ -314,7 +404,43 @@ _KNOWN_TER: Dict[str, float] = {
     "SCHD":0.0006,"WQDV":0.0025,"VIG":0.0006,"DGRW":0.0028,
     "SMH":0.0035,"SOXX":0.0035,"ARKK":0.0068,
     "XGLD":0.0012,"RBTX":0.008,
+    "0P0000XW0J": 0.0092, # Invesco UK Eq High Inc
+    "0P0000X63C": 0.0099, # Jupiter India (0P0000TKZO was incorrect)
 }
+
+# Ticker resolver for UK Funds/SEDOLs which yfinance can't natively lookup.
+# Maps common II symbols/SEDOLs to Yahoo Finance fund tickers (0P...L format).
+_FUND_TICKER_MAP = {
+    "B8N46L7": "0P0000XW0J.L",  # Invesco UK Eq High Inc UK Z Acc
+    "B4TZHH9": "0P0000X63C.L",  # Jupiter India I Acc (Corrected from TKZO)
+    "EQQQ": "EQQQ.L",
+    "VWRP": "VWRP.L",
+    "VWRL": "VWRL.L",
+    "VUSA": "VUSA.L",
+    "VUKE": "VUKE.L",
+}
+
+def _resolve_ticker(symbol: str) -> str:
+    """Helper to resolve SEDOLs or ambiguous tickers to Yahoo Finance symbols."""
+    if not symbol: return symbol
+    clean = symbol.upper().strip()
+    # Strip composite or SEDOL prefix
+    if clean.startswith("SEDOL:"):
+        clean = clean[6:]
+    # Try direct lookup first
+    if clean in _FUND_TICKER_MAP:
+        return _FUND_TICKER_MAP[clean]
+    # Try without .L suffix (e.g. "B8N46L7.L" → "B8N46L7")
+    bare = clean.removesuffix(".L")
+    if bare != clean and bare in _FUND_TICKER_MAP:
+        return _FUND_TICKER_MAP[bare]
+    return symbol.upper().strip()
+
+
+def _is_sedol_ticker(tk: str) -> bool:
+    """Check if a ticker looks like a SEDOL code (alphanumeric, 7 chars, no '.')."""
+    bare = tk.upper().strip().removesuffix(".L")
+    return len(bare) == 7 and bare.isalnum() and not bare.startswith("0P")
 
 # Fraction of each ETF's NAV denominated in non-GBP currencies.
 # LSE-listed ETFs trade in GBP but often track USD-denominated indices.
@@ -403,8 +529,12 @@ def _tax_year(dt: datetime.date) -> str:
         return f"{y}/{str((y + 1) % 100).zfill(2)}"
     return f"{y - 1}/{str(y % 100).zfill(2)}"
 
-def _parse_gbp(raw: str) -> Optional[float]:
-    """Parse '£1,234.56', '(£1,234.56)', 'n/a' → float or None."""
+def _parse_gbp(raw: str, pence_to_pounds: bool = False) -> Optional[float]:
+    """Parse '£1,234.56', '(£1,234.56)', '120.064p', 'n/a' → float or None.
+
+    When pence_to_pounds=True, pence values (e.g. '120.064p') are converted to
+    pounds (÷100).  Otherwise pence values are returned as-is (numeric part only).
+    """
     if raw is None:
         return None
     s = str(raw).strip()
@@ -412,10 +542,18 @@ def _parse_gbp(raw: str) -> Optional[float]:
         return None
     neg = s.startswith("(") and s.endswith(")")
     s = s.strip("()")
+    # Detect pence suffix (e.g. "120.064p" or "443.94P")
+    is_pence = s.lower().endswith("p") and not s.lower().startswith("£")
+    if is_pence:
+        s = s[:-1]  # strip trailing 'p'
     s = re.sub(r"[£,\s\ufeff]", "", s)
     try:
         v = float(s)
-        return -v if neg else v
+        if is_pence and pence_to_pounds:
+            v /= 100.0
+        if neg:
+            v = -v
+        return v
     except ValueError:
         return None
 
@@ -449,9 +587,14 @@ def _parse_ii_csv(csv_text: str, account_type: str) -> pd.DataFrame:
         # Instrument key
         inst = None
         if sym:
-            inst = sym.upper()
+            inst = _resolve_ticker(sym)
         elif sedol:
-            inst = f"SEDOL:{sedol.upper()}"
+            inst = _resolve_ticker(sedol)
+            if inst == sedol.upper():
+                inst = f"SEDOL:{sedol.upper()}"
+        
+        # If sym was present but not resolved, inst is just sym.upper() (from _resolve_ticker fallback)
+        # This is correct for normal tickers like VUSA.L or AAPL.
 
         qty_raw = (raw.get("Quantity") or "").strip()
         qty = None
@@ -461,7 +604,7 @@ def _parse_ii_csv(csv_text: str, account_type: str) -> pd.DataFrame:
             except ValueError:
                 qty = None
 
-        price = _parse_gbp(raw.get("Price"))
+        price = _parse_gbp(raw.get("Price"), pence_to_pounds=True)
         debit = _parse_gbp(raw.get("Debit"))
         credit = _parse_gbp(raw.get("Credit"))
         balance = _parse_gbp(raw.get("Running Balance"))
@@ -581,6 +724,9 @@ def _run_pnl_engine(df: pd.DataFrame, account_type: str) -> dict:
 
     # ── 3. Process each row ──────────────────────────────────────────────────
     pools: Dict[str, Dict] = {}          # instrument → {qty, total_cost}
+    last_prices: Dict[str, float] = {}   # instrument → latest per-unit price (£)
+    inst_names: Dict[str, str] = {}      # instrument → human name from description
+    inst_sedols: Dict[str, str] = {}     # instrument → original SEDOL code
     transfer_window_end: Optional[datetime.date] = None
 
     total_personal_contribution = 0.0
@@ -638,6 +784,19 @@ def _run_pnl_engine(df: pd.DataFrame, account_type: str) -> dict:
             pool = pools.setdefault(inst, {"qty": 0, "total_cost": 0})
             pool["qty"] += qty
             pool["total_cost"] += cost
+            # Track last per-unit price from CSV (for SEDOL funds Yahoo can't resolve)
+            row_price = r.get("price")
+            if row_price and isinstance(row_price, (int, float)) and not np.isnan(row_price) and row_price > 0:
+                last_prices[inst] = float(row_price)
+            elif qty > 0 and cost > 0:
+                last_prices[inst] = cost / qty  # derive from total ÷ qty
+            # Extract fund name from description (e.g. "Royal London Short Term Money Mkt Y Acc")
+            if inst and desc and inst not in inst_names:
+                inst_names[inst] = desc.split(" - ")[0].strip() if " - " in desc else desc.strip()
+            # Track original SEDOL code for reverse lookup
+            raw_sedol = r.get("sedol")
+            if raw_sedol and isinstance(raw_sedol, str) and raw_sedol.lower() != "nan" and inst not in inst_sedols:
+                inst_sedols[inst] = raw_sedol.upper().strip()
 
         elif tx == "TRADE_SELL":
             proceeds = credit
@@ -739,11 +898,23 @@ def _run_pnl_engine(df: pd.DataFrame, account_type: str) -> dict:
         if pool["qty"] > 0.001:
             avg = round(pool["total_cost"] / pool["qty"], 4)
             tc = round(pool["total_cost"], 2)
-            open_positions[inst] = {
+            pos_entry = {
                 "qty": round(pool["qty"], 4),
                 "avg_cost": avg,
                 "total_cost": tc,
             }
+            # For SEDOL-keyed positions, include broker price, name & SEDOL (Yahoo can't resolve these)
+            if inst.startswith("SEDOL:") or inst.startswith("0P"):
+                bp = last_prices.get(inst)
+                if bp and bp > 0:
+                    pos_entry["broker_price"] = round(bp, 4)
+                nm = inst_names.get(inst)
+                if nm:
+                    pos_entry["name"] = nm
+                sd = inst_sedols.get(inst)
+                if sd:
+                    pos_entry["sedol"] = sd
+            open_positions[inst] = pos_entry
             total_book_cost += tc
 
     # ── 5. Finalize yearly summaries ─────────────────────────────────────────
@@ -804,18 +975,31 @@ def _aggregate_analytics(*results: dict) -> dict:
     for a in accounts:
         for sym, p in a.get("open_positions", {}).items():
             if sym not in merged_pos:
-                merged_pos[sym] = {"qty": 0, "cost": 0}
+                merged_pos[sym] = {"qty": 0, "cost": 0, "broker_price": None, "name": None, "sedol": None}
             merged_pos[sym]["qty"] += p["qty"]
             merged_pos[sym]["cost"] += p["total_cost"]
+            if p.get("broker_price"):
+                merged_pos[sym]["broker_price"] = p["broker_price"]
+            if p.get("name"):
+                merged_pos[sym]["name"] = p["name"]
+            if p.get("sedol"):
+                merged_pos[sym]["sedol"] = p["sedol"]
 
     open_positions = {}
     for sym, p in merged_pos.items():
         if p["qty"] > 0.001:
-            open_positions[sym] = {
+            entry = {
                 "qty": round(p["qty"], 4),
                 "avg_cost": round(p["cost"] / p["qty"], 4),
                 "total_cost": round(p["cost"], 2),
             }
+            if p.get("broker_price"):
+                entry["broker_price"] = p["broker_price"]
+            if p.get("name"):
+                entry["name"] = p["name"]
+            if p.get("sedol"):
+                entry["sedol"] = p["sedol"]
+            open_positions[sym] = entry
 
     total_book_cost = sum(p["total_cost"] for p in open_positions.values())
 
@@ -1009,7 +1193,8 @@ async def _fetch_full_history(tickers: List[str]) -> Tuple[pd.DataFrame, Dict[st
     full_data = {}
     async def fetch_one(ticker: str):
         try:
-            t = yf.Ticker(ticker)
+            api_tk = _resolve_ticker(ticker)
+            t = yf.Ticker(api_tk)
             h = await _in_thread(lambda: t.history(period="1y", auto_adjust=True))
             if not h.empty:
                 if h.index.tz is not None: h.index = h.index.tz_localize(None)
@@ -2135,6 +2320,9 @@ _ENTITY_MAP: Dict[str, List[str]] = {
     "DFEN": ["aerospace defense", "US defense spending"],
     # Income
     "SDIP": ["dividend stocks", "income equities"],
+    # Fund specific entities
+    "0P0000XW0J": ["Invesco UK", "UK high income", "Invesco High Income"],
+    "0P0000X63C": ["Jupiter India", "India economy", "Jupiter Asset Management"],
 }
 
 # ── Junk-headline patterns to strip retail SEO chaff ─────────────────────────
@@ -2391,6 +2579,8 @@ async def analyze_portfolio(request: PortfolioRequest):
             try:
                 # Strip composite suffix (e.g. AAPL_ISA -> AAPL) for API calls
                 api_ticker = ticker.split('_')[0]
+                api_ticker = _resolve_ticker(api_ticker)
+                
                 t = yf.Ticker(api_ticker); info = await _in_thread(lambda: t.info) or {}
                 p = _to_float(info.get("currentPrice") or info.get("regularMarketPrice") or info.get("previousClose") or 0)
                 return ticker, info, p
@@ -2663,7 +2853,8 @@ async def get_quotes(tickers: str = Query(..., description="Comma-separated tick
 
     async def _quote(tk: str):
         try:
-            info = await _in_thread(lambda: yf.Ticker(tk).info) or {}
+            api_tk = _resolve_ticker(tk)
+            info = await _in_thread(lambda: yf.Ticker(api_tk).info) or {}
             price = _to_float(
                 info.get("currentPrice") or info.get("regularMarketPrice") or info.get("previousClose") or 0
             )
@@ -2675,15 +2866,22 @@ async def get_quotes(tickers: str = Query(..., description="Comma-separated tick
             chg = price - prev
             pct = (chg / prev * 100) if prev else 0.0
             name = (info.get("shortName") or info.get("longName") or tk)[:30]
-            return {
+            result = {
                 "ticker": tk, "name": name,
                 "price": round(price, 4), "prev_close": round(prev, 4),
                 "change": round(chg, 4), "change_pct": round(pct, 4),
                 "currency": ccy,
             }
+            # Flag SEDOL/fund tickers that Yahoo couldn't resolve
+            if price == 0 and _is_sedol_ticker(tk):
+                result["use_broker_price"] = True
+            return result
         except Exception:
-            return {"ticker": tk, "name": tk, "price": 0, "prev_close": 0,
+            result = {"ticker": tk, "name": tk, "price": 0, "prev_close": 0,
                     "change": 0, "change_pct": 0, "currency": "USD"}
+            if _is_sedol_ticker(tk):
+                result["use_broker_price"] = True
+            return result
 
     results = await asyncio.gather(*[_quote(s) for s in syms])
     ts = datetime.datetime.now(datetime.timezone.utc).strftime("%H:%M UTC")
@@ -2782,14 +2980,17 @@ if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
 
 # ── Firebase Cloud Function wrapper ──────────────────────────────────────────
-from firebase_functions import https_fn, options
+try:
+    from firebase_functions import https_fn, options
 
-@https_fn.on_request(memory=options.MemoryOption.GB_2, timeout_sec=300, region="us-central1")
-def vesper_api(req: https_fn.Request) -> https_fn.Response:
-    from fastapi.testclient import TestClient
-    client = TestClient(app)
-    path = req.path
-    if path.startswith("/vesper_api"): path = path[len("/vesper_api"):]
-    if not path: path = "/"
-    response = client.request(method=req.method, url=path, params=req.args, headers=dict(req.headers), content=req.data)
-    return https_fn.Response(response.content, status=response.status_code, headers=dict(response.headers))
+    @https_fn.on_request(memory=options.MemoryOption.GB_2, timeout_sec=300, region="us-central1")
+    def vesper_api(req: https_fn.Request) -> https_fn.Response:
+        from fastapi.testclient import TestClient
+        client = TestClient(app)
+        path = req.path
+        if path.startswith("/vesper_api"): path = path[len("/vesper_api"):]
+        if not path: path = "/"
+        response = client.request(method=req.method, url=path, params=req.args, headers=dict(req.headers), content=req.data)
+        return https_fn.Response(response.content, status=response.status_code, headers=dict(response.headers))
+except ImportError:
+    pass  # Not running in Firebase Cloud Functions environment

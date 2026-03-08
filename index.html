@@ -808,6 +808,7 @@
     let sectorChart = null, regionChart = null;
     let currentImportType = 'ISA';
     let _lastQuotes = {}; // ticker → live price, updated by ticker bar
+    let _brokerPrices = {}; // sym → {price, name} from CSV broker data (fallback for SEDOL funds)
     let _intelAcctFilter = 'all'; // 'all' | 'ISA' | 'GIA' | 'SIPP'
     window.vesperState = { ISA: null, GIA: null, SIPP: null };
     const PALETTE = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6','#f97316','#14b8a6','#ef4444','#a855f7'];
@@ -880,19 +881,45 @@
               el.dataset.value = val;
             };
 
-            if (q.price > 0) {
-              tInput.dataset.fallbackPrice = q.price;
-              tInput.dataset.priceSym      = sym;
-              tInput.dataset.priceChg      = q.change;
+            // Try broker/fallback price for tickers Yahoo can't resolve
+            let usePrice = q.price, useSym = sym, isBroker = false;
+            if (usePrice === 0) {
+              // 1. Check fallbackPrice on the row (set by CSV import or prior fetch)
+              const fbp = parseFloat(tInput.dataset.fallbackPrice);
+              if (fbp > 0) {
+                usePrice = fbp; useSym = '£'; isBroker = true;
+              }
+              // 2. Check _brokerPrices cache (from P&L ledger)
+              if (usePrice === 0) {
+                const sedolKey = 'SEDOL:' + entry.ticker.replace(/\.L$/i, '');
+                const bp = _brokerPrices[entry.ticker] || _brokerPrices[sedolKey]
+                        || _brokerPrices[entry.ticker.replace(/\.L$/i, '')];
+                if (bp?.price > 0) {
+                  usePrice = bp.price; useSym = '£'; isBroker = true;
+                }
+              }
+            }
 
-              const total  = q.price * qty;
-              const dayPnl = q.change * qty;
+            if (usePrice > 0) {
+              tInput.dataset.fallbackPrice = usePrice;
+              tInput.dataset.priceSym      = useSym;
+              tInput.dataset.priceChg      = isBroker ? 0 : q.change;
 
-              setCell('price',   `${sym}${q.price.toLocaleString('en-GB', {minimumFractionDigits:2, maximumFractionDigits:2})}`, 'text-slate-200', q.price);
-              setCell('chg-pct', `${up ? '▲' : '▼'} ${Math.abs(q.change_pct).toFixed(2)}%`, chgClr, q.change_pct);
-              setCell('chg-val', `${up ? '+' : ''}${sym}${q.change.toFixed(2)}`, chgClr, q.change);
-              setCell('day-pnl', qty > 0 ? `${dayPnl >= 0 ? '+' : ''}${sym}${Math.abs(dayPnl).toFixed(2)}` : '—', qty > 0 ? chgClr : 'text-slate-700', dayPnl);
-              setCell('total',   total > 0 ? `${sym}${Math.round(total).toLocaleString('en-GB')}` : '—', total > 0 ? 'text-slate-200' : 'text-slate-700', total);
+              const total  = usePrice * qty;
+              const dayPnl = isBroker ? 0 : (q.change * qty);
+              const dispUp = isBroker ? true : up;
+              const dispChgClr = isBroker ? 'text-slate-600' : chgClr;
+
+              const priceLabel = isBroker
+                ? `${useSym}${usePrice.toLocaleString('en-GB', {minimumFractionDigits:2, maximumFractionDigits:4})} ᵇ`
+                : `${useSym}${usePrice.toLocaleString('en-GB', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+              setCell('price',   priceLabel, isBroker ? 'text-amber-400' : 'text-slate-200', usePrice);
+              setCell('chg-pct', isBroker ? 'Broker' : `${up ? '▲' : '▼'} ${Math.abs(q.change_pct).toFixed(2)}%`, isBroker ? 'text-amber-500' : chgClr, q.change_pct);
+              setCell('chg-val', isBroker ? '—' : `${up ? '+' : ''}${useSym}${q.change.toFixed(2)}`, isBroker ? 'text-slate-700' : chgClr, isBroker ? 0 : q.change);
+              setCell('day-pnl', isBroker ? '—' : (qty > 0 ? `${dayPnl >= 0 ? '+' : ''}${useSym}${Math.abs(dayPnl).toFixed(2)}` : '—'), isBroker ? 'text-slate-700' : (qty > 0 ? chgClr : 'text-slate-700'), dayPnl);
+              setCell('total',   total > 0 ? `${useSym}${Math.round(total).toLocaleString('en-GB')}` : '—', total > 0 ? 'text-slate-200' : 'text-slate-700', total);
+              // Cache in _lastQuotes so _livePrice() can find it
+              _lastQuotes[entry.ticker] = usePrice;
               updated++;
             } else {
               ['price','chg-pct','chg-val','day-pnl','total'].forEach(col => setCell(col, 'N/A', 'text-slate-700', 0));
@@ -979,14 +1006,16 @@
           document.getElementById('desk-tabs').classList.remove('hidden');
           document.getElementById('logout-btn').classList.remove('hidden');
           showDemoPreview();
-          loadPortfolio().then(() => {
-            // Auto-load live prices for restored tickers
-            const hasTickers = document.querySelectorAll('#ticker-rows > div .ticker-input');
-            if (hasTickers.length > 0) {
-              setTimeout(() => fetchLivePrices(), 400);
-            }
+          // Load ledger first (populates _brokerPrices for SEDOL funds),
+          // then portfolio, then auto-fetch prices
+          loadLedgerFromFirestore().then(() => {
+            loadPortfolio().then(() => {
+              const hasTickers = document.querySelectorAll('#ticker-rows > div .ticker-input');
+              if (hasTickers.length > 0) {
+                setTimeout(() => fetchLivePrices(), 400);
+              }
+            });
           });
-          loadLedgerFromFirestore();
         } else {
           document.getElementById('auth-modal').style.display = 'flex';
           document.getElementById('main-content').classList.add('hidden');
@@ -2872,24 +2901,40 @@
       if (!quotes || quotes.length === 0) { strip.innerHTML = ''; return; }
 
       strip.innerHTML = quotes.map(q => {
+        // Broker price fallback for SEDOL/fund tickers Yahoo can't resolve
+        let price = q.price, isBroker = false, displayName = q.name;
+        if (price === 0 && q.use_broker_price) {
+          const sedolKey = 'SEDOL:' + q.ticker.replace(/\.L$/i, '');
+          const bp = _brokerPrices[q.ticker] || _brokerPrices[sedolKey]
+                  || _brokerPrices[q.ticker.replace(/\.L$/i, '')];
+          if (bp?.price > 0) {
+            price = bp.price;
+            isBroker = true;
+            if (bp.name && bp.name !== q.ticker) displayName = bp.name;
+          }
+        }
+
         const up      = q.change_pct >= 0;
         const arrow   = up ? '▲' : '▼';
-        const clr     = q.price === 0 ? 'text-slate-600'
+        const clr     = price === 0 ? 'text-slate-600'
+                      : isBroker ? 'text-amber-400'
                       : up ? 'text-emerald-400' : 'text-red-400';
         const bgPct   = up ? 'text-emerald-500' : 'text-red-500';
         const shares  = holdings[q.ticker]?.shares || 0;
-        const total   = shares * q.price;
-        const sym     = q.currency === 'GBP' ? '£' : q.currency === 'USD' ? '$' : q.currency + ' ';
-        const priceFmt = q.price === 0 ? '—' : `${sym}${q.price.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-        const chgPct  = q.price === 0 ? '' : `${arrow} ${Math.abs(q.change_pct).toFixed(2)}%`;
-        const chgAbs  = q.price === 0 ? '' : `${up ? '+' : ''}${sym}${Math.abs(q.change).toFixed(2)}`;
+        const total   = shares * price;
+        const sym     = isBroker ? '£' : (q.currency === 'GBP' ? '£' : (q.currency === 'USD' ? '$' : q.currency + ' '));
+        const priceFmt = price === 0 ? '—' : `${sym}${price.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
+        const chgPct  = price === 0 ? '' : (isBroker ? '' : `${arrow} ${Math.abs(q.change_pct).toFixed(2)}%`);
+        const chgAbs  = price === 0 ? '' : (isBroker ? '' : `${up ? '+' : ''}${sym}${Math.abs(q.change).toFixed(2)}`);
         const totalFmt = total > 0 ? `${sym}${Math.round(total).toLocaleString('en-GB')}` : '';
+        const brokerBadge = isBroker ? '<span class="text-[7px] font-black text-amber-500 bg-amber-950/50 px-1 rounded uppercase">broker</span>' : '';
 
         return `<div class="ticker-chip group">
           <div class="flex flex-col justify-center leading-none gap-[2px]">
             <div class="flex items-center gap-1.5">
               <span class="text-[10px] font-black text-slate-200 font-mono tracking-tight">${q.ticker}</span>
-              <span class="text-[8px] text-slate-600 font-bold max-w-[90px] truncate hidden sm:inline">${q.name}</span>
+              <span class="text-[8px] text-slate-600 font-bold max-w-[90px] truncate hidden sm:inline">${displayName}</span>
+              ${brokerBadge}
             </div>
             <div class="flex items-center gap-1.5">
               <span class="text-[11px] font-black font-mono ${clr}">${priceFmt}</span>
@@ -2902,7 +2947,16 @@
       }).join('');
 
       // Cache live prices for unrealized gain calculation
-      quotes.forEach(q => { if (q.price > 0) _lastQuotes[q.ticker] = q.price; });
+      quotes.forEach(q => {
+        if (q.price > 0) { _lastQuotes[q.ticker] = q.price; return; }
+        // Broker fallback for _lastQuotes cache
+        if (q.use_broker_price) {
+          const sedolKey = 'SEDOL:' + q.ticker.replace(/\.L$/i, '');
+          const bp = _brokerPrices[q.ticker] || _brokerPrices[sedolKey]
+                  || _brokerPrices[q.ticker.replace(/\.L$/i, '')];
+          if (bp?.price > 0) _lastQuotes[q.ticker] = bp.price;
+        }
+      });
       renderAccountValueBanners();
       renderAccountHoldings();
       updatePnlUnrealized();
@@ -2948,7 +3002,39 @@
       // Try exact match, then with .L suffix (for LSE tickers in II CSVs)
       if (_lastQuotes[sym] > 0) return _lastQuotes[sym];
       if (_lastQuotes[sym + '.L'] > 0) return _lastQuotes[sym + '.L'];
+      // Fallback: broker-provided price for SEDOL funds Yahoo can't resolve
+      if (_brokerPrices[sym]?.price > 0) return _brokerPrices[sym].price;
       return null;
+    }
+
+    function _cacheBrokerPrices(data) {
+      // Extract broker prices from P&L open_positions → _brokerPrices cache
+      // Index by ALL possible lookup keys so the ticker bar can find them
+      const accounts = ['ISA', 'GIA', 'SIPP', 'all'];
+      accounts.forEach(acct => {
+        const acctData = data?.by_account?.[acct];
+        if (!acctData) return;
+        Object.entries(acctData.open_positions || {}).forEach(([sym, p]) => {
+          if (!(p.broker_price > 0)) return;
+          const entry = { price: p.broker_price, name: p.name || sym };
+          // Key by instrument_key (e.g. "SEDOL:B8XYYQ8" or "0P0000XW0J.L")
+          _brokerPrices[sym] = entry;
+          // Key by SEDOL code variants so ticker bar can find them
+          const sedol = p.sedol;
+          if (sedol) {
+            _brokerPrices[sedol] = entry;                    // "B8N46L7"
+            _brokerPrices[sedol + '.L'] = entry;             // "B8N46L7.L"
+            _brokerPrices['SEDOL:' + sedol] = entry;         // "SEDOL:B8N46L7"
+          }
+          // If key itself is "SEDOL:XXX", also index without prefix
+          if (sym.startsWith('SEDOL:')) {
+            const bare = sym.slice(6);
+            _brokerPrices[bare] = entry;
+            _brokerPrices[bare + '.L'] = entry;
+          }
+        });
+      });
+      console.log('[Vesper] Cached broker prices:', Object.keys(_brokerPrices).length, 'keys', _brokerPrices);
     }
 
     function renderAccountValueBanners() {
@@ -3076,12 +3162,13 @@
       }
 
       feed.innerHTML = alerts.map(a => {
-        const isSmart = a.type === 'SMART-MONEY';
-        const borderClr = isSmart ? 'border-fuchsia-500' : 'border-indigo-500';
-        const icon = isSmart ? '🏢' : '🔗';
-        const typeLabel = isSmart ? 'Institutional Flow' : 'Lead-Lag Correlation';
-        const badgeClr = isSmart ? 'text-fuchsia-400 bg-fuchsia-950/30' : 'text-indigo-400 bg-indigo-950/30';
-        const accentClr = isSmart ? 'fuchsia' : 'indigo';
+        const isVolume = a.type === 'VOLUME-ANOMALY';
+        const isLeadLag = a.type === 'LEAD-LAG';
+        const borderClr = isVolume ? 'border-fuchsia-500' : 'border-indigo-500';
+        const icon = isVolume ? '📊' : '🔗';
+        const typeLabel = isVolume ? 'Volume Anomaly' : 'Lead-Lag (σ-Model)';
+        const badgeClr = isVolume ? 'text-fuchsia-400 bg-fuchsia-950/30' : 'text-indigo-400 bg-indigo-950/30';
+        const accentClr = isVolume ? 'fuchsia' : 'indigo';
         const entry = a.entry_price || 0;
         const sl = a.stop_loss || 0;
         const tp = a.take_profit || 0;
@@ -3093,13 +3180,27 @@
         const gaugeW = Math.min(a.conviction, 100);
         const gaugeClr = a.conviction >= 90 ? 'bg-emerald-500' : a.conviction >= 80 ? 'bg-amber-500' : 'bg-slate-600';
 
+        // Volume-specific metadata
+        const volRatio = a.volume_ratio ? `${a.volume_ratio}×` : '';
+        const volMeta = isVolume && a.volume_ratio
+          ? `<span class="text-[8px] font-mono font-black text-fuchsia-400 ml-2">${volRatio} avg vol</span>`
+          : '';
+        // Lead-lag sigma metadata
+        const sigMeta = isLeadLag && a.leader_zscore
+          ? `<span class="text-[8px] font-mono font-black text-indigo-400 ml-2">Leader: ${a.leader_zscore}σ · Target: ${a.target_zscore}σ</span>`
+          : '';
+
         return `
           <div class="glass p-5 border-l-4 ${borderClr} hover:scale-[1.005] transition-all space-y-4">
             <div class="flex justify-between items-start">
               <div class="flex items-center gap-3">
                 <span class="text-2xl">${icon}</span>
                 <div>
-                  <span class="text-[8px] font-black px-1.5 py-0.5 rounded border border-slate-700 uppercase tracking-widest ${badgeClr}">${typeLabel}</span>
+                  <div class="flex items-center flex-wrap gap-1">
+                    <span class="text-[8px] font-black px-1.5 py-0.5 rounded border border-slate-700 uppercase tracking-widest ${badgeClr}">${typeLabel}</span>
+                    ${isVolume && a.signal_subtype ? `<span class="text-[7px] font-black px-1 py-0.5 rounded bg-slate-800 text-slate-500 uppercase">${a.signal_subtype}</span>` : ''}
+                    ${volMeta}${sigMeta}
+                  </div>
                   <p class="text-sm font-black text-slate-100 mt-1 uppercase">${a.symbol.split('_')[0]}: ${a.title}</p>
                 </div>
               </div>
@@ -3114,7 +3215,7 @@
             <p class="text-[11px] text-slate-400 leading-relaxed">${a.rationale}</p>
 
             ${entry > 0 ? `
-            <div class="p-3 bg-${accentClr}-950/20 rounded-lg border border-${accentClr}-500/20">
+            <div class="p-3 bg-slate-900/60 rounded-lg border border-slate-700/50">
               <p class="text-[9px] font-black text-${accentClr}-400 uppercase tracking-widest mb-2">Tactical Execution Box</p>
               <div class="grid grid-cols-4 gap-3">
                 <div>
@@ -3134,15 +3235,15 @@
                   <p class="text-[11px] font-black text-indigo-400 font-mono">${rr}</p>
                 </div>
               </div>
-              <p class="text-[8px] text-slate-600 mt-2 font-mono">VIX Adj: ${vixAdj}× · ATR-Based Regime Stop</p>
+              <p class="text-[8px] text-slate-700 mt-2 font-mono">VIX ${vixAdj}× · ATR Regime-Adj${isVolume && a.volume_ratio ? ` · Vol ${a.volume_ratio}× 20d avg` : ''}</p>
             </div>
             ` : ''}
 
             <div class="flex gap-2 items-center justify-between">
               <div class="flex gap-2">
-                <button onclick="console.log('ALPHA TRADE:', JSON.parse(decodeURIComponent('${encodeURIComponent(JSON.stringify(a))}')))" class="px-3 py-1.5 ${isSmart ? 'bg-fuchsia-600 hover:bg-fuchsia-500' : 'bg-indigo-600 hover:bg-indigo-500'} rounded text-[9px] font-black uppercase tracking-wider transition-all">Trade Now</button>
+                <button onclick="console.log('ALPHA TRADE:', JSON.parse(decodeURIComponent('${encodeURIComponent(JSON.stringify(a))}')))" class="px-3 py-1.5 ${isVolume ? 'bg-fuchsia-600 hover:bg-fuchsia-500' : 'bg-indigo-600 hover:bg-indigo-500'} rounded text-[9px] font-black uppercase tracking-wider transition-all">Trade Now</button>
               </div>
-              <span class="text-[8px] text-slate-700 font-mono font-black uppercase">Signal Active</span>
+              <span class="text-[8px] text-slate-700 font-mono font-black uppercase">Data-Driven Signal</span>
             </div>
           </div>
         `;
@@ -3206,6 +3307,8 @@
           ['ISA', 'GIA', 'SIPP'].forEach(acct => {
             if (data.by_account[acct]) window.vesperState[acct] = data.by_account[acct];
           });
+          // Extract broker prices for SEDOL funds (Yahoo can't resolve these)
+          _cacheBrokerPrices({ by_account: window.vesperState });
           // Rebuild a proper 'all' view from all loaded accounts client-side
           const consolidated = renderConsolidatedView();
           data.by_account = Object.assign({}, data.by_account, window.vesperState);
@@ -3258,6 +3361,8 @@
         if (!resp.ok) return;
         const data = await resp.json();
         if ((data.by_account?.all?.transaction_count || 0) > 0) {
+          // Cache broker prices for SEDOL funds — index by all possible lookup keys
+          _cacheBrokerPrices(data);
           renderPnlDashboard(data);
           _setPnlSyncBadge(true);
         }
@@ -3311,13 +3416,17 @@
         Object.entries(a.open_positions || {}).forEach(([sym, p]) => {
           if (p.qty > 0.001) {
             const key = `${sym}_${acct}`;
-            open_positions[key] = {
+            const entry = {
               qty:        Math.round(p.qty  * 10000) / 10000,
               avg_cost:   Math.round(p.avg_cost * 10000) / 10000,
               total_cost: Math.round(p.total_cost * 100)   / 100,
               account_type: acct,
               symbol: sym
             };
+            if (p.broker_price) entry.broker_price = p.broker_price;
+            if (p.name) entry.name = p.name;
+            if (p.sedol) entry.sedol = p.sedol;
+            open_positions[key] = entry;
           }
         });
       });
@@ -3412,12 +3521,18 @@
       const fmt = v => '£' + Number(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       const pos = d.open_positions || {};
 
-      // Live equity from _lastQuotes
-      let liveEquity = 0, anyLive = false;
+      // Live equity from _lastQuotes + broker fallback
+      let liveEquity = 0, anyLive = false, anyBroker = false;
       Object.entries(pos).forEach(([key, p]) => {
         const sym = p.symbol || key;
         const lp = _livePrice(sym);
-        if (lp !== null) { liveEquity += lp * p.qty; anyLive = true; }
+        if (lp !== null) {
+          liveEquity += lp * p.qty;
+          anyLive = true;
+          // Check if this price came from broker fallback
+          const isFromBroker = !(_lastQuotes[sym] > 0) && !(_lastQuotes[sym + '.L'] > 0) && _brokerPrices[sym]?.price > 0;
+          if (isFromBroker) anyBroker = true;
+        }
       });
 
       const bookCost = d.total_book_cost || 0;
@@ -3428,9 +3543,10 @@
       const uColor  = unrealPnL !== null ? (unrealPnL >= 0 ? 'text-emerald-400' : 'text-red-400') : 'text-slate-500';
       const uBorder = unrealPnL !== null ? (unrealPnL >= 0 ? 'border-emerald-500/40' : 'border-red-500/40') : 'border-slate-700/40';
       const rColor  = realizedGains >= 0 ? 'text-emerald-400' : 'text-red-400';
-      const priceTag = anyLive ? 'Live' : '—';
-      const tagColor = anyLive ? 'text-emerald-500 bg-emerald-950/50 border-emerald-900/50'
-                               : 'text-slate-500 bg-slate-900/50 border-slate-700/50';
+      const priceTag = anyLive ? (anyBroker ? 'Mixed' : 'Live') : '—';
+      const tagColor = anyLive
+        ? (anyBroker ? 'text-amber-400 bg-amber-950/50 border-amber-900/50' : 'text-emerald-500 bg-emerald-950/50 border-emerald-900/50')
+        : 'text-slate-500 bg-slate-900/50 border-slate-700/50';
 
       el.innerHTML = `
         <div class="glass p-5 border-t-2 border-indigo-500/40">
@@ -3452,7 +3568,7 @@
           </div>
           <div class="text-2xl font-black ${uColor} font-mono">${unrealPnL !== null ? (unrealPnL >= 0 ? '+' : '') + fmt(unrealPnL) : '—'}</div>
           <p class="text-xs font-bold text-slate-500 uppercase mt-1">Unrealized P&amp;L</p>
-          <p class="text-[10px] text-slate-600 mt-1">${anyLive ? 'Live equities − book cost' : 'Waiting for live prices'}</p>
+          <p class="text-[10px] text-slate-600 mt-1">${anyLive ? (anyBroker ? 'Live + broker last-trade prices' : 'Live equities − book cost') : 'Waiting for live prices'}</p>
         </div>
         <div class="glass p-5 border-t-2 border-emerald-500/40">
           <div class="text-2xl mb-1">📊</div>
@@ -3487,6 +3603,7 @@
             const sym = p.symbol || key;
             const acct = p.account_type;
             const lp = _livePrice(sym);
+            const isBrokerPrice = lp !== null && !(_lastQuotes[sym] > 0) && !(_lastQuotes[sym + '.L'] > 0) && _brokerPrices[sym]?.price > 0;
             const curVal = lp !== null ? lp * p.qty : null;
             const unreal = lp !== null ? (lp - p.avg_cost) * p.qty : null;
             const upct   = lp !== null && p.avg_cost > 0 ? ((lp / p.avg_cost) - 1) * 100 : null;
@@ -3494,13 +3611,24 @@
             const unrStr = unreal !== null
               ? (unreal >= 0 ? '+' : '') + fmt(unreal) + (upct !== null ? ` (${upct >= 0 ? '+' : ''}${upct.toFixed(1)}%)` : '')
               : '—';
-            const displaySym = acct && _activePnlTab === 'all' ? `${sym} <span class="text-[9px] text-slate-500 font-black uppercase">[${acct}]</span>` : sym;
+            // For SEDOL funds, show human-readable name + SEDOL badge
+            const isSedol = sym.startsWith('SEDOL:');
+            const fundName = _brokerPrices[sym]?.name || p.name || sym;
+            let displaySym;
+            if (isSedol) {
+              const sedolCode = sym.replace('SEDOL:', '');
+              displaySym = `<span class="font-sans">${fundName}</span><br><span class="text-[9px] text-slate-500">${sedolCode}</span>`;
+            } else {
+              displaySym = sym;
+            }
+            if (acct && _activePnlTab === 'all') displaySym += ` <span class="text-[9px] text-slate-500 font-black uppercase">[${acct}]</span>`;
+            const priceBadge = isBrokerPrice ? ' <span class="text-[8px] px-1 py-0.5 bg-amber-950/50 text-amber-400 border border-amber-900/50 rounded font-black uppercase">Broker</span>' : '';
             return `<tr>
               <td class="py-1.5 pr-4 font-mono font-bold text-slate-200">${displaySym}</td>
               <td class="py-1.5 pr-4 text-right text-slate-400 font-mono">${Number(p.qty).toLocaleString('en-GB')}</td>
               <td class="py-1.5 pr-4 text-right font-mono text-slate-400">${fmt(p.avg_cost)}</td>
               <td class="py-1.5 pr-4 text-right font-mono text-amber-400">${fmt(p.total_cost)}</td>
-              ${hasLive ? `<td class="py-1.5 pr-4 text-right font-mono text-slate-300">${curVal !== null ? fmt(curVal) : '—'}</td>
+              ${hasLive ? `<td class="py-1.5 pr-4 text-right font-mono text-slate-300">${curVal !== null ? fmt(curVal) + priceBadge : '—'}</td>
               <td class="py-1.5 text-right font-mono font-bold ${cls}">${unrStr}</td>` : ''}
             </tr>`;
           }).join('')}
@@ -3516,38 +3644,93 @@
       sect.classList.remove('hidden');
       const fmt = v => '£' + Number(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       const thisYear = currentTaxYear();
+
+      // Compute unrealized P&L from live prices
+      const pos = d.open_positions || {};
+      let liveEquity = 0, anyLive = false;
+      Object.entries(pos).forEach(([key, p]) => {
+        const sym = p.symbol || key;
+        const lp = _livePrice(sym);
+        if (lp !== null) { liveEquity += lp * p.qty; anyLive = true; }
+      });
+      const bookCost = d.total_book_cost || 0;
+      const unrealPnL = anyLive ? liveEquity - bookCost : null;
+
+      // Compute totals across all years
+      let totNetProfit = 0, totProceeds = 0, totCost = 0, totGains = 0,
+          totLosses = 0, totDivs = 0, totInt = 0, totRealized = 0;
+      years.forEach(yr => {
+        const y = yearly[yr];
+        totNetProfit += y.net_profit || 0;
+        totProceeds  += y.total_proceeds || 0;
+        totCost      += y.total_allowable_cost || 0;
+        totGains     += y.gains || 0;
+        totLosses    += y.losses || 0;
+        totDivs      += y.dividends || 0;
+        totInt       += y.interest || 0;
+        totRealized  += y.realized_gains || 0;
+      });
+      const totalPnL = totNetProfit + (unrealPnL || 0);
+      const totalPnLCls = totalPnL >= 0 ? 'text-emerald-400' : 'text-red-400';
+
       document.getElementById('pnl-year-body').innerHTML = `
-        <table class="w-full text-xs min-w-[600px]">
+        <table class="w-full text-xs min-w-[780px]">
           <thead><tr class="text-[10px] font-bold text-slate-500 uppercase border-b border-slate-800">
             <th class="text-left pb-2 pr-3">Tax Year</th>
+            <th class="text-right pb-2 pr-3">Realized P&L</th>
+            <th class="text-right pb-2 pr-3">Dividends</th>
+            <th class="text-right pb-2 pr-3">Interest</th>
             <th class="text-right pb-2 pr-3">Net Profit</th>
             <th class="text-right pb-2 pr-3">Proceeds</th>
             <th class="text-right pb-2 pr-3">Allow. Cost</th>
             <th class="text-right pb-2 pr-3">Gains</th>
-            <th class="text-right pb-2 pr-3">Losses</th>
-            <th class="text-right pb-2 pr-3">Dividends</th>
-            <th class="text-right pb-2">Interest</th>
+            <th class="text-right pb-2">Losses</th>
           </tr></thead>
           <tbody class="divide-y divide-slate-800/40">
             ${years.map(yr => {
               const y = yearly[yr];
               const isYTD = yr === thisYear;
               const npCls = y.net_profit >= 0 ? 'text-emerald-400' : 'text-red-400';
+              const rgCls = (y.realized_gains || 0) >= 0 ? 'text-emerald-400' : 'text-red-400';
               const rowCls = isYTD ? 'bg-indigo-950/20' : '';
               return `<tr class="${rowCls}">
                 <td class="py-2 pr-3 font-mono font-bold text-slate-200">
                   ${yr}${isYTD ? ' <span class="text-[8px] font-black text-indigo-400 ml-1 align-middle">YTD</span>' : ''}
                 </td>
-                <td class="py-2 pr-3 text-right font-mono ${npCls}">${fmt(y.net_profit)}</td>
-                <td class="py-2 pr-3 text-right font-mono text-slate-300">${fmt(y.total_proceeds || 0)}</td>
-                <td class="py-2 pr-3 text-right font-mono text-slate-400">${fmt(y.total_allowable_cost || 0)}</td>
-                <td class="py-2 pr-3 text-right font-mono text-emerald-400">${fmt(y.gains || 0)}</td>
-                <td class="py-2 pr-3 text-right font-mono text-red-400">${fmt(y.losses || 0)}</td>
+                <td class="py-2 pr-3 text-right font-mono font-bold ${rgCls}">${fmt(y.realized_gains || 0)}</td>
                 <td class="py-2 pr-3 text-right font-mono text-blue-400">${fmt(y.dividends)}</td>
-                <td class="py-2 text-right font-mono text-violet-400">${fmt(y.interest)}</td>
+                <td class="py-2 pr-3 text-right font-mono text-violet-400">${fmt(y.interest)}</td>
+                <td class="py-2 pr-3 text-right font-mono ${npCls}">${fmt(y.net_profit)}</td>
+                <td class="py-2 pr-3 text-right font-mono text-slate-400">${fmt(y.total_proceeds || 0)}</td>
+                <td class="py-2 pr-3 text-right font-mono text-slate-500">${fmt(y.total_allowable_cost || 0)}</td>
+                <td class="py-2 pr-3 text-right font-mono text-emerald-500/70">${fmt(y.gains || 0)}</td>
+                <td class="py-2 text-right font-mono text-red-500/70">${fmt(y.losses || 0)}</td>
               </tr>`;
             }).join('')}
           </tbody>
+          <tfoot>
+            <tr class="border-t-2 border-slate-700">
+              <td class="py-2 pr-3 font-mono font-black text-slate-200 uppercase text-[10px]">Realized Total</td>
+              <td class="py-2 pr-3 text-right font-mono font-black ${totRealized >= 0 ? 'text-emerald-400' : 'text-red-400'}">${fmt(totRealized)}</td>
+              <td class="py-2 pr-3 text-right font-mono font-bold text-blue-400">${fmt(totDivs)}</td>
+              <td class="py-2 pr-3 text-right font-mono font-bold text-violet-400">${fmt(totInt)}</td>
+              <td class="py-2 pr-3 text-right font-mono font-black ${totNetProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}">${fmt(totNetProfit)}</td>
+              <td class="py-2 pr-3 text-right font-mono font-bold text-slate-400">${fmt(totProceeds)}</td>
+              <td class="py-2 pr-3 text-right font-mono font-bold text-slate-500">${fmt(totCost)}</td>
+              <td class="py-2 pr-3 text-right font-mono font-bold text-emerald-500/70">${fmt(totGains)}</td>
+              <td class="py-2 text-right font-mono font-bold text-red-500/70">${fmt(totLosses)}</td>
+            </tr>
+            <tr class="border-t border-slate-800/60">
+              <td class="py-2 pr-3 font-mono font-black text-slate-200 uppercase text-[10px]">Unrealized</td>
+              <td class="py-2 pr-3 text-right font-mono font-black ${unrealPnL !== null ? (unrealPnL >= 0 ? 'text-emerald-400' : 'text-red-400') : 'text-slate-600'}">${unrealPnL !== null ? fmt(unrealPnL) : '—'}</td>
+              <td colspan="7" class="py-2 text-right text-[9px] text-slate-600">${anyLive ? 'Based on live/broker prices' : 'Waiting for live prices'}</td>
+            </tr>
+            <tr class="border-t-2 border-indigo-500/40 bg-indigo-950/20">
+              <td class="py-2.5 pr-3 font-mono font-black text-indigo-300 uppercase text-[10px]">Total P&L</td>
+              <td class="py-2.5 pr-3 text-right font-mono font-black text-lg ${totalPnLCls}">${unrealPnL !== null ? fmt(totalPnL) : fmt(totNetProfit)}</td>
+              <td colspan="7" class="py-2.5 text-right text-[9px] text-slate-500 font-bold">${unrealPnL !== null ? 'Realized + Unrealized' : 'Realized only (no live prices)'}</td>
+            </tr>
+          </tfoot>
         </table>`;
     }
 
