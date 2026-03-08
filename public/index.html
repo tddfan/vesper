@@ -270,6 +270,7 @@
   <div id="desk-tabs" class="hidden sticky z-[9] bg-slate-950/90 border-b border-slate-800/60" style="backdrop-filter:blur(12px)">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 flex items-center gap-3 h-11">
       <button id="desk-tab-intelligence" onclick="switchDesk('intelligence')" class="desk-tab active">🧠 Intelligence Desk</button>
+      <button id="desk-tab-alpha"        onclick="switchDesk('alpha')"        class="desk-tab">🚀 Alpha Alerts</button>
       <button id="desk-tab-pnl"          onclick="switchDesk('pnl')"          class="desk-tab">📊 P&L Desk</button>
     </div>
   </div>
@@ -413,6 +414,25 @@
       </section>
 
     </div><!-- /pnl-view -->
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+         ALPHA DESK (hidden by default)
+         ══════════════════════════════════════════════════════════════════════ -->
+    <div id="alpha-view" class="hidden">
+      <div class="flex items-center justify-between mb-8">
+        <div>
+          <h2 class="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-indigo-400 uppercase tracking-tight">Alpha Intelligence Feed</h2>
+          <p class="text-slate-500 text-sm italic">High-conviction anomalies: Insider Smart Money & Lead-Lag Correlations.</p>
+        </div>
+        <span class="text-[8px] font-black px-2 py-0.5 rounded bg-indigo-950/50 text-indigo-400 border border-indigo-900/50 uppercase">v6.0 Alpha Suite</span>
+      </div>
+
+      <div id="alpha-alerts-feed" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="col-span-full py-20 text-center text-slate-600 text-xs font-black uppercase tracking-widest">
+          No active anomalies. Run 'Execute Quant Suite' to scan.
+        </div>
+      </div>
+    </div><!-- /alpha-view -->
 
     <!-- ══════════════════════════════════════════════════════════════════════
          INTELLIGENCE DESK (visible by default)
@@ -959,7 +979,13 @@
           document.getElementById('desk-tabs').classList.remove('hidden');
           document.getElementById('logout-btn').classList.remove('hidden');
           showDemoPreview();
-          loadPortfolio();
+          loadPortfolio().then(() => {
+            // Auto-load live prices for restored tickers
+            const hasTickers = document.querySelectorAll('#ticker-rows > div .ticker-input');
+            if (hasTickers.length > 0) {
+              setTimeout(() => fetchLivePrices(), 400);
+            }
+          });
           loadLedgerFromFirestore();
         } else {
           document.getElementById('auth-modal').style.display = 'flex';
@@ -1393,6 +1419,7 @@
       renderTacticalDesk(td || [], p.total_value);
       renderRiskOptimizer(recs || [], p.total_value);
       renderSentimentSummary(a);
+      renderAlphaAlerts(data);
       // Store apex scores before rendering cards so action badges are available
       window._lastApexScores = data.apex_advisor?.scores || {};
       renderAssetCards(a, ev, r.asset_risk, ai, p);
@@ -1927,14 +1954,29 @@
         'MOMENTUM':     { border: 'border-emerald-500/50',badge: 'bg-emerald-500 text-black',  glow: 'shadow-emerald-900/30' },
         'SECTOR-ROTATE':{ border: 'border-indigo-500/50', badge: 'bg-indigo-500 text-white',   glow: 'shadow-indigo-900/30' },
       };
-      document.getElementById('tactical-desk-cards').innerHTML = desk.map(d => {
+      // Time-to-decay: hours from now (simulated 24h from signal generation)
+      const decayHours = 24;
+      const decayMs = decayHours * 3600 * 1000;
+      const signalTime = Date.now();
+
+      document.getElementById('tactical-desk-cards').innerHTML = desk.map((d, idx) => {
         const cfg = SEV[d.severity] || SEV['MACRO-SHOCK'];
         const isBuy    = d.action === 'Buy';
         const actionClr = isBuy ? 'text-emerald-400' : 'text-amber-400';
         const actionBg  = isBuy ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-amber-500/10 border-amber-500/30';
         const amtStr   = d.amount > 0 ? ` · £${d.amount.toLocaleString('en-GB')}` : '';
+        const ex = d.exit_strategy || {};
+        const entry = ex.entry_price || 0;
+        const sl = ex.stop_loss || 0;
+        const tp = ex.take_profit || 0;
+        const rr = ex.risk_reward || '—';
+        const vixAdj = ex.vix_adjustment || 1;
+        const atrPct = ex.atr_pct || 0;
+        const sugQty = ex.suggested_qty || 0;
+        const decayId = `decay-${idx}`;
+
         return `
-          <div class="glass border ${cfg.border} rounded-xl p-5 space-y-3 hover:scale-[1.01] transition-all shadow-lg ${cfg.glow}">
+          <div class="glass border ${cfg.border} rounded-xl p-5 space-y-3 hover:scale-[1.005] transition-all shadow-lg ${cfg.glow}">
             <div class="flex items-start justify-between gap-2">
               <div class="flex gap-3 min-w-0">
                 <span class="text-2xl shrink-0 mt-0.5">${d.icon}</span>
@@ -1946,13 +1988,75 @@
                   <p class="text-[11px] font-black text-slate-100 uppercase tracking-tight leading-tight">${d.event}</p>
                 </div>
               </div>
+              <div class="text-right flex-shrink-0">
+                <p class="text-[8px] font-black text-slate-600 uppercase">Decay</p>
+                <p id="${decayId}" class="text-[10px] font-mono font-black text-amber-400">24:00:00</p>
+              </div>
             </div>
+
+            ${entry > 0 ? `
+            <div class="p-3 bg-slate-900/60 rounded-lg border border-slate-700/50">
+              <p class="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-2">Tactical Execution Box</p>
+              <div class="grid grid-cols-5 gap-2">
+                <div>
+                  <p class="text-[7px] font-black text-slate-600 uppercase">Entry</p>
+                  <p class="text-[11px] font-black text-slate-200 font-mono">£${entry.toLocaleString('en-GB', {minimumFractionDigits:2})}</p>
+                </div>
+                <div>
+                  <p class="text-[7px] font-black text-slate-600 uppercase">Stop</p>
+                  <p class="text-[11px] font-black text-rose-400 font-mono">£${sl.toLocaleString('en-GB', {minimumFractionDigits:2})}</p>
+                </div>
+                <div>
+                  <p class="text-[7px] font-black text-slate-600 uppercase">Target</p>
+                  <p class="text-[11px] font-black text-emerald-400 font-mono">£${tp.toLocaleString('en-GB', {minimumFractionDigits:2})}</p>
+                </div>
+                <div>
+                  <p class="text-[7px] font-black text-slate-600 uppercase">R/R</p>
+                  <p class="text-[11px] font-black text-indigo-400 font-mono">${rr}</p>
+                </div>
+                <div>
+                  <p class="text-[7px] font-black text-slate-600 uppercase">Qty</p>
+                  <p class="text-[11px] font-black text-slate-300 font-mono">${sugQty > 0 ? sugQty : '—'}</p>
+                </div>
+              </div>
+              <p class="text-[8px] text-slate-700 mt-2 font-mono">ATR ${atrPct}% · VIX adj ${vixAdj}× · Regime-Adjusted</p>
+            </div>
+            ` : `
+            <div class="p-3 bg-indigo-950/20 rounded-lg border border-indigo-500/20">
+              <p class="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-1">Exit Levels</p>
+              <div class="grid grid-cols-2 gap-4">
+                <div><p class="text-slate-600 text-[8px] font-black uppercase">Stop</p><p class="text-[11px] font-black text-rose-400 font-mono">£${sl.toLocaleString('en-GB', {minimumFractionDigits:2})}</p></div>
+                <div><p class="text-slate-600 text-[8px] font-black uppercase">Target</p><p class="text-[11px] font-black text-emerald-400 font-mono">£${tp.toLocaleString('en-GB', {minimumFractionDigits:2})}</p></div>
+              </div>
+            </div>
+            `}
+
             <div class="rounded-lg p-3 border ${actionBg}">
               <p class="text-xs font-black ${actionClr} uppercase tracking-widest mb-1">${d.action} ${d.ticker}${amtStr}</p>
               <p class="text-[10px] text-slate-400 font-medium leading-relaxed">${d.rationale}</p>
             </div>
+
+            <button onclick="console.log('TACTICAL TRADE:', ${JSON.stringify(d).replace(/'/g, "\\'")})" class="w-full py-2 ${isBuy ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-amber-600 hover:bg-amber-500'} rounded text-[9px] font-black uppercase tracking-wider transition-all">
+              ${d.action} ${d.ticker} — Execute
+            </button>
           </div>`;
       }).join('');
+
+      // Start decay countdown timers
+      const _decayInterval = setInterval(() => {
+        const elapsed = Date.now() - signalTime;
+        const remaining = Math.max(0, decayMs - elapsed);
+        if (remaining <= 0) { clearInterval(_decayInterval); return; }
+        const h = Math.floor(remaining / 3600000);
+        const m = Math.floor((remaining % 3600000) / 60000);
+        const s = Math.floor((remaining % 60000) / 1000);
+        const timeStr = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        const clr = remaining < 3600000 ? 'text-rose-400' : remaining < 7200000 ? 'text-amber-400' : 'text-slate-500';
+        desk.forEach((_, idx) => {
+          const el = document.getElementById(`decay-${idx}`);
+          if (el) { el.textContent = timeStr; el.className = `text-[10px] font-mono font-black ${clr}`; }
+        });
+      }, 1000);
     }
 
     function renderRiskOptimizer(recs, totalPortfolioValue = 0) {
@@ -2418,6 +2522,24 @@
       };
       const cycleClr = cycleColors[cycle_indicator] || "text-slate-300";
       
+      // Calculate Signal Strength (highest score among active signals)
+      const maxScore = act_now.length > 0 ? Math.max(...act_now.map(a => a.score)) : 0;
+      const signalStrengthHtml = `
+        <div class="mt-6 p-4 bg-slate-950/50 rounded-xl border border-slate-800">
+          <div class="flex justify-between items-center mb-2">
+            <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Signal Strength</p>
+            <span class="text-[10px] font-black text-indigo-400 font-mono">${maxScore}%</span>
+          </div>
+          <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+            <div class="bg-gradient-to-r from-indigo-500 to-fuchsia-500 h-full transition-all duration-1000" style="width: ${maxScore}%"></div>
+          </div>
+          <div class="flex justify-between items-center mt-4">
+            <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Speed to Action</p>
+            <span id="speed-countdown" class="text-[10px] font-black text-rose-400 font-mono animate-pulse">00:59:59</span>
+          </div>
+        </div>
+      `;
+      
       // Cycle Indicator UI
       let cycleHtml = `
         <div class="glass p-6 border-t-2 border-fuchsia-500/40 hover:bg-slate-900/20 transition-colors h-full">
@@ -2425,9 +2547,10 @@
           <p class="text-[10px] text-slate-600 mb-4">Based on SPY 200MA and ^VIX (${vix})</p>
           <div class="flex flex-col items-center justify-center mt-6">
             <div class="text-3xl font-black ${cycleClr} uppercase tracking-widest animate-pulse">${cycle_indicator}</div>
-            <p class="text-[10px] font-bold text-slate-500 mt-2 uppercase tracking-widest">Current Status: High Fear (VIX > 25)</p>
+            <p class="text-[10px] font-bold text-slate-500 mt-2 uppercase tracking-widest">Current Status: ${vix > 25 ? 'High Fear (VIX > 25)' : 'Stabilizing (VIX < 25)'}</p>
+            ${signalStrengthHtml}
             <div class="mt-6 p-3 bg-slate-950/50 rounded-lg border border-slate-800 text-[10px] text-slate-400 leading-relaxed italic">
-              Strategy Focus: Volatility Defense & Mean Reversion. Prioritizing capital preservation over momentum ride.
+              Strategy Focus: ${cycle_indicator === 'Contraction' ? 'Volatility Defense & Mean Reversion' : 'Trend Following & Capital Allocation'}.
             </div>
           </div>
         </div>
@@ -2931,12 +3054,99 @@
     function switchDesk(desk) {
       document.getElementById('intelligence-view').classList.toggle('hidden', desk !== 'intelligence');
       document.getElementById('pnl-view').classList.toggle('hidden', desk !== 'pnl');
+      document.getElementById('alpha-view').classList.toggle('hidden', desk !== 'alpha');
       document.getElementById('desk-tab-intelligence').classList.toggle('active', desk === 'intelligence');
       document.getElementById('desk-tab-pnl').classList.toggle('active', desk === 'pnl');
+      document.getElementById('desk-tab-alpha').classList.toggle('active', desk === 'alpha');
       // Sub-nav only shows on intelligence desk when results exist
       const hasResults = !document.getElementById('results-section').classList.contains('hidden');
       document.getElementById('sub-nav').classList.toggle('hidden', !(desk === 'intelligence' && hasResults));
       updateStickyTops();
+    }
+
+    function renderAlphaAlerts(data) {
+      const feed = document.getElementById('alpha-alerts-feed');
+      if (!feed) return;
+
+      const alerts = data.alpha_alerts || [];
+
+      if (alerts.length === 0) {
+        feed.innerHTML = '<div class="col-span-full py-20 text-center text-slate-600 text-xs font-black uppercase tracking-widest">No active Alpha anomalies.</div>';
+        return;
+      }
+
+      feed.innerHTML = alerts.map(a => {
+        const isSmart = a.type === 'SMART-MONEY';
+        const borderClr = isSmart ? 'border-fuchsia-500' : 'border-indigo-500';
+        const icon = isSmart ? '🏢' : '🔗';
+        const typeLabel = isSmart ? 'Institutional Flow' : 'Lead-Lag Correlation';
+        const badgeClr = isSmart ? 'text-fuchsia-400 bg-fuchsia-950/30' : 'text-indigo-400 bg-indigo-950/30';
+        const accentClr = isSmart ? 'fuchsia' : 'indigo';
+        const entry = a.entry_price || 0;
+        const sl = a.stop_loss || 0;
+        const tp = a.take_profit || 0;
+        const rr = a.risk_reward || '—';
+        const vixAdj = a.vix_adjustment || 1;
+        const convClr = a.conviction >= 90 ? 'text-emerald-400' : a.conviction >= 80 ? 'text-amber-400' : 'text-slate-400';
+
+        // Conviction gauge
+        const gaugeW = Math.min(a.conviction, 100);
+        const gaugeClr = a.conviction >= 90 ? 'bg-emerald-500' : a.conviction >= 80 ? 'bg-amber-500' : 'bg-slate-600';
+
+        return `
+          <div class="glass p-5 border-l-4 ${borderClr} hover:scale-[1.005] transition-all space-y-4">
+            <div class="flex justify-between items-start">
+              <div class="flex items-center gap-3">
+                <span class="text-2xl">${icon}</span>
+                <div>
+                  <span class="text-[8px] font-black px-1.5 py-0.5 rounded border border-slate-700 uppercase tracking-widest ${badgeClr}">${typeLabel}</span>
+                  <p class="text-sm font-black text-slate-100 mt-1 uppercase">${a.symbol.split('_')[0]}: ${a.title}</p>
+                </div>
+              </div>
+              <div class="text-right flex-shrink-0">
+                <p class="text-[10px] font-black ${convClr} font-mono">${a.conviction}%</p>
+                <div class="w-16 h-1.5 bg-slate-800 rounded-full mt-1 overflow-hidden">
+                  <div class="${gaugeClr} h-full rounded-full" style="width:${gaugeW}%"></div>
+                </div>
+              </div>
+            </div>
+
+            <p class="text-[11px] text-slate-400 leading-relaxed">${a.rationale}</p>
+
+            ${entry > 0 ? `
+            <div class="p-3 bg-${accentClr}-950/20 rounded-lg border border-${accentClr}-500/20">
+              <p class="text-[9px] font-black text-${accentClr}-400 uppercase tracking-widest mb-2">Tactical Execution Box</p>
+              <div class="grid grid-cols-4 gap-3">
+                <div>
+                  <p class="text-[8px] font-black text-slate-600 uppercase">Entry</p>
+                  <p class="text-[11px] font-black text-slate-200 font-mono">£${entry.toLocaleString('en-GB', {minimumFractionDigits:2})}</p>
+                </div>
+                <div>
+                  <p class="text-[8px] font-black text-slate-600 uppercase">Stop</p>
+                  <p class="text-[11px] font-black text-rose-400 font-mono">£${sl.toLocaleString('en-GB', {minimumFractionDigits:2})}</p>
+                </div>
+                <div>
+                  <p class="text-[8px] font-black text-slate-600 uppercase">Target</p>
+                  <p class="text-[11px] font-black text-emerald-400 font-mono">£${tp.toLocaleString('en-GB', {minimumFractionDigits:2})}</p>
+                </div>
+                <div>
+                  <p class="text-[8px] font-black text-slate-600 uppercase">R/R</p>
+                  <p class="text-[11px] font-black text-indigo-400 font-mono">${rr}</p>
+                </div>
+              </div>
+              <p class="text-[8px] text-slate-600 mt-2 font-mono">VIX Adj: ${vixAdj}× · ATR-Based Regime Stop</p>
+            </div>
+            ` : ''}
+
+            <div class="flex gap-2 items-center justify-between">
+              <div class="flex gap-2">
+                <button onclick="console.log('ALPHA TRADE:', JSON.parse(decodeURIComponent('${encodeURIComponent(JSON.stringify(a))}')))" class="px-3 py-1.5 ${isSmart ? 'bg-fuchsia-600 hover:bg-fuchsia-500' : 'bg-indigo-600 hover:bg-indigo-500'} rounded text-[9px] font-black uppercase tracking-wider transition-all">Trade Now</button>
+              </div>
+              <span class="text-[8px] text-slate-700 font-mono font-black uppercase">Signal Active</span>
+            </div>
+          </div>
+        `;
+      }).join('');
     }
 
     function taxYear(dt) {

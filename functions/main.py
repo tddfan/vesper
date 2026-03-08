@@ -55,10 +55,11 @@ async def get_lead_lag_signals(holdings: Dict[str, float], ohlc_data: Dict[str, 
     Vesper v6.0 Lead-Lag Engine.
     Copper (HG=F) leads Industrial/India.
     BTC-USD leads Tech/Risk-on.
+    Threshold: Leader >2.5% in 24h, Lag <0.5% → 90% conviction.
     """
     alerts = []
     leaders = {"HG=F": None, "BTC-USD": None}
-    
+
     for l_tk in leaders:
         if l_tk in ohlc_data:
             df = ohlc_data[l_tk]
@@ -66,60 +67,97 @@ async def get_lead_lag_signals(holdings: Dict[str, float], ohlc_data: Dict[str, 
                 change = (df['Close'].iloc[-1] / df['Close'].iloc[-2] - 1) * 100
                 leaders[l_tk] = change
 
+    # Get VIX for regime-adjusted stops
+    vix_val = 15.0
+    if "^VIX" in ohlc_data and len(ohlc_data["^VIX"]) >= 1:
+        vix_val = float(ohlc_data["^VIX"]["Close"].iloc[-1])
+
     for tk, qty in holdings.items():
         clean_tk = tk.split('_')[0].split('.')[0].upper()
         # Industrial/India proxies
         is_ind = any(x in clean_tk for x in ["IIND", "XMME", "GLDX", "COPX", "EPIC"])
         # Tech/Risk-on proxies
         is_risk = any(x in clean_tk for x in ["EQQQ", "QQQ", "SMH", "SOXX", "BTC", "COIN", "ARKK"])
-        
+
         target_df = ohlc_data.get(tk.split('_')[0], pd.DataFrame())
         if target_df.empty or len(target_df) < 2: continue
-        target_chg = (target_df['Close'].iloc[-1] / target_df['Close'].iloc[-2] - 1) * 100
-        
+        target_price = float(target_df['Close'].iloc[-1])
+        target_chg = (target_price / target_df['Close'].iloc[-2] - 1) * 100
+
         leader_chg = None
         leader_sym = ""
-        if is_ind: 
+        if is_ind:
             leader_chg = leaders.get("HG=F")
             leader_sym = "Copper (HG=F)"
-        elif is_risk: 
+        elif is_risk:
             leader_chg = leaders.get("BTC-USD")
             leader_sym = "Bitcoin (BTC-USD)"
-            
-        if leader_chg and leader_chg > 1.5 and abs(target_chg) < 0.8:
+
+        if leader_chg and leader_chg > 2.5 and abs(target_chg) < 0.5:
+            # Compute regime-adjusted ATR exit levels
+            atr = _compute_atr(target_df) if len(target_df) >= 15 else (0.02 * target_price)
+            vix_adj = 1 + (vix_val / 100)
+            sl = round(target_price - (atr * vix_adj), 2)
+            tp = round(target_price + (3 * atr), 2)
+            risk = round(target_price - sl, 2)
+            reward = round(tp - target_price, 2)
+            rr = round(reward / risk, 1) if risk > 0 else 0
             alerts.append({
                 "type": "LEAD-LAG",
                 "symbol": tk,
                 "title": "Delayed Breakout Opportunity",
-                "rationale": f"Leader {leader_sym} has shifted +{leader_chg:.1f}% in 24h. Target {tk} is lagging at {target_chg:+.2f}%. Quantitative lag-drift analysis suggests imminent breakout.",
-                "conviction": 88
+                "rationale": f"Leader {leader_sym} surged +{leader_chg:.1f}% in 24h while {tk} lags at {target_chg:+.2f}%. Quantitative lag-drift model projects imminent convergence.",
+                "conviction": 90,
+                "entry_price": round(target_price, 2),
+                "stop_loss": sl,
+                "take_profit": tp,
+                "risk_reward": f"1:{rr}",
+                "atr_raw": round(atr, 4),
+                "vix_adjustment": round(vix_adj, 2),
             })
     return alerts
 
-def get_institutional_flow(holdings: Dict[str, float]) -> List[Dict]:
+def get_institutional_flow(holdings: Dict[str, float], ohlc_data: Dict[str, pd.DataFrame] = None, vix: float = 15.0) -> List[Dict]:
     """
     Vesper v6.0 Smart Money Simulator.
     Flags symbols with high relative volume or simulated Dark Pool absorption.
+    Now includes explicit trade params (entry, stop, target, R/R).
     """
     alerts = []
     # Key should be the base ticker (e.g., 'VUSA' for 'VUSA.L')
     smart_money_targets = {
-        "PLTR": 92, "NVDA": 86, "TSLA": 89, "AAPL": 75, 
+        "PLTR": 92, "NVDA": 86, "TSLA": 89, "AAPL": 75,
         "VUSA": 82, "VWRP": 80, "CSPX": 85, "EQQQ": 90,
         "SMH": 94, "IIND": 88
     }
-    
+
+    vix_adj = 1 + (vix / 100)
+
     for tk in holdings:
-        # Strip _ISA etc, then strip .L, .TO etc to get base symbol
         base_tk = tk.split('_')[0].split('.')[0].upper()
         if base_tk in smart_money_targets:
             score = smart_money_targets[base_tk]
+            api_tk = tk.split('_')[0]
+            hist_df = ohlc_data.get(api_tk, pd.DataFrame()) if ohlc_data else pd.DataFrame()
+            entry_price = float(hist_df['Close'].iloc[-1]) if not hist_df.empty else 0
+            atr = _compute_atr(hist_df) if not hist_df.empty and len(hist_df) >= 15 else (0.02 * entry_price if entry_price else 0)
+            sl = round(entry_price - (atr * vix_adj), 2) if entry_price else 0
+            tp = round(entry_price + (3 * atr), 2) if entry_price else 0
+            risk = round(entry_price - sl, 2) if entry_price else 0
+            reward = round(tp - entry_price, 2) if entry_price else 0
+            rr = round(reward / risk, 1) if risk > 0 else 0
             alerts.append({
                 "type": "SMART-MONEY",
                 "symbol": tk,
                 "title": "Institutional Absorption",
                 "rationale": f"High relative volume and off-exchange block trades detected for {base_tk}. Institutional 'Smart Money' is aggressively defending current support levels.",
-                "conviction": score
+                "conviction": score,
+                "entry_price": round(entry_price, 2),
+                "stop_loss": sl,
+                "take_profit": tp,
+                "risk_reward": f"1:{rr}",
+                "atr_raw": round(atr, 4),
+                "vix_adjustment": round(vix_adj, 2),
             })
     return alerts
 
@@ -1908,7 +1946,9 @@ _ENERGY_TAA = {"XOM","CVX","SHEL","BP","RDSB","OXY","NRGG","XENE","IOOG"}
 
 def _generate_tactical_desk(holdings: Dict[str, float], assets: Dict[str, Any], portfolio: Dict[str, Any], ohlc_data: Dict = None) -> List[Dict]:
     """
-    Simulated LLM Catalyst Engine with Dynamic ATR-based Exit Strategy.
+    Simulated LLM Catalyst Engine with Regime-Adjusted ATR Exit Strategy.
+    Stop_Loss = Price - (ATR × (1 + VIX/100))  — wider in panic, tighter in calm.
+    Take_Profit = Price + (3 × ATR)
     """
     total_val = portfolio.get("total_value", 0)
     ticker_bases = {tk.split('.')[0].upper() for tk in holdings}
@@ -1918,45 +1958,67 @@ def _generate_tactical_desk(holdings: Dict[str, float], assets: Dict[str, Any], 
     has_tech   = bool(ticker_bases & _TECH_S)
     has_energy = bool(ticker_bases & _ENERGY_TAA)
 
+    # Get live VIX for regime-adjusted stops
+    _vix = 15.0
+    if ohlc_data and "^VIX" in ohlc_data and not ohlc_data["^VIX"].empty:
+        _vix = float(ohlc_data["^VIX"]["Close"].iloc[-1])
+    vix_adj = 1 + (_vix / 100)
+
     desk: List[Dict] = []
 
+    def _get_real_price(tk):
+        """Get live price from OHLC data or assets, not hardcoded."""
+        api_tk = tk.split('_')[0]
+        if ohlc_data and api_tk in ohlc_data and not ohlc_data[api_tk].empty:
+            return float(ohlc_data[api_tk]['Close'].iloc[-1])
+        return assets.get(tk, {}).get("price", 0)
+
     def _get_exit_strategy(tk, current_price):
-        # Compute real ATR if data available, else fallback to 2% volatility
         hist_df = ohlc_data.get(tk.split('_')[0], pd.DataFrame()) if ohlc_data else pd.DataFrame()
         atr = _compute_atr(hist_df) if not hist_df.empty else (0.02 * current_price)
-        
-        sl = round(current_price - (2 * atr), 2)
+        # Regime-adjusted: wider stops when VIX elevated
+        sl = round(current_price - (atr * vix_adj), 2)
         tp = round(current_price + (3 * atr), 2)
+        risk = round(current_price - sl, 2)
+        reward = round(tp - current_price, 2)
+        rr = round(reward / risk, 1) if risk > 0 else 0
+        qty_suggestion = max(1, round(total_val * 0.02 / current_price)) if current_price > 0 else 0
         return {
             "stop_loss": sl,
             "take_profit": tp,
-            "rationale": f"Dynamic ATR-based exit levels (ATR ~{atr/current_price*100:.1f}%). Stop = Price - 2*ATR, TP = Price + 3*ATR."
+            "entry_price": round(current_price, 2),
+            "risk_reward": f"1:{rr}",
+            "vix_adjustment": round(vix_adj, 2),
+            "atr_pct": round(atr / current_price * 100, 2) if current_price > 0 else 0,
+            "suggested_qty": qty_suggestion,
+            "rationale": f"Regime-Adjusted ATR exit (VIX {_vix:.0f}, multiplier {vix_adj:.2f}×). Stop = Price - ATR×{vix_adj:.2f}, TP = Price + 3×ATR. R/R = 1:{rr}."
         }
 
     # Signal 1 — GEO-RISK: oil supply shock → buy energy hedge if absent
     if not has_energy:
-        price = 25.0 # mock entry price for NRGG.L
-        desk.append({
-            "severity": "GEO-RISK", "icon": "🛢️",
-            "event": "Oil Supply Shock — Strait of Hormuz Threatened",
-            "action": "Buy", "ticker": "NRGG.L",
-            "amount": round(total_val * 0.03),
-            "exit_strategy": _get_exit_strategy("NRGG.L", price),
-            "rationale": (
-                "Escalating Middle East tensions threaten ~20% of global oil transit. "
-                "iShares Oil & Gas Exploration & Production UCITS ETF (NRGG.L) provides direct "
-                "exposure to upstream E&P companies and acts as a natural hedge."
-            ),
-            "time_horizon": "72h",
-        })
+        price = _get_real_price("NRGG.L")
+        if price > 0:
+            desk.append({
+                "severity": "GEO-RISK", "icon": "🛢️",
+                "event": "Oil Supply Shock — Strait of Hormuz Threatened",
+                "action": "Buy", "ticker": "NRGG.L",
+                "amount": round(total_val * 0.03),
+                "exit_strategy": _get_exit_strategy("NRGG.L", price),
+                "rationale": (
+                    "Escalating Middle East tensions threaten ~20% of global oil transit. "
+                    "iShares Oil & Gas Exploration & Production UCITS ETF (NRGG.L) provides direct "
+                    "exposure to upstream E&P companies and acts as a natural hedge."
+                ),
+                "time_horizon": "72h",
+            })
 
     # Signal 2 — MACRO-SHOCK: hot CPI → trim highest-weight tech by 10%
     tech_tickers = [tk for tk in holdings if tk.split('.')[0].upper() in _TECH_S]
     if has_tech and tech_tickers:
         top_tech = max(tech_tickers, key=lambda tk: assets.get(tk, {}).get("value", 0))
-        price = assets.get(top_tech, {}).get("price", 0)
+        price = assets.get(top_tech, {}).get("price", 0) or _get_real_price(top_tech)
         trim_val = round(assets.get(top_tech, {}).get("value", 0) * 0.10)
-        if trim_val > 0:
+        if trim_val > 0 and price > 0:
             desk.append({
                 "severity": "MACRO-SHOCK", "icon": "🌡️",
                 "event": "US CPI Surprise — Rate Cut Bets Collapse",
@@ -1972,19 +2034,20 @@ def _generate_tactical_desk(holdings: Dict[str, float], assets: Dict[str, Any], 
 
     # Signal 3 — MOMENTUM: gold breakout → add gold if absent
     if not has_gold:
-        price = 45.0 # mock entry price for SGLN.L
-        desk.append({
-            "severity": "MOMENTUM", "icon": "🏅",
-            "event": "Gold Momentum Breakout — Institutional Safe-Haven Bid",
-            "action": "Buy", "ticker": "SGLN.L",
-            "amount": round(total_val * 0.02),
-            "exit_strategy": _get_exit_strategy("SGLN.L", price),
-            "rationale": (
-                "Gold clearing $2,500 signals institutional safe-haven rotation. "
-                "SGLN.L adds portfolio convexity against macro tail risks."
-            ),
-            "time_horizon": "72h",
-        })
+        price = _get_real_price("SGLN.L")
+        if price > 0:
+            desk.append({
+                "severity": "MOMENTUM", "icon": "🏅",
+                "event": "Gold Momentum Breakout — Institutional Safe-Haven Bid",
+                "action": "Buy", "ticker": "SGLN.L",
+                "amount": round(total_val * 0.02),
+                "exit_strategy": _get_exit_strategy("SGLN.L", price),
+                "rationale": (
+                    "Gold clearing $2,500 signals institutional safe-haven rotation. "
+                    "SGLN.L adds portfolio convexity against macro tail risks."
+                ),
+                "time_horizon": "72h",
+            })
 
     return desk[:3]
 
@@ -2409,8 +2472,9 @@ async def analyze_portfolio(request: PortfolioRequest):
         
         # Parallel sentiment and V6.0 alpha signal analysis
         sentiments = await asyncio.gather(*[_get_sentiment(t) for t in tickers])
+        _vix_live = float(full_prices["^VIX"].dropna().iloc[-1]) if "^VIX" in full_prices.columns and not full_prices["^VIX"].dropna().empty else 15.0
         alpha_alerts = await get_lead_lag_signals(holdings, ohlc_data)
-        alpha_alerts.extend(get_institutional_flow(holdings))
+        alpha_alerts.extend(get_institutional_flow(holdings, ohlc_data=ohlc_data, vix=_vix_live))
 
         for i, (tk, s) in enumerate(zip(tickers, sentiments)):
             rsi_val = _rsi_cache.get(tk, _mock_rsi(tk))
@@ -2427,31 +2491,41 @@ async def analyze_portfolio(request: PortfolioRequest):
         advanced = _get_advanced_intelligence(assets, p_summary, request.risk_level, risk_data, base_curr, rsi_cache=_rsi_cache)
         apex_advisor = _run_apex_advisor(assets, full_prices, ohlc_data, p_summary)
 
-        # ── Real-Time Telegram Alerts (V6.0: Trigger if conviction > 85%) ──
+        # ── Real-Time Telegram Alerts (V6.0: Trigger if conviction > 88%) ──
         for alert in alpha_alerts:
-            if alert.get("conviction", 0) > 85:
-                msg = (f"<b>🚨 V6.0 ALPHA ALERT: {alert['symbol']}</b>\n"
+            if alert.get("conviction", 0) > 88:
+                entry = alert.get("entry_price", 0)
+                sl = alert.get("stop_loss", 0)
+                tp = alert.get("take_profit", 0)
+                rr = alert.get("risk_reward", "—")
+                msg = (f"<b>🚨 ALPHA ALERT: {alert['symbol']}</b>\n"
                        f"Type: {alert['type']}\n"
-                       f"Title: {alert['title']}\n"
-                       f"Rationale: {alert['rationale']}\n"
-                       f"Conviction: {alert['conviction']}%")
+                       f"Signal: {alert['title']}\n"
+                       f"Conviction: {alert['conviction']}%\n"
+                       f"Entry: £{entry:,.2f}\n"
+                       f"Stop Loss: £{sl:,.2f}\n"
+                       f"Take Profit: £{tp:,.2f}\n"
+                       f"R/R: {rr}\n"
+                       f"—\n{alert['rationale']}")
                 asyncio.create_task(send_telegram_alert(msg))
 
         for tk, logic in apex_advisor.get("scores", {}).items():
             if logic.get("score", 0) > 85:
                 price = assets.get(tk, {}).get("price", 0)
-                # Compute ATR for Stop Loss
                 hist_df = ohlc_data.get(tk.split('_')[0], pd.DataFrame())
                 atr = _compute_atr(hist_df) if not hist_df.empty else (0.02 * price)
-                sl = round(price - (2 * atr), 2)
-                
-                msg = (f"<b>🚨 HIGH CONVICTION SIGNAL: {tk}</b>\n"
+                vix_adj = 1 + (_vix_live / 100)
+                sl = round(price - (atr * vix_adj), 2)
+                tp = round(price + (3 * atr), 2)
+                risk = price - sl
+                rr = round((tp - price) / risk, 1) if risk > 0 else 0
+                msg = (f"<b>🚨 HIGH CONVICTION: {tk}</b>\n"
                        f"Action: {logic['action']}\n"
-                       f"Strategy: {logic['strat']}\n"
-                       f"Price: £{price:,.2f}\n"
-                       f"Stop Loss: £{sl:,.2f}\n"
-                       f"Score: {logic['score']}/100\n"
-                       f"Rationale: {logic['why']}")
+                       f"Strategy: {logic['strat']} | Score: {logic['score']}/100\n"
+                       f"Entry: £{price:,.2f}\n"
+                       f"Stop: £{sl:,.2f} | Target: £{tp:,.2f}\n"
+                       f"R/R: 1:{rr}\n"
+                       f"—\n{logic['why']}")
                 asyncio.create_task(send_telegram_alert(msg))
 
         # ── CIO LLM — live TAA (falls back to rule engine when disabled/error) ─
