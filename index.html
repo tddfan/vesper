@@ -1699,7 +1699,7 @@
         <div class="grid grid-cols-3 gap-1.5">
           <div class="bg-slate-900/50 p-2 rounded-lg border border-slate-800">
             <p class="text-[7px] text-slate-600 font-black uppercase">Proj. Sharpe</p>
-            <p class="text-xs font-black text-emerald-400">${ai.rebalancing.projected_sharpe}</p>
+            <p class="text-xs font-black ${ai.rebalancing.projected_sharpe != null ? 'text-emerald-400' : 'text-slate-600'}">${ai.rebalancing.projected_sharpe != null ? ai.rebalancing.projected_sharpe : '—'}</p>
           </div>
           <div class="bg-slate-900/50 p-2 rounded-lg border border-slate-800">
             <p class="text-[7px] text-slate-600 font-black uppercase">Proj. Beta</p>
@@ -1956,11 +1956,16 @@
       const dr = parseFloat(ai?.attribution?.div_ratio) || 1.0;
       const commentary = mo.quant_intelligence || 'Awaiting neural synthesis…';
       const strategicComm = mo.commentary || '';
+      const isStatic = mo._source === 'static_fallback';
+      const llmErr = mo._llm_error || '';
+      const sourceBadge = isStatic
+        ? `<div class="mb-4 px-3 py-2 bg-amber-950/30 border border-amber-800/40 rounded-lg"><p class="text-[9px] font-black text-amber-500 uppercase tracking-widest">⚠ Static fallback — ${llmErr ? 'CIO LLM error: ' + llmErr : 'enable CIO LLM for live AI-powered intelligence'}</p></div>`
+        : '';
       const pointsHtml = mo.points.map(x => `<div class="p-4 bg-slate-900/50 rounded-xl border border-slate-800 transition-all group hover:border-indigo-500/30"><div class="flex items-center gap-3 mb-2"><div class="text-xl group-hover:scale-110 transition-transform">${x.i}</div><div><p class="text-[10px] font-bold text-slate-600 uppercase tracking-widest">${x.l}</p><p class="text-xs font-black text-indigo-400 uppercase">${x.v}</p></div></div><p class="text-[10px] leading-relaxed text-slate-500 font-medium">${boldTerms(x.d)}</p></div>`).join('');
       const quantHtml = `<div class="p-4 bg-indigo-950/20 border-l-4 border-indigo-500 rounded-r-xl"><p class="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-2 font-black">Quant Intelligence · DR ${dr.toFixed(2)}</p><p class="text-sm text-slate-300 leading-relaxed">${boldTerms(commentary)}</p></div>`;
       const commHtml = strategicComm ? `<div class="p-4 bg-emerald-950/20 border-l-4 border-emerald-500 rounded-r-xl"><p class="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-2 font-black">Strategic Commentary</p><p class="text-sm text-slate-300 leading-relaxed">${boldTerms(strategicComm)}</p></div>` : '';
       const futureHtml = mo.future_outlook ? `<div class="p-4 bg-violet-950/20 border-l-4 border-violet-500 rounded-r-xl"><p class="text-xs font-bold text-violet-400 uppercase tracking-widest mb-2 font-black">Strategic Outlook</p><p class="text-sm text-slate-300 leading-relaxed">${boldTerms(mo.future_outlook)}</p></div>` : '';
-      document.getElementById('market-outlook').innerHTML = pointsHtml + `<div class="mt-6 space-y-4">${quantHtml}${commHtml}${futureHtml}</div>`;
+      document.getElementById('market-outlook').innerHTML = sourceBadge + pointsHtml + `<div class="mt-6 space-y-4">${quantHtml}${commHtml}${futureHtml}</div>`;
     }
 
     function renderFutureValue(fv, tv, currency) {
@@ -2456,9 +2461,11 @@
         const acct = tk.includes('_') ? tk.split('_').slice(1).join('_') : '';
         const acctColors = { ISA: 'text-emerald-400 bg-emerald-950/30 border-emerald-800', GIA: 'text-amber-400 bg-amber-950/30 border-amber-800', SIPP: 'text-indigo-400 bg-indigo-950/30 border-indigo-800' };
         const acctCls = acctColors[acct] || 'text-slate-500 bg-slate-900/30 border-slate-800';
-        const sentClr = ev.sentiment > 0.3 ? 'text-emerald-400' : ev.sentiment < -0.3 ? 'text-red-400' : 'text-slate-400';
-        const exStatus = logic.exhaustion_status || ev.exhaustion || 'Neutral';
-        const exClr = exStatus === 'Bull Trap' || exStatus === 'Blow-off Top' ? 'text-red-500' : exStatus === 'Deep Exhaustion' || exStatus === 'Oversold' ? 'text-emerald-500' : exStatus === 'Overextended' ? 'text-amber-400' : 'text-slate-500';
+        const sentUnavail = ev.sentiment_unavailable;
+        const sentClr = sentUnavail ? 'text-slate-600' : ev.sentiment > 0.3 ? 'text-emerald-400' : ev.sentiment < -0.3 ? 'text-red-400' : 'text-slate-400';
+        const sentDisplay = sentUnavail ? '—' : (ev.sentiment > 0 ? '+' : '') + ev.sentiment;
+        const exStatus = sentUnavail ? 'N/A' : (logic.exhaustion_status || ev.exhaustion || 'Neutral');
+        const exClr = exStatus === 'N/A' ? 'text-slate-600' : exStatus === 'Bull Trap' || exStatus === 'Blow-off Top' ? 'text-red-500' : exStatus === 'Deep Exhaustion' || exStatus === 'Oversold' ? 'text-emerald-500' : exStatus === 'Overextended' ? 'text-amber-400' : 'text-slate-500';
         const actInstr = logic.action_instruction || 'HOLD';
         const actClr = actInstr.startsWith('BUY') ? 'text-emerald-400 bg-emerald-950/40 border-emerald-700' : actInstr.startsWith('HEDGE') || actInstr.startsWith('TRIM') ? 'text-red-400 bg-red-950/40 border-red-700' : 'text-slate-400 bg-slate-900/40 border-slate-700';
         const prob = logic.probability || '50%';
@@ -2497,7 +2504,7 @@
             <td class="py-3"><span class="px-2 py-0.5 rounded text-[8px] font-black border uppercase whitespace-nowrap ${actClr}">${actInstr}</span></td>
             <td class="py-3 text-right font-mono text-slate-400">${ev.rsi}</td>
             <td class="py-3 text-right font-mono text-slate-500">${atrPct}</td>
-            <td class="py-3 text-right font-mono ${sentClr}">${ev.sentiment > 0 ? '+' : ''}${ev.sentiment}</td>
+            <td class="py-3 text-right font-mono ${sentClr}">${sentDisplay}</td>
             <td class="py-3 text-right"><span class="font-black text-[9px] uppercase ${exClr}">${exStatus}</span></td>
             <td class="py-3 text-right font-mono ${probClr}">${prob}</td>
             <td class="py-3 text-right pr-3 font-black text-emerald-500 uppercase text-[9px]">${logic.logic_tag || 'Standard'}</td>

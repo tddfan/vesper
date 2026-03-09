@@ -68,7 +68,7 @@ def _daily_return_zscore(df: pd.DataFrame, window: int = 30) -> float:
     return (latest - mu) / sigma
 
 
-async def get_lead_lag_signals(holdings: Dict[str, float], ohlc_data: Dict[str, pd.DataFrame]) -> List[Dict]:
+async def get_lead_lag_signals(holdings: Dict[str, float], ohlc_data: Dict[str, pd.DataFrame], live_vix: float = None) -> List[Dict]:
     """
     Vesper v6.0 Lead-Lag Engine — Relative Volatility Model.
     Copper (HG=F) leads Industrial/India.
@@ -89,10 +89,13 @@ async def get_lead_lag_signals(holdings: Dict[str, float], ohlc_data: Dict[str, 
                 z = _daily_return_zscore(df)
                 leader_data[l_tk] = {"change_pct": raw_chg, "zscore": z}
 
-    # Get VIX for regime-adjusted stops
-    vix_val = 15.0
-    if "^VIX" in ohlc_data and len(ohlc_data["^VIX"]) >= 1:
+    # Get VIX for regime-adjusted stops — prefer live quote
+    if live_vix is not None and live_vix > 0:
+        vix_val = live_vix
+    elif "^VIX" in ohlc_data and len(ohlc_data["^VIX"]) >= 1:
         vix_val = float(ohlc_data["^VIX"]["Close"].iloc[-1])
+    else:
+        vix_val = 15.0
 
     for tk, qty in holdings.items():
         clean_tk = tk.split('_')[0].split('.')[0].upper()
@@ -156,15 +159,14 @@ async def get_lead_lag_signals(holdings: Dict[str, float], ohlc_data: Dict[str, 
 
 def get_institutional_flow(holdings: Dict[str, float], ohlc_data: Dict[str, pd.DataFrame] = None, vix: float = 15.0) -> List[Dict]:
     """
-    Vesper v6.0 Institutional Flow — Volume-Delta Analysis.
+    Vesper v6.0 Institutional Flow — Volume-Based Detection.
 
     Detects abnormal institutional activity using real OHLCV data:
-    1. Volume Ratio: Today's volume vs 20-day SMA. Ratio ≥ 2.0 = unusual.
-    2. Accumulation Signal: Volume ratio high + price flat/down = stealth buying.
-    3. Distribution Signal: Volume ratio high + price up sharply = potential exit.
+    1. Volume Ratio: Today's volume vs 20-day SMA. Ratio > 1.5 = unusual.
+    2. Smart Money Accumulation: Volume ratio > 1.5 AND Price Change > 0.
+    3. Distribution/Selling: Volume ratio > 1.5 AND Price Change < 0.
 
-    Conviction is computed from the volume ratio, NOT from a hardcoded dictionary.
-    No signal is generated unless the data shows a genuine volume anomaly.
+    Returns the same JSON structure expected by the frontend with dynamic rationales.
     """
     alerts = []
     vix_adj = 1 + (vix / 100)
@@ -179,11 +181,11 @@ def get_institutional_flow(holdings: Dict[str, float], ohlc_data: Dict[str, pd.D
         today_vol = vol_series.iloc[-1]
         avg_vol_20 = float(vol_series.iloc[-21:-1].mean())
 
-        if avg_vol_20 < 1:  # Skip illiquid / no-volume instruments (e.g. some ETCs)
+        if avg_vol_20 < 1:
             continue
 
         vol_ratio = today_vol / avg_vol_20
-        if vol_ratio < 1.8:  # Below 1.8× average = nothing unusual
+        if vol_ratio <= 1.5:  # User threshold: 1.5x
             continue
 
         # Price change today
@@ -191,36 +193,26 @@ def get_institutional_flow(holdings: Dict[str, float], ohlc_data: Dict[str, pd.D
         prev_close = float(hist_df['Close'].iloc[-2])
         day_chg_pct = (entry_price / prev_close - 1) * 100 if prev_close > 0 else 0
 
-        # Classify signal type
-        if day_chg_pct <= 0.3:
-            # Volume surging but price flat/down → stealth accumulation
-            signal_type = "Accumulation"
-            signal_title = "Volume Anomaly — Stealth Accumulation"
+        # Classify signal type based on user rules
+        vol_pct_above = round((vol_ratio - 1) * 100)
+        if day_chg_pct > 0:
+            signal_type = "Smart Money Accumulation"
+            signal_title = "Institutional Flow — Smart Money Accumulation"
             rationale = (
-                f"{api_tk} traded {vol_ratio:.1f}× its 20-day average volume "
-                f"while price moved only {day_chg_pct:+.2f}%. "
-                f"Large blocks absorbed without moving the bid — consistent with institutional accumulation."
+                f"{api_tk} volume is {vol_pct_above}% above its 20-day average "
+                f"while price gained {day_chg_pct:+.2f}%. "
+                f"Suggests institutional entry and high-conviction accumulation."
             )
-        elif day_chg_pct > 1.5:
-            # Volume surging AND price up sharply → momentum/distribution risk
-            signal_type = "Momentum Surge"
-            signal_title = "Volume Anomaly — Momentum Breakout"
-            rationale = (
-                f"{api_tk} surged {day_chg_pct:+.1f}% on {vol_ratio:.1f}× average volume. "
-                f"High-volume breakouts above average daily range suggest genuine demand shift, "
-                f"but late entry carries reversal risk."
-            )
+            # Score 80+ as requested
+            conviction = min(98, 80 + int((vol_ratio - 1.5) * 5))
         else:
-            # Moderate price move on high volume
-            signal_type = "Elevated Flow"
-            signal_title = "Volume Anomaly — Elevated Institutional Activity"
+            signal_type = "Distribution/Selling"
+            signal_title = "Institutional Flow — Distribution/Selling"
             rationale = (
-                f"{api_tk} shows {vol_ratio:.1f}× normal volume with a {day_chg_pct:+.1f}% price move. "
-                f"Activity exceeds retail norms — monitor for follow-through."
+                f"{api_tk} volume is {vol_pct_above}% above average on a {day_chg_pct:+.2f}% price drop. "
+                f"Heavy institutional selling or distribution detected."
             )
-
-        # Conviction: linear scale from vol_ratio — 1.8×→70%, 3×→85%, 5×+→95%
-        conviction = min(95, max(70, round(55 + vol_ratio * 10)))
+            conviction = min(95, 75 + int((vol_ratio - 1.5) * 5))
 
         atr = _compute_atr(hist_df) if len(hist_df) >= 15 else (0.02 * entry_price)
         sl = round(entry_price - (atr * vix_adj), 2)
@@ -242,14 +234,14 @@ def get_institutional_flow(holdings: Dict[str, float], ohlc_data: Dict[str, pd.D
             "risk_reward": f"1:{rr}",
             "atr_raw": round(atr, 4),
             "vix_adjustment": round(vix_adj, 2),
-            "volume_ratio": round(vol_ratio, 1),
+            "volume_ratio": round(vol_ratio, 2),
             "today_volume": int(today_vol),
             "avg_volume_20d": int(avg_vol_20),
         })
 
-    # Sort by conviction descending, return top 5 anomalies
     alerts.sort(key=lambda x: x["conviction"], reverse=True)
     return alerts[:5]
+
 
 # ── Firebase Admin (Firestore persistence) ────────────────────────────────────
 try:
@@ -1431,9 +1423,8 @@ def _get_advisor_logic(symbol: str, hist: pd.DataFrame, sentiment_val: float, a:
     if atr_pct > 2.5 and abs(day_gain) > 1.5:
         score = max(score, 80); strat = "Scalping"; action = "TRIM (QUICK SCALP)" if day_gain > 0 else "BUY (SCALP DIP)"; probability = 85
 
-    # 6. Arbitrage: Regional/Instrument specific checks
-    if base_tk == "ISF": # Example for UK benchmark arb
-        score += 15; strat = "Arbitrage"; action = "BUY (NAV ARB)"; probability = 55
+    # 6. Arbitrage: placeholder — requires real NAV vs market price data to implement
+    # (Removed hardcoded ISF +15 bias — was unconditional fake signal)
 
     # 7. Hedging: Negative sentiment and breaking technicals
     is_hedge_candidate = (sentiment_val < -0.3 and price < ma50)
@@ -1555,10 +1546,14 @@ def _get_advisor_logic(symbol: str, hist: pd.DataFrame, sentiment_val: float, a:
         }
     }
 
-def _run_apex_advisor(assets, prices, ohlc_data, p_summary):
-    vix_latest = 15.0
-    if "^VIX" in prices.columns and not prices["^VIX"].dropna().empty:
+def _run_apex_advisor(assets, prices, ohlc_data, p_summary, live_vix: float = None):
+    # Prefer the live quote VIX passed from the main analysis function
+    if live_vix is not None and live_vix > 0:
+        vix_latest = live_vix
+    elif "^VIX" in prices.columns and not prices["^VIX"].dropna().empty:
         vix_latest = float(prices["^VIX"].dropna().iloc[-1])
+    else:
+        vix_latest = 15.0
     
     vusa_p = prices["VUSA.L"].iloc[-1] if "VUSA.L" in prices.columns else 0
     vusa_ma200 = prices["VUSA.L"].rolling(200).mean().iloc[-1] if "VUSA.L" in prices.columns and len(prices) >= 200 else vusa_p
@@ -1586,11 +1581,13 @@ def _run_apex_advisor(assets, prices, ohlc_data, p_summary):
         bull = _to_float(s.get("bullish")) if s.get("bullish") is not None else 0.5
         bear = _to_float(s.get("bearish")) if s.get("bearish") is not None else 0.5
         sentiment_val = (bull or 0.5) - (bear or 0.5)
-        
+        sentiment_is_mock = bool(s.get("_mock"))
+
         alpha_s = a.get("alpha_signal")
         insider_s = a.get("insider_signal")
-        
+
         logic = _get_advisor_logic(tk, hist_df, sentiment_val, a, vix_latest, pd.DataFrame({"Close": benchmark_hist}), cycle_indicator, alpha_signal=alpha_s, insider_signal=insider_s)
+        logic["evidence"]["sentiment_unavailable"] = sentiment_is_mock
         apex_scores[tk] = logic
         
         if logic["score"] > 80:
@@ -1686,7 +1683,7 @@ def _get_advanced_intelligence(assets, portfolio, risk_level, risk_data, base_cu
     # when actually available — producing varied, realistic scores across the portfolio.
     div_safety = {}
     for _tk, _a in assets.items():
-        _rsi  = (rsi_cache or {}).get(_tk, _mock_rsi(_tk))                 # real RSI when available
+        _rsi  = (rsi_cache or {}).get(_tk) or 50.0                          # real RSI when available; 50 = neutral fallback
         _beta = _to_float(_a.get("beta")) or 1.0
         _ter  = (_to_float(_a.get("ter"))
                  or _KNOWN_TER.get(_tk.replace('_', '.').split('.')[0].upper(), 0.003))
@@ -1740,7 +1737,7 @@ def _get_advanced_intelligence(assets, portfolio, risk_level, risk_data, base_cu
 
     return {
         "scenarios": {"nasdaq_10": round(total_val*beta*-0.1, 2), "fx_5pct_shock": round(non_base_val*0.05, 2)},
-        "rebalancing": {"current": round(curr_g_w, 4), "drift": round(drift, 4), "trade": trade_suggestion, "projected_beta": round(beta - (drift*0.2), 2), "projected_sharpe": round(portfolio.get("sharpe_ratio", 0.5)*1.2, 2), "transaction_cost_estimate": cost},
+        "rebalancing": {"current": round(curr_g_w, 4), "drift": round(drift, 4), "trade": trade_suggestion, "projected_beta": round(beta - (drift*0.2), 2), "projected_sharpe": None, "transaction_cost_estimate": cost},
         "attribution": {"factor": "Growth Dominant" if curr_g_w > 0.5 else "Core/Value", "div_ratio": div_ratio, "fx_exposure_risk": "HIGH" if non_base_val/total_val > 0.7 else "LOW"},
         "div_safety": div_safety,
         "kill_switch": kill_switch,
@@ -1787,7 +1784,7 @@ def _get_market_outlook(assets, portfolio):
     
     future_outlook = "We anticipate a structural 'Broadening Trade.' As mega-cap tech valuations reach historical exhaustion points and face 'Multiple Compression,' institutional capital will rotate into 'Undervalued Quality.' This migration will likely favor secondary SaaS players with proven unit economics and industrial energy infrastructure providers poised to profit from the massive Western re-industrialization and AI-driven power reflation cycle."
     
-    return {"points": points, "commentary": " ".join(comm), "future_outlook": future_outlook}
+    return {"points": points, "commentary": " ".join(comm), "future_outlook": future_outlook, "_source": "static_fallback"}
 
 def _get_global_events():
     """Generate approximate economic calendar based on known recurring schedules."""
@@ -1961,166 +1958,20 @@ def _extract_events(info: dict) -> Dict[str, Any]:
 
 # ── Tactical Asset Allocation Engine ─────────────────────────────────────────
 
-def _mock_rsi(ticker: str) -> float:
-    """Deterministic mock RSI seeded by ticker chars. Range: 20–80."""
-    seed = sum(ord(c) for c in ticker.upper()) % 61  # 0-60
-    return round(20.0 + seed, 1)
+def _mock_rsi(ticker: str) -> Optional[float]:
+    """Fallback when OHLC data unavailable. Returns None (not a fake number)."""
+    return None
 
-
-# ── Macro factor signals per ETF — shown when live FinBERT headlines unavailable ─
-_MACRO_FACTORS: Dict[str, List[str]] = {
-    "EQQQ": [
-        "AI capex supercycle sustaining Nasdaq 100 EPS growth trajectory",
-        "Fed higher-for-longer path compresses long-duration growth multiples",
-        "Semiconductor capacity expansion: TSMC N2 ramp accelerating through H2",
-    ],
-    "QQQ":  [
-        "Mega-cap tech buybacks providing structural bid beneath the index",
-        "AI revenue monetisation accelerating across cloud, ad, and enterprise",
-        "Options market pricing elevated implied vol — momentum fragility signal",
-    ],
-    "VWRP": [
-        "Global equity risk premium at multi-year lows — valuation headwind building",
-        "USD strength creating FX drag on 55% US weight within the fund",
-        "EM allocation: China property deleveraging weighing on emerging-market returns",
-    ],
-    "SWRD": [
-        "Developed market earnings revisions diverging: US upgrade, Europe flat",
-        "Yen weakness amplifying unhedged Japan allocation within MSCI World",
-    ],
-    "CSPX": [
-        "S&P 500 concentration: top-10 holdings exceed 35% index weight",
-        "US labour market resilience supporting corporate revenue outlook",
-        "PCE inflation sticky — Fed pivot expectations pushed to late 2025",
-    ],
-    "VUSA": [
-        "S&P 500 buyback yield at 1.8% providing technical floor",
-        "US consumer credit stress emerging in sub-prime auto and card delinquencies",
-    ],
-    "IITU": [
-        "Semiconductor equipment orders inflecting higher — cycle recovery on track",
-        "AI inference demand creating structural tailwind for large-cap tech",
-    ],
-    "SGLN": [
-        "Central bank gold accumulation surpassing 1,000 tonnes per annum",
-        "Real yields declining from peak — structurally supportive for gold prices",
-        "De-dollarisation accelerating: BRICS nations diversifying FX reserves into gold",
-    ],
-    "PHGP": [
-        "Gold spot holding above $2,300/oz — momentum regime intact",
-        "ETF outflows moderating as institutional demand absorbs retail selling pressure",
-    ],
-    "NRGG": [
-        "Brent crude supported by OPEC+ production discipline and Red Sea disruptions",
-        "US shale production growth moderating — supply tightness emerging in H2",
-        "Energy sector FCF yield at 8%+ — shareholder return programmes accelerating",
-    ],
-    "DFNG": [
-        "NATO spending mandates: European members raising defence budgets to 2% GDP",
-        "Geopolitical risk premium structurally embedded in defence sector multiples",
-        "Order backlogs at record levels — 5yr revenue visibility above sector average",
-    ],
-    "IIND": [
-        "India GDP growth at 7.2% — strongest trajectory among major economies globally",
-        "Nifty 50 earnings: 15% YoY growth driven by domestic consumption and IT exports",
-        "RBI holding rates as CPI trends toward 4% target — policy inflection approaching",
-    ],
-    "EMIM": [
-        "EM earnings recovery contingent on China fiscal stimulus efficacy",
-        "USD strength creating persistent FX headwind across EM commodity exporters",
-        "India and Indonesia offsetting China allocation drag within the fund",
-    ],
-    "VFEM": [
-        "EM valuation discount to DM at widest since 2005 — mean-reversion potential",
-        "China property sector: policy stimulus stabilising; risk of further leg down remains",
-    ],
-    "ISF":  [
-        "FTSE 100 value discount to US peers at historic wide — rerating catalyst needed",
-        "Commodity and financials skew: FTSE 100 benefits from USD strength and yield curve",
-        "BoE rate cuts supportive for domestic consumer and real estate sub-sectors",
-    ],
-    "VAGP": [
-        "Global bond duration risk elevated as inflation stays above central bank targets",
-        "Investment grade credit spreads tightening — risk appetite supportive for IG bonds",
-    ],
-    "VGOV": [
-        "UK gilt carry premium: BoE Bank Rate at 5.25% generating positive real yield",
-        "UK fiscal deficit widening — gilt supply issuance risk emerging in H2",
-    ],
-    "IGLH": [
-        "GBP-hedged USD credit: hedge cost eroding yield pickup relative to gilts",
-        "IG default rates at cyclical lows — credit quality broadly intact",
-    ],
-    "DAGB": [
-        "Global aggregate duration exposure elevated — higher-for-longer is the base case",
-        "Credit quality improving; IG spreads near post-GFC tights — limited upside",
-    ],
-    "AINF": [
-        "Infrastructure assets: inflation-linked revenues providing real return floor",
-        "Energy transition: $3T/yr capex creating secular demand for infrastructure funds",
-    ],
-    "SPOG": [
-        "Real estate valuations rebasing lower as cap rates adjust to higher discount rates",
-        "Logistics and data-centre REITs outperforming — structural demand from AI build-out",
-    ],
-    "WLDS": [
-        "Global small cap lagging large cap — risk-off positioning reducing speculative demand",
-        "Small cap earnings sensitivity to credit conditions: watch US regional bank lending",
-    ],
-    "VJPB": [
-        "Bank of Japan yield curve control exit: JGB volatility risk to global bond markets",
-        "Yen carry unwind risk: USD/JPY positioning at extreme levels — reversal fragility",
-    ],
-    "CMOP": [
-        "Commodity super-cycle thesis: supply underinvestment meeting structural EM demand",
-        "China restocking cycle: PMI recovery driving base metals upside",
-    ],
-    "SDIP": [
-        "Dividend growth stocks: quality factor outperforming in high-rate environment",
-        "Payout ratios healthy — dividend coverage supported by robust FCF generation",
-    ],
-}
 
 def _mock_sentiment(ticker: str) -> Dict[str, Any]:
-    """
-    Heuristic sentiment derived from the same RSI seed — deterministic and varied per ticker.
-    Called whenever the real FinBERT API is unavailable or returns no headlines.
-    RSI > 65  → momentum regime → net bullish scores
-    RSI < 35  → fear / oversold  → net bearish scores
-    35–65     → neutral band     → mixed scores
-    Headlines are populated from _MACRO_FACTORS for known ETFs so the frontend
-    'Macro Factor Synthesis' section always has content.
-    """
-    rsi   = _mock_rsi(ticker)
-    # Secondary spread: weighted sum of char ordinals and positions (0–99)
-    spread = sum(ord(c) * (i + 1) for i, c in enumerate(ticker.upper())) % 100 / 1000.0
-
-    if rsi > 65:          # momentum / overbought
-        bull = round(0.52 + spread, 3)
-        bear = round(0.20 + spread * 0.4, 3)
-    elif rsi < 35:        # oversold / fear
-        bull = round(0.20 + spread * 0.4, 3)
-        bear = round(0.52 + spread, 3)
-    else:                 # neutral band
-        bull = round(0.36 + spread * 0.8, 3)
-        bear = round(0.28 + spread * 0.5, 3)
-
-    label = ("positive" if bull > bear and bull > 0.38
-             else "negative" if bear > bull and bear > 0.38
-             else "neutral")
-
-    clean = ticker.split(".")[0].upper()
-    macro_headlines = _MACRO_FACTORS.get(clean, [
-        "Macro regime: elevated uncertainty warrants active risk monitoring",
-        "Portfolio factor exposure: review correlation to broader equity beta",
-    ])
-
+    """Fallback when FinBERT API is unavailable. Returns neutral with 'unavailable' flag."""
     return {
-        "bullish": bull, "bearish": bear, "label": label,
-        "headline_count": len(macro_headlines),
-        "headlines": macro_headlines,
-        "sentiment_delta": round(bull - 0.45, 2),
-        "exhaustion_alert": rsi > 74,
+        "bullish": 0.33, "bearish": 0.33, "label": "unavailable",
+        "headline_count": 0,
+        "headlines": ["Sentiment data unavailable — FinBERT API offline or no recent headlines found."],
+        "sentiment_delta": 0.0,
+        "exhaustion_alert": False,
+        "_mock": True,
     }
 
 
@@ -2129,9 +1980,9 @@ _GOLD_TAA  = {"SGLN","GLD","IAU","GLDM","PHAU","HMSO","IGLN","SGLP","XGLD"}
 _BOND_TAA  = {"TN28","IGLT","BND","AGG","TLT","VGLT","XGSD"}
 _ENERGY_TAA = {"XOM","CVX","SHEL","BP","RDSB","OXY","NRGG","XENE","IOOG"}
 
-def _generate_tactical_desk(holdings: Dict[str, float], assets: Dict[str, Any], portfolio: Dict[str, Any], ohlc_data: Dict = None) -> List[Dict]:
+def _generate_tactical_desk(holdings: Dict[str, float], assets: Dict[str, Any], portfolio: Dict[str, Any], ohlc_data: Dict = None, live_vix: float = None) -> List[Dict]:
     """
-    Simulated LLM Catalyst Engine with Regime-Adjusted ATR Exit Strategy.
+    Rule-Based Tactical Engine with Regime-Adjusted ATR Exit Strategy.
     Stop_Loss = Price - (ATR × (1 + VIX/100))  — wider in panic, tighter in calm.
     Take_Profit = Price + (3 × ATR)
     """
@@ -2143,10 +1994,13 @@ def _generate_tactical_desk(holdings: Dict[str, float], assets: Dict[str, Any], 
     has_tech   = bool(ticker_bases & _TECH_S)
     has_energy = bool(ticker_bases & _ENERGY_TAA)
 
-    # Get live VIX for regime-adjusted stops
-    _vix = 15.0
-    if ohlc_data and "^VIX" in ohlc_data and not ohlc_data["^VIX"].empty:
+    # Prefer live quote VIX passed from main analysis
+    if live_vix is not None and live_vix > 0:
+        _vix = live_vix
+    elif ohlc_data and "^VIX" in ohlc_data and not ohlc_data["^VIX"].empty:
         _vix = float(ohlc_data["^VIX"]["Close"].iloc[-1])
+    else:
+        _vix = 15.0
     vix_adj = 1 + (_vix / 100)
 
     desk: List[Dict] = []
@@ -2179,25 +2033,26 @@ def _generate_tactical_desk(holdings: Dict[str, float], assets: Dict[str, Any], 
             "rationale": f"Regime-Adjusted ATR exit (VIX {_vix:.0f}, multiplier {vix_adj:.2f}×). Stop = Price - ATR×{vix_adj:.2f}, TP = Price + 3×ATR. R/R = 1:{rr}."
         }
 
-    # Signal 1 — GEO-RISK: oil supply shock → buy energy hedge if absent
+    # Signal 1 — GEO-RISK: portfolio missing energy exposure → suggest hedge
     if not has_energy:
         price = _get_real_price("NRGG.L")
         if price > 0:
             desk.append({
                 "severity": "GEO-RISK", "icon": "🛢️",
-                "event": "Oil Supply Shock — Strait of Hormuz Threatened",
+                "event": "Portfolio Missing Energy Exposure — Sector Gap Detected",
                 "action": "Buy", "ticker": "NRGG.L",
                 "amount": round(total_val * 0.03),
                 "exit_strategy": _get_exit_strategy("NRGG.L", price),
                 "rationale": (
-                    "Escalating Middle East tensions threaten ~20% of global oil transit. "
+                    "Your portfolio has zero energy sector allocation. "
                     "iShares Oil & Gas Exploration & Production UCITS ETF (NRGG.L) provides direct "
-                    "exposure to upstream E&P companies and acts as a natural hedge."
+                    "exposure to upstream E&P companies and hedges against energy price shocks."
                 ),
                 "time_horizon": "72h",
+                "_source": "rule_engine",
             })
 
-    # Signal 2 — MACRO-SHOCK: hot CPI → trim highest-weight tech by 10%
+    # Signal 2 — MACRO-SHOCK: high tech concentration → suggest trimming
     tech_tickers = [tk for tk in holdings if tk.split('.')[0].upper() in _TECH_S]
     if has_tech and tech_tickers:
         top_tech = max(tech_tickers, key=lambda tk: assets.get(tk, {}).get("value", 0))
@@ -2206,32 +2061,34 @@ def _generate_tactical_desk(holdings: Dict[str, float], assets: Dict[str, Any], 
         if trim_val > 0 and price > 0:
             desk.append({
                 "severity": "MACRO-SHOCK", "icon": "🌡️",
-                "event": "US CPI Surprise — Rate Cut Bets Collapse",
+                "event": "High-Weight Tech Concentration — Duration Risk Elevated",
                 "action": "Trim", "ticker": top_tech,
                 "amount": trim_val,
                 "exit_strategy": _get_exit_strategy(top_tech, price),
                 "rationale": (
-                    f"Hot CPI removes near-term rate relief. Long-duration growth equities ({top_tech}) "
-                    "are most exposed to discount-rate re-pricing."
+                    f"Long-duration growth equities ({top_tech}) are your largest position. "
+                    "Trimming 10% reduces concentration risk and discount-rate sensitivity."
                 ),
                 "time_horizon": "72h",
+                "_source": "rule_engine",
             })
 
-    # Signal 3 — MOMENTUM: gold breakout → add gold if absent
+    # Signal 3 — MOMENTUM: portfolio missing gold hedge → suggest adding
     if not has_gold:
         price = _get_real_price("SGLN.L")
         if price > 0:
             desk.append({
                 "severity": "MOMENTUM", "icon": "🏅",
-                "event": "Gold Momentum Breakout — Institutional Safe-Haven Bid",
+                "event": "Portfolio Missing Gold Hedge — Tail-Risk Unhedged",
                 "action": "Buy", "ticker": "SGLN.L",
                 "amount": round(total_val * 0.02),
                 "exit_strategy": _get_exit_strategy("SGLN.L", price),
                 "rationale": (
-                    "Gold clearing $2,500 signals institutional safe-haven rotation. "
-                    "SGLN.L adds portfolio convexity against macro tail risks."
+                    "Your portfolio has no gold allocation. "
+                    "SGLN.L adds portfolio convexity against macro tail risks and inflation."
                 ),
                 "time_horizon": "72h",
+                "_source": "rule_engine",
             })
 
     return desk[:3]
@@ -2413,29 +2270,48 @@ async def _get_sentiment(ticker: str) -> Dict[str, Any]:
         return s
 
 
-# ── Daily headline pool (seeded by date so it's stable within a day) ─────────
-_HEADLINE_POOL: List[tuple] = [
-    ("Federal Reserve signals higher-for-longer rate path as PCE remains elevated", "MACRO-SHOCK"),
-    ("US CPI prints 3.8% YoY, above consensus 3.5%, reigniting rate-hike fears", "MACRO-SHOCK"),
-    ("Brent crude surges 4.2% as Houthi attacks disrupt Red Sea shipping lanes", "GEO-RISK"),
-    ("Iran threatens Strait of Hormuz closure after US sanctions escalation", "GEO-RISK"),
-    ("Nasdaq 100 posts 3-month high; AI chip sector reaches historic valuation multiple", "MOMENTUM"),
-    ("UK gilt yields spike 18 bp as BoE governor flags persistent services inflation", "MACRO-SHOCK"),
-    ("Gold breaks $2,450/oz as central banks accelerate de-dollarisation reserves", "MOMENTUM"),
-    ("Chinese PPI contracts for 20th consecutive month; deflationary spiral deepens", "SECTOR-ROTATE"),
-    ("European PMI falls to 44.2, signalling contraction for 8th consecutive month", "SECTOR-ROTATE"),
-    ("OPEC+ agrees surprise output cut of 500k bbl/day effective next month", "GEO-RISK"),
-    ("Nvidia surges 8% after earnings beat; options market pricing 40% implied move", "MOMENTUM"),
-    ("US 2-year/10-year yield curve inverts further to −62 bp; recession signal flashes", "MACRO-SHOCK"),
-    ("Russia restricts fertiliser exports, raising agricultural supply-shock risk", "GEO-RISK"),
-    ("Mega-cap tech layoffs accelerate: combined 35,000 jobs cut across sector", "SECTOR-ROTATE"),
-    ("Dollar index at 6-month high on safe-haven flows; EM currencies under pressure", "MACRO-SHOCK"),
-    ("UK Chancellor unveils fiscal austerity package; gilt rally 12 bp on debt relief", "MACRO-SHOCK"),
-    ("Semiconductor supply chain disruption: Taiwan Strait tensions intensify", "GEO-RISK"),
-    ("Hedge funds at highest net-short on US equities since 2022 bear market", "MOMENTUM"),
-    ("WTI crude inventory draw 8.2M bbl — largest since 2021; energy sector outperforms", "GEO-RISK"),
-    ("ECB holds rates, signals two further cuts in H2; European banks rally hard", "SECTOR-ROTATE"),
-]
+# ── Live headline fetcher (replaces fake _HEADLINE_POOL) ─────────────────────
+async def _fetch_live_headlines(n: int = 5) -> List[tuple]:
+    """Fetch real market headlines from yfinance for broad macro ETFs."""
+    macro_tickers = ["SPY", "QQQ", "GLD", "TLT", "USO"]
+    tag_map = {"SPY": "MACRO-SHOCK", "QQQ": "MOMENTUM", "GLD": "MOMENTUM",
+               "TLT": "MACRO-SHOCK", "USO": "GEO-RISK"}
+    headlines: List[tuple] = []
+    cutoff = _news_cutoff_ts()
+    for tk in macro_tickers:
+        try:
+            news = await _in_thread(lambda t=tk: yf.Ticker(t).news)
+            for item in (news or [])[:5]:
+                content = item.get("content", {})
+                title = content.get("title", "")
+                if not title:
+                    continue
+                pub = content.get("pubDate") or content.get("displayTime") or ""
+                if pub:
+                    try:
+                        ts = datetime.datetime.fromisoformat(
+                            pub.rstrip("Z")
+                        ).replace(tzinfo=datetime.timezone.utc).timestamp()
+                        if ts < cutoff:
+                            continue
+                    except Exception:
+                        pass
+                tl = title.lower()
+                if any(p in tl for p in _NEWS_JUNK_PATTERNS):
+                    continue
+                headlines.append((title, tag_map.get(tk, "SECTOR-ROTATE")))
+        except Exception:
+            continue
+    # Deduplicate by headline text
+    seen = set()
+    unique: List[tuple] = []
+    for hl, tag in headlines:
+        if hl not in seen:
+            seen.add(hl)
+            unique.append((hl, tag))
+    if len(unique) < 3:
+        return []  # Not enough real headlines → LLM will rely on portfolio data only
+    return unique[:n]
 
 async def _call_cio_llm(
     holdings: Dict[str, float],
@@ -2448,13 +2324,9 @@ async def _call_cio_llm(
     Calls Claude Opus 4.6 (CIO persona) to generate live TAA recommendations.
     Falls back to the deterministic rule-based engine on any error.
     """
-    # ── Build daily news context (stable within a calendar day) ──────────────
+    # ── Build daily news context from REAL yfinance headlines ──────────────
     today = datetime.datetime.now(datetime.timezone.utc)
-    date_seed = int(today.strftime("%Y%m%d"))
-    rng_news = np.random.default_rng(date_seed)
-    n_headlines = int(rng_news.integers(4, 6))
-    idx = rng_news.choice(len(_HEADLINE_POOL), size=n_headlines, replace=False)
-    todays_headlines = [_HEADLINE_POOL[i] for i in idx]
+    todays_headlines = await _fetch_live_headlines(5)
 
     # ── Format portfolio context ──────────────────────────────────────────────
     total_val  = portfolio.get("total_value", 0)
@@ -2470,7 +2342,7 @@ async def _call_cio_llm(
     asset_lines = []
     for tk, a in assets.items():
         s   = a.get("sentiment", {})
-        rsi = s.get("rsi", (rsi_cache or {}).get(tk, _mock_rsi(tk)))
+        rsi = s.get("rsi") or (rsi_cache or {}).get(tk) or 50.0
         sig = "OVERBOUGHT" if rsi > 70 else "OVERSOLD" if rsi < 30 else "NEUTRAL"
         cls = ("Growth"    if tk.split(".")[0].upper() in _GROWTH_BASES    else
                "Defensive" if tk.split(".")[0].upper() in _DEFENSIVE_BASES else "Core")
@@ -2479,7 +2351,10 @@ async def _call_cio_llm(
             f"RSI {rsi:.0f} ({sig}) | Bull {s.get('bullish', 0.33):.0%} Bear {s.get('bearish', 0.33):.0%}"
         )
 
-    headline_text = "\n".join(f"  [{tag}] {hl}" for hl, tag in todays_headlines)
+    if todays_headlines:
+        headline_text = "\n".join(f"  [{tag}] {hl}" for hl, tag in todays_headlines)
+    else:
+        headline_text = "  [No live market headlines available — base analysis on portfolio metrics only]"
     asset_text    = "\n".join(asset_lines)
 
     user_msg = (
@@ -2545,16 +2420,22 @@ async def _cio_with_fallback(
     portfolio: Dict[str, Any],
     ideal_blueprint: Dict[str, float],
     rsi_cache: Dict[str, float] = None,
+    live_vix: float = None,
 ) -> Dict[str, Any]:
-    """Calls the LLM; falls back silently to the rule-based engine on any error."""
+    """Calls the LLM; falls back to the rule-based engine on any error, with error visibility."""
     try:
-        return await _call_cio_llm(holdings, assets, portfolio, ideal_blueprint, rsi_cache=rsi_cache)
-    except Exception:
+        result = await _call_cio_llm(holdings, assets, portfolio, ideal_blueprint, rsi_cache=rsi_cache)
+        result["_llm_powered"] = True
+        return result
+    except Exception as e:
         traceback.print_exc()
-        desk      = _generate_tactical_desk(holdings, assets, portfolio)
+        err_msg = str(e)
+        print(f"[CIO LLM] Falling back to rule engine: {err_msg}")
+        desk      = _generate_tactical_desk(holdings, assets, portfolio, live_vix=live_vix)
         blueprint = _compute_tactical_blueprint(ideal_blueprint, desk)
         return {"tactical_desk": desk, "tactical_blueprint": blueprint,
-                "sentiment_updates": {}, "_llm_powered": False}
+                "sentiment_updates": {}, "_llm_powered": False,
+                "_llm_error": err_msg}
 
 
 @app.get("/api/config")
@@ -2656,18 +2537,33 @@ async def analyze_portfolio(request: PortfolioRequest):
             if not _ohlc.empty and 'Close' in _ohlc.columns and len(_ohlc) >= 15:
                 _rsi_cache[_tk_raw] = _compute_rsi(_ohlc['Close'])
             else:
-                _rsi_cache[_tk_raw] = _mock_rsi(_tk_raw)
+                _rsi_cache[_tk_raw] = None  # no OHLC data available
 
         risk_data = _compute_risk_history_from_prices(full_prices, tickers, {tk: assets[tk]["weight"] for tk in tickers})
         
         # Parallel sentiment and V6.0 alpha signal analysis
         sentiments = await asyncio.gather(*[_get_sentiment(t) for t in tickers])
-        _vix_live = float(full_prices["^VIX"].dropna().iloc[-1]) if "^VIX" in full_prices.columns and not full_prices["^VIX"].dropna().empty else 15.0
-        alpha_alerts = await get_lead_lag_signals(holdings, ohlc_data)
+        # Fetch latest VIX: prefer live quote (regularMarketPrice) over historical close
+        _vix_available = False
+        _vix_live = 15.0
+        try:
+            _vix_info = await _in_thread(lambda: yf.Ticker("^VIX").info)
+            _vix_rt = _to_float(_vix_info.get("regularMarketPrice"))
+            if _vix_rt and _vix_rt > 0:
+                _vix_live = _vix_rt
+                _vix_available = True
+        except Exception:
+            pass
+        if not _vix_available and "^VIX" in full_prices.columns and not full_prices["^VIX"].dropna().empty:
+            _vix_live = float(full_prices["^VIX"].dropna().iloc[-1])
+            _vix_available = True
+        alpha_alerts = await get_lead_lag_signals(holdings, ohlc_data, live_vix=_vix_live)
         alpha_alerts.extend(get_institutional_flow(holdings, ohlc_data=ohlc_data, vix=_vix_live))
 
         for i, (tk, s) in enumerate(zip(tickers, sentiments)):
-            rsi_val = _rsi_cache.get(tk, _mock_rsi(tk))
+            rsi_val = _rsi_cache.get(tk)
+            if rsi_val is None:
+                rsi_val = 50.0  # neutral fallback — no OHLC data
             s["rsi"] = rsi_val
             s["rsi_signal"] = "OVERBOUGHT" if rsi_val > 70 else "OVERSOLD" if rsi_val < 30 else "NEUTRAL"
             assets[tk]["sentiment"] = s
@@ -2677,9 +2573,9 @@ async def analyze_portfolio(request: PortfolioRequest):
 
         blended_ter = sum((_to_float(a.get("ter")) or _KNOWN_TER.get(tk.replace('_', '.').split('.')[0].upper(), 0.002)) * a["weight"]
                           for tk, a in assets.items())
-        p_summary = {**risk_data["portfolio_risk"], "total_value": round(total_val, 2), "weighted_dividend_yield": round(sum((_to_float(a["dividend_yield"]) or 0)*a["weight"] for a in assets.values()), 4), "portfolio_beta": round(sum((_to_float(a["beta"]) or 1)*a["weight"] for a in assets.values()), 2), "asset_count": len(tickers), "currency": base_curr, "blended_ter": round(blended_ter, 4)}
+        p_summary = {**risk_data["portfolio_risk"], "total_value": round(total_val, 2), "weighted_dividend_yield": round(sum((_to_float(a["dividend_yield"]) or 0)*a["weight"] for a in assets.values()), 4), "portfolio_beta": round(sum((_to_float(a["beta"]) or 1)*a["weight"] for a in assets.values()), 2), "asset_count": len(tickers), "currency": base_curr, "blended_ter": round(blended_ter, 4), "vix_assumed": not _vix_available, "risk_free_rate": RISK_FREE_RATE}
         advanced = _get_advanced_intelligence(assets, p_summary, request.risk_level, risk_data, base_curr, rsi_cache=_rsi_cache)
-        apex_advisor = _run_apex_advisor(assets, full_prices, ohlc_data, p_summary)
+        apex_advisor = _run_apex_advisor(assets, full_prices, ohlc_data, p_summary, live_vix=_vix_live)
 
         # ── Real-Time Telegram Alerts (V6.0: Trigger if conviction > 88%) ──
         for alert in alpha_alerts:
@@ -2721,9 +2617,9 @@ async def analyze_portfolio(request: PortfolioRequest):
         # ── CIO LLM — live TAA (falls back to rule engine when disabled/error) ─
         ideal_bp = advanced.get("ideal_blueprint", {})
         if request.enable_cio_llm:
-            cio = await _cio_with_fallback(holdings, assets, p_summary, ideal_bp, rsi_cache=_rsi_cache)
+            cio = await _cio_with_fallback(holdings, assets, p_summary, ideal_bp, rsi_cache=_rsi_cache, live_vix=_vix_live)
         else:
-            desk = _generate_tactical_desk(holdings, assets, p_summary, ohlc_data=ohlc_data)
+            desk = _generate_tactical_desk(holdings, assets, p_summary, ohlc_data=ohlc_data, live_vix=_vix_live)
             cio  = {"tactical_desk": desk,
                     "tactical_blueprint": _compute_tactical_blueprint(ideal_bp, desk),
                     "sentiment_updates": {}, "_llm_powered": False}
@@ -2759,7 +2655,7 @@ async def analyze_portfolio(request: PortfolioRequest):
             if tk in assets and isinstance(upd, dict):
                 s = assets[tk].get("sentiment", {})
                 s.update({k: v for k, v in upd.items() if v is not None})
-                rsi = float(s.get("rsi", _rsi_cache.get(tk, _mock_rsi(tk))))
+                rsi = float(s.get("rsi") or _rsi_cache.get(tk) or 50.0)
                 s["rsi_signal"] = "OVERBOUGHT" if rsi > 70 else "OVERSOLD" if rsi < 30 else "NEUTRAL"
                 assets[tk]["sentiment"] = s
 
@@ -2824,6 +2720,9 @@ async def analyze_portfolio(request: PortfolioRequest):
         llm_outlook = cio.get("market_outlook")
         if isinstance(llm_outlook, list) and len(llm_outlook) >= 3:
             market_outlook["points"] = llm_outlook
+            market_outlook["_source"] = "llm"
+        if cio.get("_llm_error"):
+            market_outlook["_llm_error"] = cio["_llm_error"]
         if cio.get("strategic_commentary"):
             market_outlook["commentary"] = cio["strategic_commentary"]
         if cio.get("future_outlook"):

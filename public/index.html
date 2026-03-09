@@ -1699,7 +1699,7 @@
         <div class="grid grid-cols-3 gap-1.5">
           <div class="bg-slate-900/50 p-2 rounded-lg border border-slate-800">
             <p class="text-[7px] text-slate-600 font-black uppercase">Proj. Sharpe</p>
-            <p class="text-xs font-black text-emerald-400">${ai.rebalancing.projected_sharpe}</p>
+            <p class="text-xs font-black ${ai.rebalancing.projected_sharpe != null ? 'text-emerald-400' : 'text-slate-600'}">${ai.rebalancing.projected_sharpe != null ? ai.rebalancing.projected_sharpe : '—'}</p>
           </div>
           <div class="bg-slate-900/50 p-2 rounded-lg border border-slate-800">
             <p class="text-[7px] text-slate-600 font-black uppercase">Proj. Beta</p>
@@ -1956,11 +1956,16 @@
       const dr = parseFloat(ai?.attribution?.div_ratio) || 1.0;
       const commentary = mo.quant_intelligence || 'Awaiting neural synthesis…';
       const strategicComm = mo.commentary || '';
+      const isStatic = mo._source === 'static_fallback';
+      const llmErr = mo._llm_error || '';
+      const sourceBadge = isStatic
+        ? `<div class="mb-4 px-3 py-2 bg-amber-950/30 border border-amber-800/40 rounded-lg"><p class="text-[9px] font-black text-amber-500 uppercase tracking-widest">⚠ Static fallback — ${llmErr ? 'CIO LLM error: ' + llmErr : 'enable CIO LLM for live AI-powered intelligence'}</p></div>`
+        : '';
       const pointsHtml = mo.points.map(x => `<div class="p-4 bg-slate-900/50 rounded-xl border border-slate-800 transition-all group hover:border-indigo-500/30"><div class="flex items-center gap-3 mb-2"><div class="text-xl group-hover:scale-110 transition-transform">${x.i}</div><div><p class="text-[10px] font-bold text-slate-600 uppercase tracking-widest">${x.l}</p><p class="text-xs font-black text-indigo-400 uppercase">${x.v}</p></div></div><p class="text-[10px] leading-relaxed text-slate-500 font-medium">${boldTerms(x.d)}</p></div>`).join('');
       const quantHtml = `<div class="p-4 bg-indigo-950/20 border-l-4 border-indigo-500 rounded-r-xl"><p class="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-2 font-black">Quant Intelligence · DR ${dr.toFixed(2)}</p><p class="text-sm text-slate-300 leading-relaxed">${boldTerms(commentary)}</p></div>`;
       const commHtml = strategicComm ? `<div class="p-4 bg-emerald-950/20 border-l-4 border-emerald-500 rounded-r-xl"><p class="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-2 font-black">Strategic Commentary</p><p class="text-sm text-slate-300 leading-relaxed">${boldTerms(strategicComm)}</p></div>` : '';
       const futureHtml = mo.future_outlook ? `<div class="p-4 bg-violet-950/20 border-l-4 border-violet-500 rounded-r-xl"><p class="text-xs font-bold text-violet-400 uppercase tracking-widest mb-2 font-black">Strategic Outlook</p><p class="text-sm text-slate-300 leading-relaxed">${boldTerms(mo.future_outlook)}</p></div>` : '';
-      document.getElementById('market-outlook').innerHTML = pointsHtml + `<div class="mt-6 space-y-4">${quantHtml}${commHtml}${futureHtml}</div>`;
+      document.getElementById('market-outlook').innerHTML = sourceBadge + pointsHtml + `<div class="mt-6 space-y-4">${quantHtml}${commHtml}${futureHtml}</div>`;
     }
 
     function renderFutureValue(fv, tv, currency) {
@@ -2456,9 +2461,11 @@
         const acct = tk.includes('_') ? tk.split('_').slice(1).join('_') : '';
         const acctColors = { ISA: 'text-emerald-400 bg-emerald-950/30 border-emerald-800', GIA: 'text-amber-400 bg-amber-950/30 border-amber-800', SIPP: 'text-indigo-400 bg-indigo-950/30 border-indigo-800' };
         const acctCls = acctColors[acct] || 'text-slate-500 bg-slate-900/30 border-slate-800';
-        const sentClr = ev.sentiment > 0.3 ? 'text-emerald-400' : ev.sentiment < -0.3 ? 'text-red-400' : 'text-slate-400';
-        const exStatus = logic.exhaustion_status || ev.exhaustion || 'Neutral';
-        const exClr = exStatus === 'Bull Trap' || exStatus === 'Blow-off Top' ? 'text-red-500' : exStatus === 'Deep Exhaustion' || exStatus === 'Oversold' ? 'text-emerald-500' : exStatus === 'Overextended' ? 'text-amber-400' : 'text-slate-500';
+        const sentUnavail = ev.sentiment_unavailable;
+        const sentClr = sentUnavail ? 'text-slate-600' : ev.sentiment > 0.3 ? 'text-emerald-400' : ev.sentiment < -0.3 ? 'text-red-400' : 'text-slate-400';
+        const sentDisplay = sentUnavail ? '—' : (ev.sentiment > 0 ? '+' : '') + ev.sentiment;
+        const exStatus = sentUnavail ? 'N/A' : (logic.exhaustion_status || ev.exhaustion || 'Neutral');
+        const exClr = exStatus === 'N/A' ? 'text-slate-600' : exStatus === 'Bull Trap' || exStatus === 'Blow-off Top' ? 'text-red-500' : exStatus === 'Deep Exhaustion' || exStatus === 'Oversold' ? 'text-emerald-500' : exStatus === 'Overextended' ? 'text-amber-400' : 'text-slate-500';
         const actInstr = logic.action_instruction || 'HOLD';
         const actClr = actInstr.startsWith('BUY') ? 'text-emerald-400 bg-emerald-950/40 border-emerald-700' : actInstr.startsWith('HEDGE') || actInstr.startsWith('TRIM') ? 'text-red-400 bg-red-950/40 border-red-700' : 'text-slate-400 bg-slate-900/40 border-slate-700';
         const prob = logic.probability || '50%';
@@ -2497,7 +2504,7 @@
             <td class="py-3"><span class="px-2 py-0.5 rounded text-[8px] font-black border uppercase whitespace-nowrap ${actClr}">${actInstr}</span></td>
             <td class="py-3 text-right font-mono text-slate-400">${ev.rsi}</td>
             <td class="py-3 text-right font-mono text-slate-500">${atrPct}</td>
-            <td class="py-3 text-right font-mono ${sentClr}">${ev.sentiment > 0 ? '+' : ''}${ev.sentiment}</td>
+            <td class="py-3 text-right font-mono ${sentClr}">${sentDisplay}</td>
             <td class="py-3 text-right"><span class="font-black text-[9px] uppercase ${exClr}">${exStatus}</span></td>
             <td class="py-3 text-right font-mono ${probClr}">${prob}</td>
             <td class="py-3 text-right pr-3 font-black text-emerald-500 uppercase text-[9px]">${logic.logic_tag || 'Standard'}</td>
@@ -3644,38 +3651,93 @@
       sect.classList.remove('hidden');
       const fmt = v => '£' + Number(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       const thisYear = currentTaxYear();
+
+      // Compute unrealized P&L from live prices
+      const pos = d.open_positions || {};
+      let liveEquity = 0, anyLive = false;
+      Object.entries(pos).forEach(([key, p]) => {
+        const sym = p.symbol || key;
+        const lp = _livePrice(sym);
+        if (lp !== null) { liveEquity += lp * p.qty; anyLive = true; }
+      });
+      const bookCost = d.total_book_cost || 0;
+      const unrealPnL = anyLive ? liveEquity - bookCost : null;
+
+      // Compute totals across all years
+      let totNetProfit = 0, totProceeds = 0, totCost = 0, totGains = 0,
+          totLosses = 0, totDivs = 0, totInt = 0, totRealized = 0;
+      years.forEach(yr => {
+        const y = yearly[yr];
+        totNetProfit += y.net_profit || 0;
+        totProceeds  += y.total_proceeds || 0;
+        totCost      += y.total_allowable_cost || 0;
+        totGains     += y.gains || 0;
+        totLosses    += y.losses || 0;
+        totDivs      += y.dividends || 0;
+        totInt       += y.interest || 0;
+        totRealized  += y.realized_gains || 0;
+      });
+      const totalPnL = totNetProfit + (unrealPnL || 0);
+      const totalPnLCls = totalPnL >= 0 ? 'text-emerald-400' : 'text-red-400';
+
       document.getElementById('pnl-year-body').innerHTML = `
-        <table class="w-full text-xs min-w-[600px]">
+        <table class="w-full text-xs min-w-[780px]">
           <thead><tr class="text-[10px] font-bold text-slate-500 uppercase border-b border-slate-800">
             <th class="text-left pb-2 pr-3">Tax Year</th>
+            <th class="text-right pb-2 pr-3">Realized P&L</th>
+            <th class="text-right pb-2 pr-3">Dividends</th>
+            <th class="text-right pb-2 pr-3">Interest</th>
             <th class="text-right pb-2 pr-3">Net Profit</th>
             <th class="text-right pb-2 pr-3">Proceeds</th>
             <th class="text-right pb-2 pr-3">Allow. Cost</th>
             <th class="text-right pb-2 pr-3">Gains</th>
-            <th class="text-right pb-2 pr-3">Losses</th>
-            <th class="text-right pb-2 pr-3">Dividends</th>
-            <th class="text-right pb-2">Interest</th>
+            <th class="text-right pb-2">Losses</th>
           </tr></thead>
           <tbody class="divide-y divide-slate-800/40">
             ${years.map(yr => {
               const y = yearly[yr];
               const isYTD = yr === thisYear;
               const npCls = y.net_profit >= 0 ? 'text-emerald-400' : 'text-red-400';
+              const rgCls = (y.realized_gains || 0) >= 0 ? 'text-emerald-400' : 'text-red-400';
               const rowCls = isYTD ? 'bg-indigo-950/20' : '';
               return `<tr class="${rowCls}">
                 <td class="py-2 pr-3 font-mono font-bold text-slate-200">
                   ${yr}${isYTD ? ' <span class="text-[8px] font-black text-indigo-400 ml-1 align-middle">YTD</span>' : ''}
                 </td>
-                <td class="py-2 pr-3 text-right font-mono ${npCls}">${fmt(y.net_profit)}</td>
-                <td class="py-2 pr-3 text-right font-mono text-slate-300">${fmt(y.total_proceeds || 0)}</td>
-                <td class="py-2 pr-3 text-right font-mono text-slate-400">${fmt(y.total_allowable_cost || 0)}</td>
-                <td class="py-2 pr-3 text-right font-mono text-emerald-400">${fmt(y.gains || 0)}</td>
-                <td class="py-2 pr-3 text-right font-mono text-red-400">${fmt(y.losses || 0)}</td>
+                <td class="py-2 pr-3 text-right font-mono font-bold ${rgCls}">${fmt(y.realized_gains || 0)}</td>
                 <td class="py-2 pr-3 text-right font-mono text-blue-400">${fmt(y.dividends)}</td>
-                <td class="py-2 text-right font-mono text-violet-400">${fmt(y.interest)}</td>
+                <td class="py-2 pr-3 text-right font-mono text-violet-400">${fmt(y.interest)}</td>
+                <td class="py-2 pr-3 text-right font-mono ${npCls}">${fmt(y.net_profit)}</td>
+                <td class="py-2 pr-3 text-right font-mono text-slate-400">${fmt(y.total_proceeds || 0)}</td>
+                <td class="py-2 pr-3 text-right font-mono text-slate-500">${fmt(y.total_allowable_cost || 0)}</td>
+                <td class="py-2 pr-3 text-right font-mono text-emerald-500/70">${fmt(y.gains || 0)}</td>
+                <td class="py-2 text-right font-mono text-red-500/70">${fmt(y.losses || 0)}</td>
               </tr>`;
             }).join('')}
           </tbody>
+          <tfoot>
+            <tr class="border-t-2 border-slate-700">
+              <td class="py-2 pr-3 font-mono font-black text-slate-200 uppercase text-[10px]">Realized Total</td>
+              <td class="py-2 pr-3 text-right font-mono font-black ${totRealized >= 0 ? 'text-emerald-400' : 'text-red-400'}">${fmt(totRealized)}</td>
+              <td class="py-2 pr-3 text-right font-mono font-bold text-blue-400">${fmt(totDivs)}</td>
+              <td class="py-2 pr-3 text-right font-mono font-bold text-violet-400">${fmt(totInt)}</td>
+              <td class="py-2 pr-3 text-right font-mono font-black ${totNetProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}">${fmt(totNetProfit)}</td>
+              <td class="py-2 pr-3 text-right font-mono font-bold text-slate-400">${fmt(totProceeds)}</td>
+              <td class="py-2 pr-3 text-right font-mono font-bold text-slate-500">${fmt(totCost)}</td>
+              <td class="py-2 pr-3 text-right font-mono font-bold text-emerald-500/70">${fmt(totGains)}</td>
+              <td class="py-2 text-right font-mono font-bold text-red-500/70">${fmt(totLosses)}</td>
+            </tr>
+            <tr class="border-t border-slate-800/60">
+              <td class="py-2 pr-3 font-mono font-black text-slate-200 uppercase text-[10px]">Unrealized</td>
+              <td class="py-2 pr-3 text-right font-mono font-black ${unrealPnL !== null ? (unrealPnL >= 0 ? 'text-emerald-400' : 'text-red-400') : 'text-slate-600'}">${unrealPnL !== null ? fmt(unrealPnL) : '—'}</td>
+              <td colspan="7" class="py-2 text-right text-[9px] text-slate-600">${anyLive ? 'Based on live/broker prices' : 'Waiting for live prices'}</td>
+            </tr>
+            <tr class="border-t-2 border-indigo-500/40 bg-indigo-950/20">
+              <td class="py-2.5 pr-3 font-mono font-black text-indigo-300 uppercase text-[10px]">Total P&L</td>
+              <td class="py-2.5 pr-3 text-right font-mono font-black text-lg ${totalPnLCls}">${unrealPnL !== null ? fmt(totalPnL) : fmt(totNetProfit)}</td>
+              <td colspan="7" class="py-2.5 text-right text-[9px] text-slate-500 font-bold">${unrealPnL !== null ? 'Realized + Unrealized' : 'Realized only (no live prices)'}</td>
+            </tr>
+          </tfoot>
         </table>`;
     }
 
