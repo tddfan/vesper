@@ -101,10 +101,21 @@
     }
     html[data-theme="light"] input::placeholder { color: #94a3b8 !important; }
 
-    /* Scrollbar */
-    html[data-theme="light"] ::-webkit-scrollbar-thumb { background: #94a3b8 !important; }
+    /* Ticker bar time */
+    #ticker-bar-time { font-feature-settings: "tnum"; font-variant-numeric: tabular-nums; }
 
-    /* Master desk tabs */
+    /* Builder Grid Responsive */
+    @media (max-width: 1024px) {
+      .builder-grid { grid-template-cols: 1fr 60px 40px 60px 60px 28px !important; }
+      .builder-hide-tablet { display: none !important; }
+    }
+    @media (max-width: 640px) {
+      .builder-grid { grid-template-cols: 1fr 50px 40px 50px 28px !important; }
+      .builder-hide-mobile { display: none !important; }
+      .summary-grid { grid-template-cols: repeat(2, minmax(0, 1fr)) !important; }
+    }
+  </style>
+</head>
     .desk-tab { color: #64748b; border: 1px solid #1e293b; background: transparent;
       padding: 0.375rem 1rem; font-size: 0.75rem; font-weight: 700; border-radius: 9999px; transition: all 0.15s; cursor: pointer; }
     .desk-tab.active { color: #a5b4fc; border-color: #4f46e5; background: rgb(30 27 75 / 0.4); }
@@ -442,21 +453,17 @@
     <section id="builder-section" class="mb-10">
       <div class="glass p-5 shadow-2xl">
 
-        <!-- Scrollable grid wrapper — allows horizontal scroll on mobile without breaking layout -->
-        <div class="overflow-x-auto -mx-1 px-1" style="scrollbar-width:thin;scrollbar-color:#1e293b transparent">
-        <div style="min-width:660px">
-
         <!-- Column header row (sortable) -->
-        <div class="grid grid-cols-[1fr_75px_58px_78px_68px_72px_84px_90px_120px_28px] px-2 pb-1 border-b border-slate-800 mb-1">
+        <div class="builder-grid grid grid-cols-[1fr_75px_58px_78px_68px_72px_84px_90px_120px_28px] px-2 pb-1 border-b border-slate-800 mb-1 items-center">
           <span onclick="sortRows('ticker')" class="text-[10px] font-black text-slate-500 uppercase tracking-widest cursor-pointer hover:text-slate-300 select-none flex items-center gap-1">Ticker <span id="sort-ind-ticker" class="text-slate-700 text-[9px]">↕</span></span>
           <span onclick="sortRows('qty')" class="text-[10px] font-black text-slate-500 uppercase tracking-widest text-right pr-2 cursor-pointer hover:text-slate-300 select-none flex items-center justify-end gap-1">Qty <span id="sort-ind-qty" class="text-slate-700 text-[9px]">↕</span></span>
           <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1">Wrap</span>
           <span onclick="sortRows('price')" class="text-[10px] font-black text-slate-600 uppercase tracking-widest text-right pr-2 cursor-pointer hover:text-slate-300 select-none flex items-center justify-end gap-1">Price <span id="sort-ind-price" class="text-slate-700 text-[9px]">↕</span></span>
-          <span onclick="sortRows('chg-pct')" class="text-[10px] font-black text-slate-600 uppercase tracking-widest text-right pr-2 cursor-pointer hover:text-slate-300 select-none flex items-center justify-end gap-1">Chg% <span id="sort-ind-chg-pct" class="text-slate-700 text-[9px]">↕</span></span>
-          <span onclick="sortRows('chg-val')" class="text-[10px] font-black text-slate-600 uppercase tracking-widest text-right pr-2 cursor-pointer hover:text-slate-300 select-none flex items-center justify-end gap-1">Chg£ <span id="sort-ind-chg-val" class="text-slate-700 text-[9px]">↕</span></span>
-          <span onclick="sortRows('day-pnl')" class="text-[10px] font-black text-slate-600 uppercase tracking-widest text-right pr-2 cursor-pointer hover:text-slate-300 select-none flex items-center justify-end gap-1">Day P&amp;L <span id="sort-ind-day-pnl" class="text-slate-700 text-[9px]">↕</span></span>
-          <span onclick="sortRows('total')" class="text-[10px] font-black text-slate-600 uppercase tracking-widest text-right pr-2 cursor-pointer hover:text-slate-300 select-none flex items-center justify-end gap-1">Total <span id="sort-ind-total" class="text-slate-700 text-[9px]">↕</span></span>
-          <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Advisor</span>
+          <span onclick="sortRows('chg-pct')" class="builder-hide-mobile text-[10px] font-black text-slate-600 uppercase tracking-widest text-right pr-2 cursor-pointer hover:text-slate-300 select-none flex items-center justify-end gap-1">Chg% <span id="sort-ind-chg-pct" class="text-slate-700 text-[9px]">↕</span></span>
+          <span onclick="sortRows('chg-val')" class="builder-hide-tablet text-[10px] font-black text-slate-600 uppercase tracking-widest text-right pr-2 cursor-pointer hover:text-slate-300 select-none flex items-center justify-end gap-1">Chg£ <span id="sort-ind-chg-val" class="text-slate-700 text-[9px]">↕</span></span>
+          <span onclick="sortRows('day-pnl')" class="builder-hide-tablet text-[10px] font-black text-slate-600 uppercase tracking-widest text-right pr-2 cursor-pointer hover:text-slate-300 select-none flex items-center justify-end gap-1">Day P&L <span id="sort-ind-day-pnl" class="text-slate-700 text-[9px]">↕</span></span>
+          <span onclick="sortRows('total')" class="builder-hide-tablet text-[10px] font-black text-slate-600 uppercase tracking-widest text-right pr-2 cursor-pointer hover:text-slate-300 select-none flex items-center justify-end gap-1">Total <span id="sort-ind-total" class="text-slate-700 text-[9px]">↕</span></span>
+          <span class="builder-hide-mobile text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Advisor</span>
           <span></span>
         </div>
 
@@ -464,13 +471,15 @@
         <div id="ticker-rows"></div>
 
         <!-- Totals row — shown after prices are loaded -->
-        <div id="totals-row" class="hidden grid grid-cols-[1fr_75px_58px_78px_68px_72px_84px_90px_120px_28px] px-2 py-1.5 mb-2 border-t-2 border-slate-700/60 bg-slate-900/30">
+        <div id="totals-row" class="hidden builder-grid grid grid-cols-[1fr_75px_58px_78px_68px_72px_84px_90px_120px_28px] px-2 py-1.5 mb-2 border-t-2 border-slate-700/60 bg-slate-900/30">
           <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Portfolio</span>
-          <span></span><span></span><span></span><span></span>
-          <span class="text-[10px] font-black font-mono text-right pr-2 text-slate-500">—</span>
-          <span id="totals-day-pnl" class="text-[10px] font-black font-mono text-right pr-2 text-slate-500">—</span>
-          <span id="totals-total"   class="text-[10px] font-black font-mono text-right pr-2 text-slate-400">—</span>
-          <span></span><span></span>
+          <span></span><span></span><span></span>
+          <span class="builder-hide-mobile"></span>
+          <span class="builder-hide-tablet text-[10px] font-black font-mono text-right pr-2 text-slate-500">—</span>
+          <span id="totals-day-pnl" class="builder-hide-tablet text-[10px] font-black font-mono text-right pr-2 text-slate-500">—</span>
+          <span id="totals-total"   class="builder-hide-tablet text-[10px] font-black font-mono text-right pr-2 text-slate-400">—</span>
+          <span class="builder-hide-mobile"></span>
+          <span></span>
         </div>
         </div></div><!-- /min-width inner · /overflow-x-auto outer -->
 
@@ -559,12 +568,56 @@
     <section id="results-section" class="hidden space-y-6">
       <div id="intel-account-banners" class="hidden"></div>
       <div id="intel-acct-holdings" class="hidden mb-2"></div>
-      <div id="summary-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4"></div>
+      
+      <!-- Executive Master Verdict (Synthesized Leyman Advice) -->
+      <section id="master-verdict-section" class="mb-8">
+        <div class="glass p-8 border-l-8 border-indigo-500 shadow-2xl relative overflow-hidden">
+          <div class="absolute top-0 right-0 p-4 opacity-5 pointer-events-none text-6xl">🧠</div>
+          <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+            <div>
+              <h2 class="text-4xl font-black text-white uppercase tracking-tighter">Executive Master Verdict</h2>
+              <p class="text-slate-500 text-xs font-black uppercase tracking-[0.2em] mt-1">Cross-Factor Signal Synthesis • <span class="generated-at-ts">Loading...</span></p>
+            </div>
+            <div id="verdict-priority-badge" class="px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border shadow-lg">ROUTINE</div>
+          </div>
+          
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div class="lg:col-span-2 space-y-6">
+              <div>
+                <p class="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-2">Layman Rationale</p>
+                <p id="verdict-rationale" class="text-lg text-slate-200 leading-relaxed font-medium italic">Synthesizing signals from CIO Desk, Alpha Alerts, and Regime models...</p>
+              </div>
+              <div class="p-6 bg-slate-900/60 rounded-2xl border border-slate-800 shadow-inner">
+                <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Primary Action</p>
+                <p id="verdict-action" class="text-2xl font-black text-white uppercase tracking-tight">Processing Verdict...</p>
+              </div>
+            </div>
+            <div class="space-y-4">
+              <div class="p-5 bg-indigo-950/20 rounded-2xl border border-indigo-500/30">
+                <p class="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-2">Recommended Timeframe</p>
+                <p id="verdict-timeframe" class="text-sm font-black text-slate-200 uppercase tracking-wide">...</p>
+              </div>
+              <div class="p-5 bg-emerald-950/20 rounded-2xl border border-emerald-500/30">
+                <p class="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-2">Trade Quantity (Estimate)</p>
+                <p id="verdict-quantity" class="text-sm font-black text-slate-200 uppercase tracking-wide">...</p>
+              </div>
+              <button onclick="document.getElementById('execution-section').scrollIntoView({behavior:'smooth'})" class="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-xl transition-all">Review Execution Steps</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div id="summary-grid" class="summary-grid grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4"></div>
 
       <!-- Ideal Portfolio & Execution Path -->
       <section id="execution-section" class="border-t-2 border-indigo-500/30 pt-10">
-        <h2 class="text-3xl font-black mb-2 text-transparent bg-clip-text bg-gradient-to-r from-white to-indigo-400 uppercase tracking-tight">Ideal Portfolio & Execution Path</h2>
-        <p class="text-slate-500 text-sm mb-6 italic">The v5.0 Quantitative Blueprint for your chosen mandate.</p>
+        <div class="flex justify-between items-start mb-6">
+          <div>
+            <h2 class="text-3xl font-black mb-1 text-transparent bg-clip-text bg-gradient-to-r from-white to-indigo-400 uppercase tracking-tight">Ideal Portfolio & Execution Path</h2>
+            <p class="text-slate-500 text-sm italic">The v5.0 Quantitative Blueprint for your chosen mandate.</p>
+          </div>
+          <span class="text-[9px] font-black text-slate-600 uppercase tracking-widest pt-2 generated-at-ts">...</span>
+        </div>
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div class="glass p-8 border-l-4 border-indigo-500"><p class="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-6">Strategic Blueprint</p><div id="blueprint-content" class="space-y-6"></div></div>
           <div class="glass p-8 border-l-4 border-emerald-500"><p class="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-6">Suggested Execution Path</p><div id="blueprint-actions" class="space-y-4"></div></div>
@@ -575,23 +628,32 @@
       <section id="quant-execution-report" class="border-t-2 border-emerald-500/30 pt-10 mt-10">
         <div class="flex items-center justify-between mb-6">
           <div>
-            <h2 class="text-3xl font-black mb-2 text-transparent bg-clip-text bg-gradient-to-r from-white to-emerald-400 uppercase tracking-tight">Institutional Quant Execution Report</h2>
+            <h2 class="text-3xl font-black mb-1 text-transparent bg-clip-text bg-gradient-to-r from-white to-emerald-400 uppercase tracking-tight">Institutional Quant Execution Report</h2>
             <p class="text-slate-500 text-sm italic">High-conviction roadmap derived from cross-factor regime analysis.</p>
           </div>
-          <span class="text-[8px] font-black px-2 py-0.5 rounded bg-emerald-950/50 text-emerald-400 border border-emerald-900/50 uppercase">Top Tier Data</span>
+          <div class="text-right">
+            <span class="text-[8px] font-black px-2 py-0.5 rounded bg-emerald-950/50 text-emerald-400 border border-emerald-900/50 uppercase block mb-1">Top Tier Data</span>
+            <span class="text-[9px] font-black text-slate-600 uppercase tracking-widest generated-at-ts">...</span>
+          </div>
         </div>
         <div id="quant-execution-content" class="space-y-8"></div>
       </section>
 
       <!-- Apex Advisor Section -->
       <section id="apex-advisor-section" class="border-t-2 border-fuchsia-500/30 pt-10">
-        <h2 class="text-3xl font-black mb-2 text-transparent bg-clip-text bg-gradient-to-r from-white to-fuchsia-400 uppercase tracking-tight">Senior Portfolio Quant Advisor</h2>
-        <p class="text-slate-500 text-sm mb-6 italic">High-Conviction Seven-Strategy Matrix & Macro Regime Intelligence.</p>
+        <div class="flex justify-between items-start mb-6">
+          <div>
+            <h2 class="text-3xl font-black mb-1 text-transparent bg-clip-text bg-gradient-to-r from-white to-fuchsia-400 uppercase tracking-tight">Senior Portfolio Quant Advisor</h2>
+            <p class="text-slate-500 text-sm italic">High-Conviction Seven-Strategy Matrix & Macro Regime Intelligence.</p>
+          </div>
+          <span class="text-[9px] font-black text-slate-600 uppercase tracking-widest pt-2 generated-at-ts">...</span>
+        </div>
         <div id="apex-advisor-content" class="grid grid-cols-1 lg:grid-cols-3 gap-6"></div>
       </section>
 
       <!-- Scenario Analysis — Historical Stress Test -->
-      <div id="stress-test-card" class="glass p-6 border-t-2 border-red-500/40">
+      <div id="stress-test-card" class="glass p-6 border-t-2 border-red-500/40 relative">
+        <span class="absolute top-4 right-20 text-[9px] font-black text-slate-600 uppercase tracking-widest generated-at-ts">...</span>
         <div class="flex items-start justify-between mb-5">
           <div>
             <p class="text-xs font-bold text-slate-500 uppercase mb-1">Scenario Analysis — Historical Stress Test</p>
@@ -603,7 +665,8 @@
         <p id="stress-insight" class="text-[10px] text-slate-500 italic mt-4 pt-4 border-t border-slate-800/50 leading-relaxed"></p>
       </div>
 
-      <div class="glass p-6 border-l-4 border-indigo-500">
+      <div class="glass p-6 border-l-4 border-indigo-500 relative">
+        <span class="absolute top-4 right-4 text-[9px] font-black text-slate-600 uppercase tracking-widest generated-at-ts">...</span>
         <p class="text-xs font-bold text-slate-500 uppercase mb-1">Risk Profile Analysis</p>
         <p class="text-[9px] text-slate-700 mb-4">How efficiently your portfolio earns return per unit of risk, vs your mandate target</p>
         <div id="risk-profile-content" class="grid grid-cols-1 md:grid-cols-3 gap-6"></div>
@@ -1407,9 +1470,20 @@
 
     function renderResults(data, riskLevel) {
       if (!data || !data.advanced_intel) return;
-      const { portfolio: p, assets: a, risk: r, advanced_intel: ai, recommendations: recs, market_outlook: mo, events: ev, global_macro_events: gme, tactical_desk: td, tactical_blueprint: tb } = data;
+      const { portfolio: p, assets: a, risk: r, advanced_intel: ai, recommendations: recs, market_outlook: mo, events: ev, global_macro_events: gme, tactical_desk: td, tactical_blueprint: tb, master_verdict: mv, generated_at: ts } = data;
       document.getElementById('results-section').classList.remove('hidden');
       document.getElementById('intel-acct-bar').classList.remove('hidden');
+
+      // Update timestamps
+      if (ts) {
+        const dateObj = new Date(ts);
+        const timeStr = dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const fullStr = `Computed at ${timeStr}`;
+        document.querySelectorAll('.generated-at-ts').forEach(el => {
+          el.textContent = fullStr;
+        });
+      }
+
       // Only show sub-nav if currently on Intelligence Desk
       if (!document.getElementById('intelligence-view').classList.contains('hidden'))
         document.getElementById('sub-nav').classList.remove('hidden');
@@ -1448,6 +1522,7 @@
       renderTacticalDesk(td || [], p.total_value);
       renderRiskOptimizer(recs || [], p.total_value);
       renderSentimentSummary(a);
+      renderMasterVerdict(mv, ts);
       renderAlphaAlerts(data);
       // Store apex scores before rendering cards so action badges are available
       window._lastApexScores = data.apex_advisor?.scores || {};
@@ -3157,14 +3232,49 @@
       updateStickyTops();
     }
 
+    function renderMasterVerdict(mv, ts) {
+      if (!mv) return;
+      const rationaleEl = document.getElementById('verdict-rationale');
+      const actionEl = document.getElementById('verdict-action');
+      const timeframeEl = document.getElementById('verdict-timeframe');
+      const quantityEl = document.getElementById('verdict-quantity');
+      const badgeEl = document.getElementById('verdict-priority-badge');
+
+      if (rationaleEl) rationaleEl.textContent = mv.rationale_layman || 'Signals synthesized.';
+      if (actionEl) actionEl.textContent = mv.action || 'HOLD';
+      if (timeframeEl) timeframeEl.textContent = mv.timeframe || '—';
+      if (quantityEl) quantityEl.textContent = mv.quantity || '—';
+
+      if (badgeEl) {
+        badgeEl.textContent = mv.priority || 'ROUTINE';
+        const p = (mv.priority || '').toUpperCase();
+        if (p === 'CRITICAL') {
+          badgeEl.className = 'px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border shadow-lg bg-red-600 text-white border-red-400 animate-pulse';
+        } else if (p === 'HIGH') {
+          badgeEl.className = 'px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border shadow-lg bg-amber-600 text-white border-amber-400';
+        } else {
+          badgeEl.className = 'px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border shadow-lg bg-slate-800 text-slate-300 border-slate-600';
+        }
+      }
+    }
+
     function renderAlphaAlerts(data) {
       const feed = document.getElementById('alpha-alerts-feed');
       if (!feed) return;
 
       const alerts = data.alpha_alerts || [];
+      const ts = data.generated_at;
+      let tsStr = '';
+      if (ts) {
+        const timeStr = new Date(ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+        tsStr = `<span class="text-[9px] font-black text-slate-600 uppercase tracking-widest ml-auto">Freshness: ${timeStr}</span>`;
+      }
 
       if (alerts.length === 0) {
-        feed.innerHTML = '<div class="col-span-full py-20 text-center text-slate-600 text-xs font-black uppercase tracking-widest">No active Alpha anomalies.</div>';
+        feed.innerHTML = `<div class="col-span-full flex flex-col items-center justify-center py-20">
+          <div class="text-center text-slate-600 text-xs font-black uppercase tracking-widest">No active Alpha anomalies.</div>
+          ${tsStr}
+        </div>`;
         return;
       }
 

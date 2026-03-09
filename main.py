@@ -277,12 +277,15 @@ You are powering the "Vesper v5.0 Institutional Apex" wealth management terminal
 
 Every day you receive:
 1. The client's current portfolio holdings (Tickers and GBP values).
-2. The latest global macroeconomic and geopolitical news headlines.
+2. The client's uninvested cash balance in GBP.
+3. The latest global macroeconomic and geopolitical news headlines.
 
 YOUR TASK:
-Analyse the news and generate 2–3 short-term Tactical Asset Allocation (TAA) trades to hedge \
-incoming risks or exploit immediate market dislocations. Also adjust the broader "Tactical \
-Blueprint" weights (Growth, Core, Defensive) based on the current macro regime.
+Analyse the news and portfolio metrics to generate exactly 10 "Executive Directives" for the client. 
+1. Sort these directives by descending priority: CRITICAL (immediate threat/opportunity) > HIGH > MEDIUM > ROUTINE.
+2. Ensure they are written in clear, jargon-free layman language.
+3. If the client has significant uninvested cash, the top directives must address specific deployment steps.
+4. Also adjust the broader "Tactical Blueprint" weights (Growth, Core, Defensive) based on the current macro regime.
 
 RULES & HEURISTICS:
 - Inflation/Hot CPI: Trim long-duration growth/tech; buy short-duration bonds or commodities.
@@ -297,6 +300,17 @@ OUTPUT FORMAT:
 Respond with ONLY a single, strict, valid JSON object — no markdown, no commentary outside it.
 
 {
+  "master_verdict": {
+    "summary": "2-3 sentences providing an executive summary of the current regime and primary portfolio focus.",
+    "directives": [
+      {
+        "priority": "CRITICAL | HIGH | MEDIUM | ROUTINE",
+        "action": "Clear, bold layman instruction (e.g., 'Deploy £5k into Gold')",
+        "timeframe": "Immediate (0-4h) | Tactical (24-72h) | Strategic (1-2 weeks)",
+        "rationale": "One-sentence layman explanation of why."
+      }
+    ]
+  },
   "tactical_desk": [
     {
       "icon": "🛢️",
@@ -465,6 +479,7 @@ class PortfolioRequest(BaseModel):
     base_currency: str = "GBP"
     fallback_prices: Dict[str, float] = {}
     account_mapping: Dict[str, str] = {}   # e.g. {"EQQQ.L": "ISA", "SDIP.L": "GIA"}
+    cash_balances: Dict[str, float] = {}   # e.g. {"ISA": 1000, "GIA": 500}
     enable_cio_llm: bool = True            # False → skip LLM, use rule engine only
 
     @field_validator("holdings")
@@ -1188,13 +1203,14 @@ async def _fetch_full_history(tickers: List[str]) -> Tuple[pd.DataFrame, Dict[st
             api_tk = _resolve_ticker(ticker)
             t = yf.Ticker(api_tk)
             h = await _in_thread(lambda: t.history(period="1y", auto_adjust=True))
-            if not h.empty:
+            if h is not None and not h.empty:
                 if h.index.tz is not None: h.index = h.index.tz_localize(None)
                 # Fix GBp/GBP unit flips for London-listed tickers
                 if ticker.endswith(".L"):
                     h = _normalise_gbp_series(h)
                 return ticker, h
-        except: pass
+        except Exception as e:
+            print(f"[Vesper] History fetch failed for {ticker}: {e}")
         return ticker, pd.DataFrame()
     results = await asyncio.gather(*[fetch_one(tk) for tk in tickers])
     for tk, df in results:
@@ -2318,11 +2334,14 @@ async def _call_cio_llm(
     assets: Dict[str, Any],
     portfolio: Dict[str, Any],
     ideal_blueprint: Dict[str, float],
+    alpha_alerts: List[Dict] = None,
+    apex_advisor: Dict[str, Any] = None,
+    advanced_intel: Dict[str, Any] = None,
     rsi_cache: Dict[str, float] = None,
 ) -> Dict[str, Any]:
     """
-    Calls Claude Opus 4.6 (CIO persona) to generate live TAA recommendations.
-    Falls back to the deterministic rule-based engine on any error.
+    Calls Claude (CIO persona) to generate live TAA recommendations by
+    synthesizing Alpha Alerts, Apex Advisor logic, and Quant risk metrics.
     """
     # ── Build daily news context from REAL yfinance headlines ──────────────
     today = datetime.datetime.now(datetime.timezone.utc)
@@ -2335,72 +2354,101 @@ async def _call_cio_llm(
     sharpe     = portfolio.get("sharpe_ratio", 0.0)
     var_95     = portfolio.get("var_95_daily", 0.02)
 
-    growth_pct    = sum(a["weight"] for tk, a in assets.items() if tk.split(".")[0].upper() in _GROWTH_BASES) * 100
-    defensive_pct = sum(a["weight"] for tk, a in assets.items() if tk.split(".")[0].upper() in _DEFENSIVE_BASES) * 100
-    core_pct      = max(0.0, 100 - growth_pct - defensive_pct)
+    # ── Extract technical/alpha signals for the prompt ────────────────────────
+    alpha_text = ""
+    if alpha_alerts:
+        alpha_text = "## Active Alpha Alerts (Volume/Lead-Lag)\n" + "\n".join(
+            f"- {a['symbol']}: {a['title']} (Conviction {a['conviction']}%) | {a['rationale']}"
+            for a in alpha_alerts[:5]
+        ) + "\n\n"
+
+    advisor_text = ""
+    if apex_advisor and "scores" in apex_advisor:
+        advisor_text = "## Senior Quant Advisor Signals (Matrix/Exhaustion)\n"
+        for tk, log in list(apex_advisor["scores"].items())[:8]:
+            advisor_text += (f"- {tk}: Strategy: {log['strat']} | Action: {log['action_instruction']} | "
+                             f"Exhaustion: {log['exhaustion_status']} | Reason: {log['why']}\n")
+        advisor_text += "\n"
+
+    quant_text = ""
+    if advanced_intel:
+        quant_text = "## Institutional Quant Metrics\n"
+        quant_text += f"- Diversification Ratio: {advanced_intel.get('attribution', {}).get('div_ratio', 1.0)}\n"
+        quant_text += f"- Hedge Efficiency: {advanced_intel.get('hedge_optimizer', {}).get('hedge_efficiency', 'N/A')}\n\n"
 
     asset_lines = []
     for tk, a in assets.items():
         s   = a.get("sentiment", {})
         rsi = s.get("rsi") or (rsi_cache or {}).get(tk) or 50.0
         sig = "OVERBOUGHT" if rsi > 70 else "OVERSOLD" if rsi < 30 else "NEUTRAL"
-        cls = ("Growth"    if tk.split(".")[0].upper() in _GROWTH_BASES    else
-               "Defensive" if tk.split(".")[0].upper() in _DEFENSIVE_BASES else "Core")
         asset_lines.append(
-            f"  {tk}: £{a['value']:,.0f} | {a['weight']*100:.1f}% weight | {cls} | "
+            f"  {tk}: £{a['value']:,.0f} | {a['weight']*100:.1f}% weight | "
             f"RSI {rsi:.0f} ({sig}) | Bull {s.get('bullish', 0.33):.0%} Bear {s.get('bearish', 0.33):.0%}"
         )
 
     if todays_headlines:
         headline_text = "\n".join(f"  [{tag}] {hl}" for hl, tag in todays_headlines)
     else:
-        headline_text = "  [No live market headlines available — base analysis on portfolio metrics only]"
+        headline_text = "  [No live market headlines available]"
     asset_text    = "\n".join(asset_lines)
 
     user_msg = (
         f"## Today's Date\n{today.strftime('%A, %d %B %Y')}\n\n"
-        f"## Client Portfolio — Base Currency: {portfolio.get('currency', 'GBP')}\n"
-        f"{asset_text}\n\n"
-        f"Totals: £{total_val:,.0f} | Beta {beta:.2f} | Vol {vol*100:.1f}% | "
-        f"Sharpe {sharpe:.2f} | Daily VaR95 {var_95*100:.2f}%\n\n"
-        f"## Current Allocation vs Strategic Mandate\n"
-        f"Growth {growth_pct:.0f}% | Core {core_pct:.0f}% | Defensive {defensive_pct:.0f}%\n"
-        f"Targets → Growth {ideal_blueprint.get('Growth', 0.45)*100:.0f}% | "
-        f"Core {ideal_blueprint.get('Core', 0.40)*100:.0f}% | "
-        f"Defensive {ideal_blueprint.get('Defensive', 0.15)*100:.0f}%\n\n"
-        f"## Live Market Intelligence\n{headline_text}\n\n"
-        f"Generate your tactical analysis now. Return ONLY the JSON object."
+        f"## Client Portfolio\n{asset_text}\n\n"
+        f"Totals: £{total_val:,.0f} (Invested) | Uninvested Cash: £{portfolio.get('total_cash', 0):,.0f} | "
+        f"Beta {beta:.2f} | Vol {vol*100:.1f}% | Sharpe {sharpe:.2f} | Daily VaR95 {var_95*100:.2f}%\n\n"
+        f"{alpha_text}{advisor_text}{quant_text}"
+        f"## Live Market Headlines\n{headline_text}\n\n"
+        f"Generate the 'Executive Master Verdict' by synthesizing all the signals above. "
+        f"Sort the 10 directives by descending priority. Return ONLY JSON."
     )
 
-    # ── Call Claude Opus 4.6 ─────────────────────────────────────────────────
-    if not _ANTHROPIC_OK or not os.getenv("ANTHROPIC_API_KEY"):
-        raise RuntimeError("anthropic SDK or ANTHROPIC_API_KEY not available")
+    # ── Call Claude 3 Haiku ──────────────────────────────────────────────────
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise RuntimeError("ANTHROPIC_API_KEY missing from environment.")
 
-    client = _anthropic.AsyncAnthropic()
-    async with client.messages.stream(
-        model="claude-opus-4-6",
-        max_tokens=3200,
-        thinking={"type": "adaptive"},
-        # Cache the static system prompt — ~90% cheaper on repeated calls (5-min TTL)
-        system=[{
-            "type": "text",
-            "text": _CIO_SYSTEM_PROMPT,
-            "cache_control": {"type": "ephemeral"},
-        }],
-        messages=[{"role": "user", "content": user_msg}],
-    ) as stream:
-        final = await stream.get_final_message()
-
-    # Extract first text block (thinking blocks have no .text attr by default)
-    raw = next((b.text for b in final.content if hasattr(b, "text") and b.text), "")
+    try:
+        from anthropic import AsyncAnthropic as _AsyncAnthropic
+        client = _AsyncAnthropic(api_key=api_key)
+        
+        response = await client.messages.create(
+            model="claude-opus-4-6", 
+            max_tokens=8192,
+            system=_CIO_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": user_msg}]
+        )
+        
+        # Robust extraction (handles thinking blocks and multiple text blocks)
+        raw = ""
+        for block in response.content:
+            if block.type == "text":
+                raw += block.text
+        raw = raw.strip()
+        print(f"[CIO LLM] Raw Response Received ({len(raw)} chars)")
+    except Exception as e:
+        raise RuntimeError(f"Anthropic API call failed: {str(e)}")
 
     # Strip accidental markdown fences
-    raw = raw.strip()
-    if raw.startswith("```"):
-        parts = raw.split("```")
-        raw = parts[1].lstrip("json").strip() if len(parts) > 1 else raw
+    if "```" in raw:
+        raw = raw.split("```")[1]
+        if raw.startswith("json"): raw = raw[4:]
+        raw = raw.strip()
 
-    result = json.loads(raw)
+    # ── Robust JSON Repair (for occasional truncation) ───────────────────────
+    if not raw.endswith("}"):
+        print("[CIO LLM] WARNING: Response appears truncated. Attempting repair...")
+        # Close any open quotes
+        if raw.count('"') % 2 != 0: raw += '"'
+        # Add missing braces
+        open_braces = raw.count("{") - raw.count("}")
+        raw += ("}" * open_braces)
+
+    try:
+        result = json.loads(raw)
+    except json.JSONDecodeError as je:
+        print(f"[CIO LLM] JSON Decode Error at char {je.pos}. Raw content snippet: {raw[-100:]}")
+        raise RuntimeError("CIO LLM returned invalid JSON. Check server logs.")
 
     # Validate schema & normalise blueprint weights
     assert isinstance(result.get("tactical_desk"), list), "missing tactical_desk"
@@ -2419,23 +2467,48 @@ async def _cio_with_fallback(
     assets: Dict[str, Any],
     portfolio: Dict[str, Any],
     ideal_blueprint: Dict[str, float],
+    alpha_alerts: List[Dict] = None,
+    apex_advisor: Dict[str, Any] = None,
+    advanced_intel: Dict[str, Any] = None,
     rsi_cache: Dict[str, float] = None,
     live_vix: float = None,
 ) -> Dict[str, Any]:
-    """Calls the LLM; falls back to the rule-based engine on any error, with error visibility."""
+    """Calls the LLM; returns error state if LLM fails instead of hardcoded fallback."""
     try:
-        result = await _call_cio_llm(holdings, assets, portfolio, ideal_blueprint, rsi_cache=rsi_cache)
+        result = await _call_cio_llm(
+            holdings, assets, portfolio, ideal_blueprint, 
+            alpha_alerts=alpha_alerts, 
+            apex_advisor=apex_advisor, 
+            advanced_intel=advanced_intel,
+            rsi_cache=rsi_cache
+        )
         result["_llm_powered"] = True
         return result
     except Exception as e:
         traceback.print_exc()
         err_msg = str(e)
-        print(f"[CIO LLM] Falling back to rule engine: {err_msg}")
-        desk      = _generate_tactical_desk(holdings, assets, portfolio, live_vix=live_vix)
-        blueprint = _compute_tactical_blueprint(ideal_blueprint, desk)
-        return {"tactical_desk": desk, "tactical_blueprint": blueprint,
-                "sentiment_updates": {}, "_llm_powered": False,
-                "_llm_error": err_msg}
+        print(f"[CIO LLM] ERROR: {err_msg}")
+        return {
+            "master_verdict": {
+                "summary": "The Intelligence Engine encountered a connection error.",
+                "directives": [
+                    {
+                        "priority": "CRITICAL",
+                        "action": "ERROR: Intelligence Engine Unavailable",
+                        "timeframe": "N/A",
+                        "rationale": f"System error during analysis: {err_msg}. Review manual risk parameters."
+                    }
+                ]
+            },
+            "tactical_desk": [],
+            "tactical_blueprint": {"target": ideal_blueprint.get("target", {}), "rationale": "Strategic mandate active (LLM Error)"},
+            "summary_hints": {"var": "Error", "beta": "Error", "sharpe": "Error", "cagr": "Error"},
+            "quant_intelligence": "AI analysis unavailable.",
+            "market_outlook": {"points": []},
+            "sentiment_updates": {},
+            "_llm_powered": False,
+            "_llm_error": err_msg
+        }
 
 
 @app.get("/api/config")
@@ -2462,10 +2535,16 @@ async def analyze_portfolio(request: PortfolioRequest):
                 api_ticker = ticker.split('_')[0]
                 api_ticker = _resolve_ticker(api_ticker)
                 
-                t = yf.Ticker(api_ticker); info = await _in_thread(lambda: t.info) or {}
+                t = yf.Ticker(api_ticker)
+                # yf info can be slow or throw 404s for invalid symbols
+                info = await _in_thread(lambda: t.info)
+                if not info or not isinstance(info, dict):
+                    info = {}
                 p = _to_float(info.get("currentPrice") or info.get("regularMarketPrice") or info.get("previousClose") or 0)
                 return ticker, info, p
-            except: return ticker, {}, 0
+            except Exception as e:
+                print(f"[Vesper] Info fetch failed for {ticker}: {e}")
+                return ticker, {}, 0
         
         res_info = await asyncio.gather(*[_fetch_info(t) for t in tickers])
         infos = {tk: info for tk, info, p in res_info}
@@ -2573,56 +2652,94 @@ async def analyze_portfolio(request: PortfolioRequest):
 
         blended_ter = sum((_to_float(a.get("ter")) or _KNOWN_TER.get(tk.replace('_', '.').split('.')[0].upper(), 0.002)) * a["weight"]
                           for tk, a in assets.items())
-        p_summary = {**risk_data["portfolio_risk"], "total_value": round(total_val, 2), "weighted_dividend_yield": round(sum((_to_float(a["dividend_yield"]) or 0)*a["weight"] for a in assets.values()), 4), "portfolio_beta": round(sum((_to_float(a["beta"]) or 1)*a["weight"] for a in assets.values()), 2), "asset_count": len(tickers), "currency": base_curr, "blended_ter": round(blended_ter, 4), "vix_assumed": not _vix_available, "risk_free_rate": RISK_FREE_RATE}
+        total_cash_val = sum(request.cash_balances.values()) if request.cash_balances else 0.0
+        p_summary = {**risk_data["portfolio_risk"], "total_value": round(total_val, 2), "total_cash": round(total_cash_val, 2), "weighted_dividend_yield": round(sum((_to_float(a["dividend_yield"]) or 0)*a["weight"] for a in assets.values()), 4), "portfolio_beta": round(sum((_to_float(a["beta"]) or 1)*a["weight"] for a in assets.values()), 2), "asset_count": len(tickers), "currency": base_curr, "blended_ter": round(blended_ter, 4), "vix_assumed": not _vix_available, "risk_free_rate": RISK_FREE_RATE}
         advanced = _get_advanced_intelligence(assets, p_summary, request.risk_level, risk_data, base_curr, rsi_cache=_rsi_cache)
         apex_advisor = _run_apex_advisor(assets, full_prices, ohlc_data, p_summary, live_vix=_vix_live)
 
         # ── Real-Time Telegram Alerts (V6.0: Trigger if conviction > 88%) ──
-        for alert in alpha_alerts:
-            if alert.get("conviction", 0) > 88:
-                entry = alert.get("entry_price", 0)
-                sl = alert.get("stop_loss", 0)
-                tp = alert.get("take_profit", 0)
-                rr = alert.get("risk_reward", "—")
-                msg = (f"<b>🚨 ALPHA ALERT: {alert['symbol']}</b>\n"
-                       f"Type: {alert['type']}\n"
-                       f"Signal: {alert['title']}\n"
-                       f"Conviction: {alert['conviction']}%\n"
-                       f"Entry: £{entry:,.2f}\n"
-                       f"Stop Loss: £{sl:,.2f}\n"
-                       f"Take Profit: £{tp:,.2f}\n"
-                       f"R/R: {rr}\n"
-                       f"—\n{alert['rationale']}")
-                asyncio.create_task(send_telegram_alert(msg))
+        try:
+            for alert in alpha_alerts:
+                if alert.get("conviction", 0) > 88:
+                    entry = alert.get("entry_price", 0)
+                    sl = alert.get("stop_loss", 0)
+                    tp = alert.get("take_profit", 0)
+                    rr = alert.get("risk_reward", "—")
+                    msg = (f"<b>🚨 ALPHA ALERT: {alert['symbol']}</b>\n"
+                           f"Type: {alert['type']}\n"
+                           f"Signal: {alert['title']}\n"
+                           f"Conviction: {alert['conviction']}%\n"
+                           f"Entry: £{entry:,.2f}\n"
+                           f"Stop Loss: £{sl:,.2f}\n"
+                           f"Take Profit: £{tp:,.2f}\n"
+                           f"R/R: {rr}\n"
+                           f"—\n{alert['rationale']}")
+                    asyncio.create_task(send_telegram_alert(msg))
+        except Exception as e:
+            print(f"[Telegram] Alpha alerts loop error: {e}")
 
-        for tk, logic in apex_advisor.get("scores", {}).items():
-            if logic.get("score", 0) > 85:
-                price = assets.get(tk, {}).get("price", 0)
-                hist_df = ohlc_data.get(tk.split('_')[0], pd.DataFrame())
-                atr = _compute_atr(hist_df) if not hist_df.empty else (0.02 * price)
-                vix_adj = 1 + (_vix_live / 100)
-                sl = round(price - (atr * vix_adj), 2)
-                tp = round(price + (3 * atr), 2)
-                risk = price - sl
-                rr = round((tp - price) / risk, 1) if risk > 0 else 0
-                msg = (f"<b>🚨 HIGH CONVICTION: {tk}</b>\n"
-                       f"Action: {logic['action']}\n"
-                       f"Strategy: {logic['strat']} | Score: {logic['score']}/100\n"
-                       f"Entry: £{price:,.2f}\n"
-                       f"Stop: £{sl:,.2f} | Target: £{tp:,.2f}\n"
-                       f"R/R: 1:{rr}\n"
-                       f"—\n{logic['why']}")
-                asyncio.create_task(send_telegram_alert(msg))
+        try:
+            for tk, logic in apex_advisor.get("scores", {}).items():
+                if logic.get("score", 0) > 85:
+                    price = assets.get(tk, {}).get("price", 0)
+                    hist_df = ohlc_data.get(tk.split('_')[0], pd.DataFrame())
+                    atr = _compute_atr(hist_df) if not hist_df.empty else (0.02 * price)
+                    vix_adj = 1 + (_vix_live / 100)
+                    sl = round(price - (atr * vix_adj), 2)
+                    tp = round(price + (3 * atr), 2)
+                    risk = price - sl
+                    rr = round((tp - price) / risk, 1) if risk > 0 else 0
+                    msg = (f"<b>🚨 HIGH CONVICTION: {tk}</b>\n"
+                           f"Action: {logic['action']}\n"
+                           f"Strategy: {logic['strat']} | Score: {logic['score']}/100\n"
+                           f"Entry: £{price:,.2f}\n"
+                           f"Stop: £{sl:,.2f} | Target: £{tp:,.2f}\n"
+                           f"R/R: 1:{rr}\n"
+                           f"—\n{logic['why']}")
+                    asyncio.create_task(send_telegram_alert(msg))
+        except Exception as e:
+            print(f"[Telegram] High conviction loop error: {e}")
 
         # ── CIO LLM — live TAA (falls back to rule engine when disabled/error) ─
         ideal_bp = advanced.get("ideal_blueprint", {})
         if request.enable_cio_llm:
-            cio = await _cio_with_fallback(holdings, assets, p_summary, ideal_bp, rsi_cache=_rsi_cache, live_vix=_vix_live)
+            cio = await _cio_with_fallback(
+                holdings, assets, p_summary, ideal_bp, 
+                alpha_alerts=alpha_alerts, 
+                apex_advisor=apex_advisor, 
+                advanced_intel=advanced,
+                rsi_cache=_rsi_cache, 
+                live_vix=_vix_live
+            )
         else:
             desk = _generate_tactical_desk(holdings, assets, p_summary, ohlc_data=ohlc_data, live_vix=_vix_live)
+            
+            # Neutral Master Verdict for non-LLM mode
+            v_regime = "STABLE" if (_vix_live or 15) < 22 else "HIGH"
+            mv = {
+                "summary": f"VIX regime is {v_regime}. Portfolio remains aligned with strategic mandate parameters.",
+                "directives": [
+                    {
+                        "priority": "ROUTINE",
+                        "action": "Maintain strategic target weights.",
+                        "timeframe": "Strategic (1-2 weeks)",
+                        "rationale": "No significant macro dislocations detected by the rule engine. Continue following your chosen risk mandate."
+                    }
+                ]
+            }
+            if total_cash_val > 50:
+                mv["directives"].insert(0, {
+                    "priority": "MEDIUM",
+                    "action": f"Review £{total_cash_val:,.0f} uninvested cash.",
+                    "timeframe": "Tactical (24-72h)",
+                    "rationale": "Significant idle cash detected. Consider deploying into your Core bucket to avoid long-term inflationary drag."
+                })
+
             cio  = {"tactical_desk": desk,
                     "tactical_blueprint": _compute_tactical_blueprint(ideal_bp, desk),
+                    "master_verdict": mv,
                     "sentiment_updates": {}, "_llm_powered": False}
+        
         tactical_desk      = cio["tactical_desk"]
         tactical_blueprint = cio["tactical_blueprint"]
 
@@ -2637,6 +2754,8 @@ async def analyze_portfolio(request: PortfolioRequest):
             _segs = advanced["ideal_blueprint"]["segments"]
             _tac_actions = []
             for _cat, _tgt in _tac_tgt.items():
+                if not isinstance(_tgt, (int, float)):
+                    continue
                 _diff = _tgt - _cur.get(_cat, 0.0)
                 if abs(_diff) > 0.05:
                     _tac_actions.append({
@@ -2729,6 +2848,8 @@ async def analyze_portfolio(request: PortfolioRequest):
             market_outlook["future_outlook"] = cio["future_outlook"]
 
         return {
+            "generated_at": datetime.datetime.now().isoformat(),
+            "master_verdict": cio.get("master_verdict", {}),
             "portfolio": p_summary, "assets": assets, "risk": risk_data, "advanced_intel": advanced,
             "alpha_alerts": alpha_alerts,
             "recommendations": _generate_recommendations(assets, p_summary, request.risk_level, base_curr),
