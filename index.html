@@ -253,6 +253,10 @@
           <span class="w-2 h-2 rounded-full bg-slate-700 shrink-0" id="health-indicator"></span>
           <span id="health-label" class="hidden sm:inline">System Init...</span>
         </div>
+        <button id="notif-btn" onclick="requestNotificationPermission()" title="Enable Desktop Alerts"
+          class="hidden w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-full border border-slate-800 hover:border-emerald-500/60 text-slate-500 hover:text-emerald-400 transition-colors text-sm select-none">
+          <span>🔔</span>
+        </button>
         <button id="theme-toggle" onclick="toggleTheme()" title="Toggle light / dark mode"
           class="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-full border border-slate-800 hover:border-indigo-500/60 text-slate-500 hover:text-indigo-400 transition-colors text-sm select-none">
           <span id="theme-icon">☀️</span>
@@ -378,6 +382,17 @@
             <span class="text-slate-600 text-xs" id="pnl-year-toggle">▼</span>
           </div>
           <div id="pnl-year-body" class="overflow-x-auto"></div>
+        </div>
+      </section>
+
+      <!-- Monthly Performance table -->
+      <section id="pnl-monthly-section" class="mb-6 hidden">
+        <div class="glass p-5">
+          <div class="flex items-center justify-between mb-3 cursor-pointer" onclick="togglePnlSection('pnl-monthly-body')">
+            <p class="text-xs font-bold text-slate-500 uppercase">Monthly Realized Performance</p>
+            <span class="text-slate-600 text-xs" id="pnl-monthly-toggle">▼</span>
+          </div>
+          <div id="pnl-monthly-body" class="overflow-x-auto hidden"></div>
         </div>
       </section>
 
@@ -524,22 +539,34 @@
           </div>
         </div>
 
-        <!-- CIO LLM Toggle -->
-        <div class="flex items-center justify-between gap-4 px-3 py-2.5 rounded-xl border border-slate-700/60 bg-slate-800/40">
-          <div class="flex items-center gap-2.5 min-w-0">
-            <span class="text-base shrink-0">🧠</span>
-            <div class="min-w-0">
-              <p class="text-xs font-black text-slate-200 uppercase tracking-wide">CIO Intelligence Engine</p>
-              <p class="text-[10px] text-slate-500 truncate">Claude Opus 4.6 · ~5¢ per analysis · prompt-cached</p>
+        <!-- CIO LLM Toggle & Model Selector -->
+        <div class="px-3 py-2.5 rounded-xl border border-slate-700/60 bg-slate-800/40">
+          <div class="flex items-center justify-between gap-4 mb-3">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <span class="text-base shrink-0">🧠</span>
+              <div class="min-w-0">
+                <p class="text-xs font-black text-slate-200 uppercase tracking-wide">CIO Intelligence Engine</p>
+                <p class="text-[10px] text-slate-500 truncate" id="model-desc">Gemini 2.0 Flash · Free Tier</p>
+              </div>
             </div>
+            <label class="relative inline-flex items-center cursor-pointer shrink-0">
+              <input type="checkbox" id="cio-llm-toggle" class="sr-only peer" checked>
+              <div class="w-10 h-5 bg-slate-700 rounded-full peer peer-checked:bg-indigo-600
+                          after:content-[''] after:absolute after:top-0.5 after:left-0.5
+                          after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-colors
+                          peer-checked:after:translate-x-5"></div>
+            </label>
           </div>
-          <label class="relative inline-flex items-center cursor-pointer shrink-0">
-            <input type="checkbox" id="cio-llm-toggle" class="sr-only peer">
-            <div class="w-10 h-5 bg-slate-700 rounded-full peer peer-checked:bg-indigo-600
-                        after:content-[''] after:absolute after:top-0.5 after:left-0.5
-                        after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-colors
-                        peer-checked:after:translate-x-5"></div>
-          </label>
+          <div class="flex gap-2">
+            <label class="flex-1 cursor-pointer">
+              <input type="radio" name="model-provider" value="claude" class="hidden peer" onchange="document.getElementById('model-desc').textContent = 'Claude Opus 4.6 · ~5¢ per run'">
+              <div class="py-1.5 text-center rounded-lg border border-slate-700 peer-checked:border-indigo-500 peer-checked:bg-indigo-500/10 text-[9px] font-black uppercase text-slate-500 peer-checked:text-indigo-400 transition-colors">Claude</div>
+            </label>
+            <label class="flex-1 cursor-pointer">
+              <input type="radio" name="model-provider" value="gemini" checked class="hidden peer" onchange="document.getElementById('model-desc').textContent = 'Gemini 2.0 Flash · Free Tier'">
+              <div class="py-1.5 text-center rounded-lg border border-slate-700 peer-checked:border-indigo-500 peer-checked:bg-indigo-500/10 text-[9px] font-black uppercase text-slate-500 peer-checked:text-indigo-400 transition-colors">Gemini (Free)</div>
+            </label>
+          </div>
         </div>
 
         <!-- Execute + Save -->
@@ -1417,10 +1444,11 @@
       document.getElementById('loading-state').classList.remove('hidden'); document.getElementById('results-section').classList.add('hidden'); document.getElementById('sub-nav').classList.add('hidden'); debounceUpdateStickyTops();
       try {
         const riskLevel = document.querySelector('input[name="risk-level"]:checked').value;
+        const modelProvider = document.querySelector('input[name="model-provider"]:checked').value;
         const res = await fetch(API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ holdings, account_mapping, cash_balances, risk_level: riskLevel, base_currency: 'GBP', fallback_prices: fallbackPrices, enable_cio_llm: document.getElementById('cio-llm-toggle').checked })
+          body: JSON.stringify({ holdings, account_mapping, cash_balances, risk_level: riskLevel, model_provider: modelProvider, base_currency: 'GBP', fallback_prices: fallbackPrices, enable_cio_llm: document.getElementById('cio-llm-toggle').checked })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || 'Engine execution failed.');
@@ -3076,10 +3104,31 @@
       analyzePortfolio();
     }
 
+    function requestNotificationPermission() {
+      if (!("Notification" in window)) return;
+      Notification.requestPermission().then(permission => {
+        if (permission === "granted") {
+          document.getElementById('notif-btn').classList.add('hidden');
+          showToast("System notifications active", "success");
+        }
+      });
+    }
+
+    function showDesktopNotification(title, body) {
+      if (!("Notification" in window) || Notification.permission !== "granted") return;
+      new Notification(title, { body, icon: '/favicon.ico' });
+    }
+
     window.addEventListener('DOMContentLoaded', () => {
       // Sync toggle icon with whatever theme was set by the anti-FOUC script
       if (document.documentElement.getAttribute('data-theme') === 'light')
         document.getElementById('theme-icon').textContent = '🌙';
+      
+      // Show notification button if not granted
+      if ("Notification" in window && Notification.permission !== "granted") {
+        document.getElementById('notif-btn').classList.remove('hidden');
+      }
+
       debounceUpdateStickyTops();
       initFirebase();
       pollHealth();
@@ -3284,6 +3333,13 @@
             </div>
           </div>`;
       }).join('');
+
+      // Trigger Desktop Notifications for new High/Critical directives
+      directives.forEach(d => {
+        if (d.priority === 'CRITICAL' || d.priority === 'HIGH') {
+          showDesktopNotification(`VESPER: ${d.priority} Priority`, d.action);
+        }
+      });
     }
 
     function renderAlphaAlerts(data) {
@@ -3307,6 +3363,9 @@
       }
 
       feed.innerHTML = alerts.map(a => {
+        if (a.conviction >= 90) {
+          showDesktopNotification(`ALPHA ALERT: ${a.symbol}`, a.title);
+        }
         const isVolume = a.type === 'VOLUME-ANOMALY';
         const isLeadLag = a.type === 'LEAD-LAG';
         const borderClr = isVolume ? 'border-fuchsia-500' : 'border-indigo-500';
@@ -3611,6 +3670,17 @@
                        net_profit: r2(g + d + i), ror: 0, top_3_holdings: [] };
       });
 
+      // Merge monthly summaries
+      const allMonths = new Set(accounts.flatMap(a => Object.keys(a.monthly || {})));
+      const monthly = {};
+      [...allMonths].sort().forEach(mk => {
+        const g = accounts.reduce((s, a) => s + (a.monthly?.[mk]?.realized_gains || 0), 0);
+        const d = accounts.reduce((s, a) => s + (a.monthly?.[mk]?.dividends      || 0), 0);
+        const i = accounts.reduce((s, a) => s + (a.monthly?.[mk]?.interest       || 0), 0);
+        monthly[mk] = { realized_gains: r2(g), dividends: r2(d), interest: r2(i),
+                        net_profit: r2(g + d + i) };
+      });
+
       return {
         account_type:                'all',
         total_paid_in:               r2(total_paid_in),
@@ -3628,6 +3698,7 @@
         open_positions,
         cash_timeline,
         yearly,
+        monthly,
         transaction_count,
       };
     }
@@ -3654,6 +3725,7 @@
       renderPnlSummaryCards(d);
       renderOpenPositionsTable(d);
       renderYearTable(d);
+      renderMonthlyTable(d);
       renderDisposalLog(d);
       renderTransferInDetail(d);
       renderDividendDetail(d);
@@ -3876,6 +3948,43 @@
               <td colspan="7" class="py-2.5 text-right text-[9px] text-slate-500 font-bold">${unrealPnL !== null ? 'Realized + Unrealized' : 'Realized only (no live prices)'}</td>
             </tr>
           </tfoot>
+        </table>`;
+    }
+
+    function renderMonthlyTable(d) {
+      const monthly = d.monthly || {};
+      const keys = Object.keys(monthly).sort().reverse();
+      const sect = document.getElementById('pnl-monthly-section');
+      if (keys.length === 0) { sect.classList.add('hidden'); return; }
+      sect.classList.remove('hidden');
+      const fmt = v => '£' + Number(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+      document.getElementById('pnl-monthly-body').innerHTML = `
+        <table class="w-full text-xs min-w-[640px]">
+          <thead><tr class="text-[10px] font-bold text-slate-500 uppercase border-b border-slate-800">
+            <th class="text-left pb-2 pr-3">Month</th>
+            <th class="text-right pb-2 pr-3">Realized P&L</th>
+            <th class="text-right pb-2 pr-3">Dividends</th>
+            <th class="text-right pb-2 pr-3">Interest</th>
+            <th class="text-right pb-2">Net Profit</th>
+          </tr></thead>
+          <tbody class="divide-y divide-slate-800/40">
+            ${keys.map(mk => {
+              const m = monthly[mk];
+              const npCls = m.net_profit >= 0 ? 'text-emerald-400' : 'text-red-400';
+              const rgCls = (m.realized_gains || 0) >= 0 ? 'text-emerald-400' : 'text-red-400';
+              // Convert YYYY-MM to Month YYYY
+              const date = new Date(mk + '-01');
+              const label = date.toLocaleString('en-GB', { month: 'long', year: 'numeric' });
+              return `<tr>
+                <td class="py-2 pr-3 font-mono font-bold text-slate-200">${label}</td>
+                <td class="py-2 pr-3 text-right font-mono ${rgCls}">${fmt(m.realized_gains || 0)}</td>
+                <td class="py-2 pr-3 text-right font-mono text-blue-400">${fmt(m.dividends)}</td>
+                <td class="py-2 pr-3 text-right font-mono text-violet-400">${fmt(m.interest)}</td>
+                <td class="py-2 text-right font-mono font-bold ${npCls}">${fmt(m.net_profit)}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
         </table>`;
     }
 

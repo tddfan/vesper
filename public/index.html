@@ -34,8 +34,10 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
   <style>
     * { box-sizing: border-box; }
-    body { font-family: 'Inter', system-ui, sans-serif; transition: background-color 0.25s ease, color 0.2s ease; }
-    .glass { background: #0f172a; border: 1px solid #1e293b; border-radius: 1rem; transition: background-color 0.25s ease, border-color 0.25s ease; }
+    html { overflow-y: scroll; } /* Force scrollbar to prevent layout jumps */
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    .hidden { display: none !important; }
+    .glass { background: #0f172a; border: 1px solid #1e293b; border-radius: 1rem; }
     .glass:hover { border-color: #334155; }
     .tnum { font-feature-settings: "tnum"; font-variant-numeric: tabular-nums; }
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -114,8 +116,7 @@
       .builder-hide-mobile { display: none !important; }
       .summary-grid { grid-template-cols: repeat(2, minmax(0, 1fr)) !important; }
     }
-  </style>
-</head>
+
     .desk-tab { color: #64748b; border: 1px solid #1e293b; background: transparent;
       padding: 0.375rem 1rem; font-size: 0.75rem; font-weight: 700; border-radius: 9999px; transition: all 0.15s; cursor: pointer; }
     .desk-tab.active { color: #a5b4fc; border-color: #4f46e5; background: rgb(30 27 75 / 0.4); }
@@ -142,11 +143,11 @@
         <p class="text-xs text-slate-500 uppercase tracking-widest text-center">Institutional Intelligence Suite</p>
       </div>
       <div id="auth-form" class="space-y-4">
-        <input type="email" id="auth-email" placeholder="Email" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none transition-all">
-        <input type="password" id="auth-password" placeholder="Password" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none transition-all">
+        <input type="email" id="auth-email" placeholder="Email" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none transition-colors">
+        <input type="password" id="auth-password" placeholder="Password" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none transition-colors">
         <div class="flex gap-2">
-          <button onclick="handleAuth('login')" class="flex-1 py-3 bg-indigo-600 rounded-xl font-black text-xs uppercase hover:bg-indigo-500 transition-all">Login</button>
-          <button onclick="handleAuth('signup')" class="flex-1 py-3 border border-slate-700 rounded-xl font-black text-xs uppercase hover:bg-slate-800 transition-all">Sign Up</button>
+          <button onclick="handleAuth('login')" class="flex-1 py-3 bg-indigo-600 rounded-xl font-black text-xs uppercase hover:bg-indigo-500 transition-colors">Login</button>
+          <button onclick="handleAuth('signup')" class="flex-1 py-3 border border-slate-700 rounded-xl font-black text-xs uppercase hover:bg-slate-800 transition-colors">Sign Up</button>
         </div>
         <p id="auth-error" class="text-[10px] text-red-400 font-bold uppercase text-center"></p>
       </div>
@@ -173,17 +174,17 @@
         <p class="text-xs text-slate-400 font-bold mt-1.5">All imported rows will be tagged with this type. You can adjust individual rows afterwards.</p>
       </div>
       <div class="grid grid-cols-3 gap-3">
-        <button onclick="pickCsvFile('ISA')" class="py-5 flex flex-col items-center gap-2 rounded-xl border border-slate-700 hover:border-emerald-500/70 hover:bg-emerald-500/5 transition-all group">
+        <button onclick="pickCsvFile('ISA')" class="py-5 flex flex-col items-center gap-2 rounded-xl border border-slate-700 hover:border-emerald-500/70 hover:bg-emerald-500/5 transition-colors group">
           <span class="text-2xl">🛡️</span>
           <span class="text-xs font-black text-slate-300 group-hover:text-emerald-400 uppercase transition-colors">ISA</span>
           <span class="text-[10px] text-slate-500 font-black uppercase tracking-wider">Tax-Free</span>
         </button>
-        <button onclick="pickCsvFile('SIPP')" class="py-5 flex flex-col items-center gap-2 rounded-xl border border-slate-700 hover:border-indigo-500/70 hover:bg-indigo-500/5 transition-all group">
+        <button onclick="pickCsvFile('SIPP')" class="py-5 flex flex-col items-center gap-2 rounded-xl border border-slate-700 hover:border-indigo-500/70 hover:bg-indigo-500/5 transition-colors group">
           <span class="text-2xl">🏦</span>
           <span class="text-xs font-black text-slate-300 group-hover:text-indigo-400 uppercase transition-colors">SIPP</span>
           <span class="text-[10px] text-slate-500 font-black uppercase tracking-wider">Pension</span>
         </button>
-        <button onclick="pickCsvFile('GIA')" class="py-5 flex flex-col items-center gap-2 rounded-xl border border-slate-700 hover:border-amber-500/70 hover:bg-amber-500/5 transition-all group">
+        <button onclick="pickCsvFile('GIA')" class="py-5 flex flex-col items-center gap-2 rounded-xl border border-slate-700 hover:border-amber-500/70 hover:bg-amber-500/5 transition-colors group">
           <span class="text-2xl">💷</span>
           <span class="text-xs font-black text-slate-300 group-hover:text-amber-400 uppercase transition-colors">GIA</span>
           <span class="text-[10px] text-slate-500 font-black uppercase tracking-wider">Taxable</span>
@@ -237,7 +238,7 @@
       </div>
       
       <div class="mt-8 pt-6 border-t border-slate-800 flex justify-end">
-        <button onclick="document.getElementById('advisor-modal').classList.add('hidden')" class="px-6 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-black uppercase rounded-lg transition-all">Understood</button>
+        <button onclick="document.getElementById('advisor-modal').classList.add('hidden')" class="px-6 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-black uppercase rounded-lg transition-colors">Understood</button>
       </div>
     </div>
   </div>
@@ -252,8 +253,12 @@
           <span class="w-2 h-2 rounded-full bg-slate-700 shrink-0" id="health-indicator"></span>
           <span id="health-label" class="hidden sm:inline">System Init...</span>
         </div>
+        <button id="notif-btn" onclick="requestNotificationPermission()" title="Enable Desktop Alerts"
+          class="hidden w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-full border border-slate-800 hover:border-emerald-500/60 text-slate-500 hover:text-emerald-400 transition-colors text-sm select-none">
+          <span>🔔</span>
+        </button>
         <button id="theme-toggle" onclick="toggleTheme()" title="Toggle light / dark mode"
-          class="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-full border border-slate-800 hover:border-indigo-500/60 text-slate-500 hover:text-indigo-400 transition-all text-sm select-none">
+          class="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-full border border-slate-800 hover:border-indigo-500/60 text-slate-500 hover:text-indigo-400 transition-colors text-sm select-none">
           <span id="theme-icon">☀️</span>
         </button>
         <button id="logout-btn" onclick="firebase.auth().signOut()" class="hidden text-[10px] text-slate-500 hover:text-red-400 font-black uppercase tracking-widest transition-colors">Logout</button>
@@ -262,7 +267,7 @@
   </header>
 
   <!-- ── Live Ticker Bar ─────────────────────────────────────────────────── -->
-  <div id="ticker-bar" class="hidden sticky z-10 bg-slate-950 border-b border-slate-800/70" style="will-change:auto;top:60px">
+  <div id="ticker-bar" class="hidden sticky z-10 bg-slate-950 border-b border-slate-800/70" style="top:60px">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 flex items-center gap-0 h-10">
       <!-- scrollable strip — native scroll, no backdrop-filter -->
       <div id="ticker-strip" class="flex-1 flex items-stretch gap-0 min-w-0 h-full" style="overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none"></div>
@@ -271,14 +276,14 @@
         <span id="ticker-bar-time" class="text-[9px] font-black text-slate-600 uppercase tracking-wider font-mono whitespace-nowrap"></span>
         <button onclick="refreshTickerBar(true)" id="ticker-refresh-btn"
           title="Refresh live prices"
-          class="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-indigo-400 hover:bg-slate-800/60 rounded transition-all text-sm font-black select-none">⟳</button>
+          class="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-indigo-400 hover:bg-slate-800/60 rounded transition-colors text-sm font-black select-none">⟳</button>
       </div>
     </div>
   </div>
 
 
   <!-- ── Master Desk Tab Bar ───────────────────────────────────────────── -->
-  <div id="desk-tabs" class="hidden sticky z-[9] bg-slate-950/90 border-b border-slate-800/60" style="backdrop-filter:blur(12px)">
+  <div id="desk-tabs" class="hidden sticky z-[9] bg-slate-950/95 border-b border-slate-800/60">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 flex items-center gap-3 h-11">
       <button id="desk-tab-intelligence" onclick="switchDesk('intelligence')" class="desk-tab active">🧠 Intelligence Desk</button>
       <button id="desk-tab-alpha"        onclick="switchDesk('alpha')"        class="desk-tab">🚀 Alpha Alerts</button>
@@ -287,7 +292,7 @@
   </div>
 
   <!-- ── Section Sub-Navigation ─────────────────────────────────────────── -->
-  <nav id="sub-nav" class="hidden sticky z-[8] border-b border-slate-800/50" style="background:rgba(2,6,23,0.90);backdrop-filter:blur(12px);top:100px">
+  <nav id="sub-nav" class="hidden sticky z-[8] border-b border-slate-800/50" style="background:rgba(2,6,23,0.98);top:100px">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 flex items-center gap-1 h-9 overflow-x-auto" style="scrollbar-width:none;-ms-overflow-style:none">
       <a href="#builder-section"        class="sub-nav-link">Builder & Summary</a>
       <span class="text-slate-800 text-[8px] font-black select-none shrink-0">·</span>
@@ -317,16 +322,16 @@
         <div class="flex items-center gap-3">
           <div class="flex gap-2 flex-wrap" id="pnl-tabs">
             <button onclick="switchPnlTab('all')" data-tab="all"
-                    class="pnl-tab active px-4 py-1.5 rounded-full text-xs font-bold border transition-all">All</button>
+                    class="pnl-tab active px-4 py-1.5 rounded-full text-xs font-bold border transition-colors">All</button>
             <button onclick="switchPnlTab('ISA')" data-tab="ISA"
-                    class="pnl-tab px-4 py-1.5 rounded-full text-xs font-bold border transition-all">ISA</button>
+                    class="pnl-tab px-4 py-1.5 rounded-full text-xs font-bold border transition-colors">ISA</button>
             <button onclick="switchPnlTab('GIA')" data-tab="GIA"
-                    class="pnl-tab px-4 py-1.5 rounded-full text-xs font-bold border transition-all" style="display:none">GIA</button>
+                    class="pnl-tab px-4 py-1.5 rounded-full text-xs font-bold border transition-colors" style="display:none">GIA</button>
             <button onclick="switchPnlTab('SIPP')" data-tab="SIPP"
-                    class="pnl-tab px-4 py-1.5 rounded-full text-xs font-bold border transition-all" style="display:none">SIPP</button>
+                    class="pnl-tab px-4 py-1.5 rounded-full text-xs font-bold border transition-colors" style="display:none">SIPP</button>
           </div>
           <button onclick="clearLedger()"
-                  class="text-[10px] font-bold px-3 py-1 rounded-lg bg-red-950/40 border border-red-800/40 text-red-400 hover:bg-red-900/40 transition-all">
+                  class="text-[10px] font-bold px-3 py-1 rounded-lg bg-red-950/40 border border-red-800/40 text-red-400 hover:bg-red-900/40 transition-colors">
             🗑 Clear
           </button>
         </div>
@@ -337,7 +342,7 @@
 
       <!-- CSV Upload Zone -->
       <div id="pnl-upload-zone"
-           class="border-2 border-dashed border-slate-700/70 rounded-xl p-5 mb-6 text-center group hover:border-indigo-500/60 hover:bg-indigo-950/20 transition-all duration-200"
+           class="border-2 border-dashed border-slate-700/70 rounded-xl p-5 mb-6 text-center group hover:border-indigo-500/60 hover:bg-indigo-950/20 transition-colors duration-200"
            ondragover="event.preventDefault(); this.classList.add('border-indigo-500','bg-indigo-950/20')"
            ondragleave="this.classList.remove('border-indigo-500','bg-indigo-950/20')"
            ondrop="event.preventDefault(); this.classList.remove('border-indigo-500','bg-indigo-950/20'); handleTransactionUpload(event.dataTransfer.files[0])">
@@ -353,7 +358,7 @@
             <option value="SIPP">SIPP (Pension)</option>
           </select>
           <button onclick="document.getElementById('pnl-file-input').click()"
-                  class="text-xs font-bold px-3 py-1.5 rounded-lg bg-indigo-900/50 border border-indigo-700/50 text-indigo-400 hover:bg-indigo-800/50 transition-all">
+                  class="text-xs font-bold px-3 py-1.5 rounded-lg bg-indigo-900/50 border border-indigo-700/50 text-indigo-400 hover:bg-indigo-800/50 transition-colors">
             Browse
           </button>
         </div>
@@ -377,6 +382,17 @@
             <span class="text-slate-600 text-xs" id="pnl-year-toggle">▼</span>
           </div>
           <div id="pnl-year-body" class="overflow-x-auto"></div>
+        </div>
+      </section>
+
+      <!-- Monthly Performance table -->
+      <section id="pnl-monthly-section" class="mb-6 hidden">
+        <div class="glass p-5">
+          <div class="flex items-center justify-between mb-3 cursor-pointer" onclick="togglePnlSection('pnl-monthly-body')">
+            <p class="text-xs font-bold text-slate-500 uppercase">Monthly Realized Performance</p>
+            <span class="text-slate-600 text-xs" id="pnl-monthly-toggle">▼</span>
+          </div>
+          <div id="pnl-monthly-body" class="overflow-x-auto hidden"></div>
         </div>
       </section>
 
@@ -481,15 +497,14 @@
           <span class="builder-hide-mobile"></span>
           <span></span>
         </div>
-        </div></div><!-- /min-width inner · /overflow-x-auto outer -->
 
         <!-- Action row: add / import / live prices -->
         <div class="flex gap-2 pt-1 border-t border-slate-800/40 mt-1 mb-4">
           <button id="add-btn" onclick="addRow()" class="py-1.5 px-3 border border-dashed border-slate-700 text-slate-500 text-xs font-black uppercase hover:text-slate-300 transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500">+ Add</button>
-          <button onclick="openCsvModal()" class="py-1.5 px-3 border border-dashed border-indigo-500/40 text-indigo-400 text-xs font-black uppercase hover:bg-indigo-500/10 transition-all rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500">Import CSV</button>
-          <button id="fetch-prices-btn" onclick="fetchLivePrices()" class="py-1.5 px-3 border border-dashed border-violet-500/40 text-violet-400 text-xs font-black uppercase hover:bg-violet-500/10 transition-all rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500">⟳ Prices</button>
+          <button onclick="openCsvModal()" class="py-1.5 px-3 border border-dashed border-indigo-500/40 text-indigo-400 text-xs font-black uppercase hover:bg-indigo-500/10 transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500">Import CSV</button>
+          <button id="fetch-prices-btn" onclick="fetchLivePrices()" class="py-1.5 px-3 border border-dashed border-violet-500/40 text-violet-400 text-xs font-black uppercase hover:bg-violet-500/10 transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500">⟳ Prices</button>
           <input type="file" id="csv-upload" class="hidden" accept=".csv" onchange="handleCSV(this.files[0])">
-          <button onclick="clearPortfolio()" class="py-1.5 px-3 border border-dashed border-red-800/50 text-red-700 text-xs font-black uppercase hover:bg-red-500/10 hover:text-red-500 transition-all rounded ml-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-red-500">✕ Clear</button>
+          <button onclick="clearPortfolio()" class="py-1.5 px-3 border border-dashed border-red-800/50 text-red-700 text-xs font-black uppercase hover:bg-red-500/10 hover:text-red-500 transition-colors rounded ml-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-red-500">✕ Clear</button>
         </div>
 
         <!-- Uninvested Cash Strip -->
@@ -524,28 +539,40 @@
           </div>
         </div>
 
-        <!-- CIO LLM Toggle -->
-        <div class="flex items-center justify-between gap-4 px-3 py-2.5 rounded-xl border border-slate-700/60 bg-slate-800/40">
-          <div class="flex items-center gap-2.5 min-w-0">
-            <span class="text-base shrink-0">🧠</span>
-            <div class="min-w-0">
-              <p class="text-xs font-black text-slate-200 uppercase tracking-wide">CIO Intelligence Engine</p>
-              <p class="text-[10px] text-slate-500 truncate">Claude Opus 4.6 · ~5¢ per analysis · prompt-cached</p>
+        <!-- CIO LLM Toggle & Model Selector -->
+        <div class="px-3 py-2.5 rounded-xl border border-slate-700/60 bg-slate-800/40">
+          <div class="flex items-center justify-between gap-4 mb-3">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <span class="text-base shrink-0">🧠</span>
+              <div class="min-w-0">
+                <p class="text-xs font-black text-slate-200 uppercase tracking-wide">CIO Intelligence Engine</p>
+                <p class="text-[10px] text-slate-500 truncate" id="model-desc">Gemini 2.0 Flash · Free Tier</p>
+              </div>
             </div>
+            <label class="relative inline-flex items-center cursor-pointer shrink-0">
+              <input type="checkbox" id="cio-llm-toggle" class="sr-only peer" checked>
+              <div class="w-10 h-5 bg-slate-700 rounded-full peer peer-checked:bg-indigo-600
+                          after:content-[''] after:absolute after:top-0.5 after:left-0.5
+                          after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-colors
+                          peer-checked:after:translate-x-5"></div>
+            </label>
           </div>
-          <label class="relative inline-flex items-center cursor-pointer shrink-0">
-            <input type="checkbox" id="cio-llm-toggle" class="sr-only peer">
-            <div class="w-10 h-5 bg-slate-700 rounded-full peer peer-checked:bg-indigo-600
-                        after:content-[''] after:absolute after:top-0.5 after:left-0.5
-                        after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all
-                        peer-checked:after:translate-x-5"></div>
-          </label>
+          <div class="flex gap-2">
+            <label class="flex-1 cursor-pointer">
+              <input type="radio" name="model-provider" value="claude" class="hidden peer" onchange="document.getElementById('model-desc').textContent = 'Claude Opus 4.6 · ~5¢ per run'">
+              <div class="py-1.5 text-center rounded-lg border border-slate-700 peer-checked:border-indigo-500 peer-checked:bg-indigo-500/10 text-[9px] font-black uppercase text-slate-500 peer-checked:text-indigo-400 transition-colors">Claude</div>
+            </label>
+            <label class="flex-1 cursor-pointer">
+              <input type="radio" name="model-provider" value="gemini" checked class="hidden peer" onchange="document.getElementById('model-desc').textContent = 'Gemini 2.0 Flash · Free Tier'">
+              <div class="py-1.5 text-center rounded-lg border border-slate-700 peer-checked:border-indigo-500 peer-checked:bg-indigo-500/10 text-[9px] font-black uppercase text-slate-500 peer-checked:text-indigo-400 transition-colors">Gemini (Free)</div>
+            </label>
+          </div>
         </div>
 
         <!-- Execute + Save -->
         <div class="flex gap-3 mt-3">
-          <button id="save-btn" onclick="savePortfolioManual()" class="px-5 py-3 border border-dashed border-emerald-700/50 text-emerald-500 text-xs font-black uppercase hover:bg-emerald-500/10 transition-all rounded-xl shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500">💾 Save</button>
-          <button id="analyse-btn" onclick="analyzePortfolio()" class="flex-1 py-3 bg-indigo-600 rounded-xl font-black text-sm uppercase tracking-wider hover:bg-indigo-500 transition-all shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white">Execute Quant Suite</button>
+          <button id="save-btn" onclick="savePortfolioManual()" class="px-5 py-3 border border-dashed border-emerald-700/50 text-emerald-500 text-xs font-black uppercase hover:bg-emerald-500/10 transition-colors rounded-xl shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500">💾 Save</button>
+          <button id="analyse-btn" onclick="analyzePortfolio()" class="flex-1 py-3 bg-indigo-600 rounded-xl font-black text-sm uppercase tracking-wider hover:bg-indigo-500 transition-colors shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white">Execute Quant Suite</button>
         </div>
 
       </div>
@@ -569,40 +596,31 @@
       <div id="intel-account-banners" class="hidden"></div>
       <div id="intel-acct-holdings" class="hidden mb-2"></div>
       
-      <!-- Executive Master Verdict (Synthesized Leyman Advice) -->
+      <!-- Executive Master Verdict (Synthesized Layman Advice) -->
       <section id="master-verdict-section" class="mb-8">
         <div class="glass p-8 border-l-8 border-indigo-500 shadow-2xl relative overflow-hidden">
           <div class="absolute top-0 right-0 p-4 opacity-5 pointer-events-none text-6xl">🧠</div>
-          <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
-            <div>
-              <h2 class="text-4xl font-black text-white uppercase tracking-tighter">Executive Master Verdict</h2>
-              <p class="text-slate-500 text-xs font-black uppercase tracking-[0.2em] mt-1">Cross-Factor Signal Synthesis • <span class="generated-at-ts">Loading...</span></p>
-            </div>
-            <div id="verdict-priority-badge" class="px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border shadow-lg">ROUTINE</div>
-          </div>
           
-          <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div class="lg:col-span-2 space-y-6">
-              <div>
-                <p class="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-2">Layman Rationale</p>
-                <p id="verdict-rationale" class="text-lg text-slate-200 leading-relaxed font-medium italic">Synthesizing signals from CIO Desk, Alpha Alerts, and Regime models...</p>
-              </div>
-              <div class="p-6 bg-slate-900/60 rounded-2xl border border-slate-800 shadow-inner">
-                <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Primary Action</p>
-                <p id="verdict-action" class="text-2xl font-black text-white uppercase tracking-tight">Processing Verdict...</p>
-              </div>
+          <div class="mb-8">
+            <h2 class="text-4xl font-black text-white uppercase tracking-tighter">Executive Master Verdict</h2>
+            <p class="text-slate-500 text-xs font-black uppercase tracking-[0.2em] mt-1">Cross-Factor Signal Synthesis • <span class="generated-at-ts">Loading...</span></p>
+            <p id="verdict-summary" class="text-lg text-slate-300 leading-relaxed font-medium mt-4 italic max-w-3xl border-l-2 border-slate-800 pl-4">Synthesizing signals from CIO Desk, Alpha Alerts, and Regime models...</p>
+          </div>
+
+          <div class="space-y-3">
+            <div class="flex items-center gap-2 mb-4">
+              <span class="h-px bg-slate-800 flex-1"></span>
+              <span class="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Top 10 Priority Directives</span>
+              <span class="h-px bg-slate-800 flex-1"></span>
             </div>
-            <div class="space-y-4">
-              <div class="p-5 bg-indigo-950/20 rounded-2xl border border-indigo-500/30">
-                <p class="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-2">Recommended Timeframe</p>
-                <p id="verdict-timeframe" class="text-sm font-black text-slate-200 uppercase tracking-wide">...</p>
-              </div>
-              <div class="p-5 bg-emerald-950/20 rounded-2xl border border-emerald-500/30">
-                <p class="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-2">Trade Quantity (Estimate)</p>
-                <p id="verdict-quantity" class="text-sm font-black text-slate-200 uppercase tracking-wide">...</p>
-              </div>
-              <button onclick="document.getElementById('execution-section').scrollIntoView({behavior:'smooth'})" class="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-xl transition-all">Review Execution Steps</button>
+            <div id="verdict-directives-list" class="grid grid-cols-1 gap-3">
+              <!-- Directives injected here -->
             </div>
+          </div>
+
+          <div class="mt-8 pt-6 border-t border-slate-800/50 flex justify-between items-center">
+            <p class="text-[9px] text-slate-600 font-black uppercase tracking-widest">Consolidated quant roadmap • Verified by Claude 3.7 Sonnet</p>
+            <button onclick="document.getElementById('execution-section').scrollIntoView({behavior:'smooth'})" class="px-6 py-2 bg-slate-900 hover:bg-slate-800 text-indigo-400 border border-indigo-500/20 rounded-xl font-black text-[10px] uppercase tracking-widest transition-colors">Review Execution Path</button>
           </div>
         </div>
       </section>
@@ -752,7 +770,7 @@
             <p class="text-[10px] text-slate-600">Sector &amp; regional decomposition · Click a chart slice to filter the Asset Breakdown below</p>
           </div>
           <div class="flex items-center gap-2 ml-4 mt-1 shrink-0">
-            <button id="xray-clear-filter" onclick="clearAssetFilter()" class="hidden flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-violet-600/40 bg-violet-950/40 text-violet-400 text-[8px] font-black uppercase hover:bg-violet-500/20 transition-all focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:outline-none">
+            <button id="xray-clear-filter" onclick="clearAssetFilter()" class="hidden flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-violet-600/40 bg-violet-950/40 text-violet-400 text-[8px] font-black uppercase hover:bg-violet-500/20 transition-colors focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:outline-none">
               <span>✕ Clear:</span> <span class="filter-label font-mono"></span>
             </button>
             <span class="text-[8px] font-black px-2 py-0.5 rounded bg-violet-950/50 text-violet-400 border border-violet-900/50 uppercase">Look-Through</span>
@@ -1016,7 +1034,7 @@
     function showDemoPreview() {
       const rs = document.getElementById('results-section');
       rs.classList.remove('hidden');
-      document.getElementById('sub-nav').classList.remove('hidden'); updateStickyTops();
+      document.getElementById('sub-nav').classList.remove('hidden'); debounceUpdateStickyTops();
       // Demo banner
       if (!document.getElementById('demo-banner')) {
         const b = document.createElement('div');
@@ -1213,13 +1231,13 @@
 
     function addRow(t = '', q = '', acctType = 'ISA') {
       rowIndex++; const id = `row-${rowIndex}`, div = document.createElement('div');
-      div.id = id; div.className = 'grid grid-cols-[1fr_75px_58px_78px_68px_72px_84px_90px_120px_28px] items-center border-b border-slate-800/40 group hover:bg-slate-900/20 transition-colors';
+      div.id = id; div.className = 'builder-grid grid grid-cols-[1fr_75px_58px_78px_68px_72px_84px_90px_120px_28px] items-center border-b border-slate-800/40 group';
       div.innerHTML = `
         <div class="ticker-ac-wrap relative w-full min-w-0">
-          <input type="text" value="${t}" placeholder="e.g. EQQQ.L" class="ticker-input bg-transparent px-2 py-1.5 text-sm font-bold uppercase focus:outline-none focus:bg-slate-900/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 rounded transition-colors w-full" autocomplete="off">
+          <input type="text" value="${t}" placeholder="e.g. EQQQ.L" class="ticker-input bg-transparent px-2 py-1.5 text-sm font-bold uppercase focus:outline-none focus:bg-slate-900/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 rounded w-full" autocomplete="off">
           <div class="ticker-ac-drop hidden absolute left-0 top-full mt-0.5 w-60 bg-slate-950 border border-indigo-500/30 rounded-xl shadow-2xl z-50 overflow-hidden py-1"></div>
         </div>
-        <input type="number" value="${q}" placeholder="0" class="qty-input bg-transparent px-2 py-1.5 text-sm font-bold text-right focus:outline-none focus:bg-slate-900/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 rounded transition-colors w-full">
+        <input type="number" value="${q}" placeholder="0" class="qty-input bg-transparent px-2 py-1.5 text-sm font-bold text-right focus:outline-none focus:bg-slate-900/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 rounded w-full">
         <select class="account-type-select bg-transparent px-1 py-1.5 text-xs font-bold focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 cursor-pointer w-full appearance-none"><option value="ISA">ISA</option><option value="SIPP">SIPP</option><option value="GIA">GIA</option></select>
         <span data-col="price"   data-value="0" class="text-[10px] font-black font-mono text-right pr-2 text-slate-700 select-none">—</span>
         <span data-col="chg-pct" data-value="0" class="text-[10px] font-black font-mono text-right pr-2 text-slate-700 select-none">—</span>
@@ -1229,7 +1247,7 @@
         <div data-col="advisor" class="flex justify-center items-center">
           <span class="text-[8px] font-black px-1.5 py-0.5 rounded bg-slate-800 text-slate-600 border border-slate-700 uppercase">AWAITING</span>
         </div>
-        <button onclick="document.getElementById('${id}').remove()" class="text-slate-800 hover:text-red-500 font-bold text-base transition-colors text-center opacity-0 group-hover:opacity-100">×</button>`;
+        <button onclick="document.getElementById('${id}').remove()" class="text-slate-800 hover:text-red-500 font-bold text-base text-center opacity-0 group-hover:opacity-100">×</button>`;
       const sel = div.querySelector('.account-type-select');
       sel.value = acctType;
       sel.addEventListener('change', () => tintAccountSelect(sel));
@@ -1392,7 +1410,7 @@
       };
       const { icon, cls } = cfg[type] || cfg.error;
       const toast = document.createElement('div');
-      toast.className = `pointer-events-auto flex items-start gap-3 px-4 py-3 rounded-xl border backdrop-blur-sm shadow-2xl max-w-xs text-[11px] font-bold leading-snug transition-all duration-300 translate-y-3 opacity-0 ${cls}`;
+      toast.className = `pointer-events-auto flex items-start gap-3 px-4 py-3 rounded-xl border backdrop-blur-sm shadow-2xl max-w-xs text-[11px] font-bold leading-snug transition-colors duration-300 translate-y-3 opacity-0 ${cls}`;
       toast.innerHTML = `<span class="shrink-0 mt-0.5">${icon}</span><span class="flex-1">${message}</span><button onclick="this.parentElement.remove()" class="shrink-0 text-current opacity-50 hover:opacity-100 font-black text-base leading-none ml-1" aria-label="Dismiss">×</button>`;
       container.appendChild(toast);
       requestAnimationFrame(() => requestAnimationFrame(() => toast.classList.remove('translate-y-3', 'opacity-0')));
@@ -1423,13 +1441,14 @@
       cash_balances.GIA  = (_intelAcctFilter === 'all' || _intelAcctFilter === 'GIA')  ? (parseFloat(document.getElementById('cash-gia').value)  || 0) : 0;
       if (Object.keys(holdings).length === 0) return;
       savePortfolio(holdings, account_mapping, cash_balances);
-      document.getElementById('loading-state').classList.remove('hidden'); document.getElementById('results-section').classList.add('hidden'); document.getElementById('sub-nav').classList.add('hidden'); updateStickyTops();
+      document.getElementById('loading-state').classList.remove('hidden'); document.getElementById('results-section').classList.add('hidden'); document.getElementById('sub-nav').classList.add('hidden'); debounceUpdateStickyTops();
       try {
         const riskLevel = document.querySelector('input[name="risk-level"]:checked').value;
+        const modelProvider = document.querySelector('input[name="model-provider"]:checked').value;
         const res = await fetch(API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ holdings, account_mapping, risk_level: riskLevel, base_currency: 'GBP', fallback_prices: fallbackPrices, enable_cio_llm: document.getElementById('cio-llm-toggle').checked })
+          body: JSON.stringify({ holdings, account_mapping, cash_balances, risk_level: riskLevel, model_provider: modelProvider, base_currency: 'GBP', fallback_prices: fallbackPrices, enable_cio_llm: document.getElementById('cio-llm-toggle').checked })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || 'Engine execution failed.');
@@ -1462,7 +1481,7 @@
     };
     function tipBtn(key) {
       const tip = TIPS[key] || '';
-      return `<button onclick="event.stopPropagation();showTooltip('${key}',\`${tip.replace(/`/g,"'")}\`)" class="ml-1 text-[9px] text-slate-700 hover:text-indigo-400 border border-slate-800 hover:border-indigo-500/50 rounded-full w-4 h-4 inline-flex items-center justify-center transition-all font-black shrink-0" title="${key} — click for explanation">?</button>`;
+      return `<button onclick="event.stopPropagation();showTooltip('${key}',\`${tip.replace(/`/g,"'")}\`)" class="ml-1 text-[9px] text-slate-700 hover:text-indigo-400 border border-slate-800 hover:border-indigo-500/50 rounded-full w-4 h-4 inline-flex items-center justify-center transition-colors font-black shrink-0" title="${key} — click for explanation">?</button>`;
     }
 
     let _lastTradeActions = [];
@@ -1487,7 +1506,7 @@
       // Only show sub-nav if currently on Intelligence Desk
       if (!document.getElementById('intelligence-view').classList.contains('hidden'))
         document.getElementById('sub-nav').classList.remove('hidden');
-      updateStickyTops();
+      debounceUpdateStickyTops();
       renderAccountValueBanners();
       renderAccountHoldings();
       // Refresh ticker bar with live prices after each analysis (holdings are confirmed at this point)
@@ -1568,7 +1587,7 @@
                 advisorCell.innerHTML = `
                   <div class="flex flex-col items-center gap-1.5 py-1">
                     <span onclick="showAdvisorTooltip('${tk}', '${strat}', ${score}, '${act}', '${why.replace(/'/g, "\\'")}', '${evidence}', '${report.replace(/'/g, "\\'")}')" 
-                          class="text-[9px] font-black px-2 py-0.5 rounded ${badgeClr} border uppercase cursor-help hover:scale-105 transition-all select-none">
+                          class="text-[9px] font-black px-2 py-0.5 rounded ${badgeClr} border uppercase cursor-help  transition-colors select-none">
                       ${strat} ${score}
                     </span>
                     <div class="flex flex-col items-center leading-tight">
@@ -1588,8 +1607,8 @@
       }
       
       document.getElementById('results-section').classList.remove('hidden');
-      document.getElementById('sub-nav').classList.remove('hidden'); updateStickyTops();
-      document.getElementById('results-section').scrollIntoView({ behavior: 'smooth' });
+      document.getElementById('sub-nav').classList.remove('hidden'); 
+      debounceUpdateStickyTops();
     }
 
     function renderRiskProfile(p, level, ai, assets) {
@@ -1808,7 +1827,7 @@
         </div>
         <p class="text-[9px] font-black text-slate-700 font-mono mt-1">&lt;1.05 Fail · 1.05–1.2 Weak · 1.2–1.5 Healthy · &gt;1.5 Strong</p>
         <div class="h-2 bg-slate-800 rounded-full overflow-hidden mt-2">
-          <div class="h-full ${drBarCls} transition-all" style="width:${drBarW}%"></div>
+          <div class="h-full ${drBarCls} transition-colors" style="width:${drBarW}%"></div>
         </div>
         <p class="text-[9px] font-bold ${drValCls} mt-2 leading-snug">${drHint}</p>
         <p class="text-[8px] text-slate-700 font-black uppercase mt-1">Factor: ${ai.attribution.factor}</p>`;
@@ -2036,7 +2055,8 @@
       const sourceBadge = isStatic
         ? `<div class="mb-4 px-3 py-2 bg-amber-950/30 border border-amber-800/40 rounded-lg"><p class="text-[9px] font-black text-amber-500 uppercase tracking-widest">⚠ Static fallback — ${llmErr ? 'CIO LLM error: ' + llmErr : 'enable CIO LLM for live AI-powered intelligence'}</p></div>`
         : '';
-      const pointsHtml = mo.points.map(x => `<div class="p-4 bg-slate-900/50 rounded-xl border border-slate-800 transition-all group hover:border-indigo-500/30"><div class="flex items-center gap-3 mb-2"><div class="text-xl group-hover:scale-110 transition-transform">${x.i}</div><div><p class="text-[10px] font-bold text-slate-600 uppercase tracking-widest">${x.l}</p><p class="text-xs font-black text-indigo-400 uppercase">${x.v}</p></div></div><p class="text-[10px] leading-relaxed text-slate-500 font-medium">${boldTerms(x.d)}</p></div>`).join('');
+      const points = mo.points || [];
+      const pointsHtml = points.map(x => `<div class="p-4 bg-slate-900/50 rounded-xl border border-slate-800 transition-colors group hover:border-indigo-500/30"><div class="flex items-center gap-3 mb-2"><div class="text-xl group- transition-transform">${x.i}</div><div><p class="text-[10px] font-bold text-slate-600 uppercase tracking-widest">${x.l}</p><p class="text-xs font-black text-indigo-400 uppercase">${x.v}</p></div></div><p class="text-[10px] leading-relaxed text-slate-500 font-medium">${boldTerms(x.d)}</p></div>`).join('');
       const quantHtml = `<div class="p-4 bg-indigo-950/20 border-l-4 border-indigo-500 rounded-r-xl"><p class="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-2 font-black">Quant Intelligence · DR ${dr.toFixed(2)}</p><p class="text-sm text-slate-300 leading-relaxed">${boldTerms(commentary)}</p></div>`;
       const commHtml = strategicComm ? `<div class="p-4 bg-emerald-950/20 border-l-4 border-emerald-500 rounded-r-xl"><p class="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-2 font-black">Strategic Commentary</p><p class="text-sm text-slate-300 leading-relaxed">${boldTerms(strategicComm)}</p></div>` : '';
       const futureHtml = mo.future_outlook ? `<div class="p-4 bg-violet-950/20 border-l-4 border-violet-500 rounded-r-xl"><p class="text-xs font-bold text-violet-400 uppercase tracking-widest mb-2 font-black">Strategic Outlook</p><p class="text-sm text-slate-300 leading-relaxed">${boldTerms(mo.future_outlook)}</p></div>` : '';
@@ -2085,7 +2105,7 @@
         const decayId = `decay-${idx}`;
 
         return `
-          <div class="glass border ${cfg.border} rounded-xl p-5 space-y-3 hover:scale-[1.005] transition-all shadow-lg ${cfg.glow}">
+          <div class="glass border ${cfg.border} rounded-xl p-5 space-y-3  transition-colors shadow-lg ${cfg.glow}">
             <div class="flex items-start justify-between gap-2">
               <div class="flex gap-3 min-w-0">
                 <span class="text-2xl shrink-0 mt-0.5">${d.icon}</span>
@@ -2145,7 +2165,7 @@
               <p class="text-[10px] text-slate-400 font-medium leading-relaxed">${d.rationale}</p>
             </div>
 
-            <button onclick="console.log('TACTICAL TRADE:', ${JSON.stringify(d).replace(/'/g, "\\'")})" class="w-full py-2 ${isBuy ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-amber-600 hover:bg-amber-500'} rounded text-[9px] font-black uppercase tracking-wider transition-all">
+            <button onclick="console.log('TACTICAL TRADE:', ${JSON.stringify(d).replace(/'/g, "\\'")})" class="w-full py-2 ${isBuy ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-amber-600 hover:bg-amber-500'} rounded text-[9px] font-black uppercase tracking-wider transition-colors">
               ${d.action} ${d.ticker} — Execute
             </button>
           </div>`;
@@ -2193,7 +2213,7 @@
         const badge  = isGia  ? 'bg-amber-500 text-black'
                      : isCash ? 'bg-yellow-400 text-black'
                      :          'bg-indigo-500 text-white';
-        return `<div class="border rounded-xl p-5 ${border} space-y-3 transition-all hover:scale-[1.01]"><div class="flex justify-between items-start gap-4"><div class="flex gap-3"><div class="text-xl shrink-0 mt-0.5">${r.icon}</div><div><p class="text-[11px] font-black text-slate-100 uppercase tracking-tight leading-tight">${r.title}</p><p class="text-[10px] text-slate-400 font-medium mt-1 uppercase">${r.detail}</p></div></div><span class="px-2 py-0.5 rounded text-[8px] font-black uppercase ${badge}">${r.action || 'ADVISORY'}</span></div><div class="pt-3 border-t border-slate-800/50"><p class="text-[10px] text-slate-400 leading-relaxed font-medium">${r.rationale}</p></div></div>`;
+        return `<div class="border rounded-xl p-5 ${border} space-y-3 transition-colors "><div class="flex justify-between items-start gap-4"><div class="flex gap-3"><div class="text-xl shrink-0 mt-0.5">${r.icon}</div><div><p class="text-[11px] font-black text-slate-100 uppercase tracking-tight leading-tight">${r.title}</p><p class="text-[10px] text-slate-400 font-medium mt-1 uppercase">${r.detail}</p></div></div><span class="px-2 py-0.5 rounded text-[8px] font-black uppercase ${badge}">${r.action || 'ADVISORY'}</span></div><div class="pt-3 border-t border-slate-800/50"><p class="text-[10px] text-slate-400 leading-relaxed font-medium">${r.rationale}</p></div></div>`;
       }).join('') || '<div class="text-center py-10"><p class="text-slate-700 text-xs font-bold uppercase tracking-widest italic">Alignment Verified.</p></div>';
     }
 
@@ -2279,7 +2299,7 @@
         const _base = tk.split('.')[0].toUpperCase();
         const cardSector = (asset.sector && asset.sector !== 'N/A') ? asset.sector : 'Other';
         const cardRegion = (typeof REGION_MAP !== 'undefined' && REGION_MAP[_base]) || (tk.endsWith('.L') ? 'United Kingdom' : 'Other');
-        return `<div class="glass p-5 border-t-2 transition-all hover:shadow-2xl" data-sector="${cardSector}" data-region="${cardRegion}" style="border-top-color: ${c}">
+        return `<div class="glass p-5 border-t-2 transition-colors hover:shadow-2xl" data-sector="${cardSector}" data-region="${cardRegion}" style="border-top-color: ${c}">
           <div class="flex justify-between mb-3">
             <div>
               <div class="flex items-center gap-2 mb-1.5 flex-wrap">
@@ -2297,7 +2317,7 @@
               <p class="text-[8px] ${safetyClr} font-bold">${safetyHint}</p>
             </div>
           </div>
-          <button onclick="const d=document.getElementById('${cardId}');const open=!d.classList.contains('hidden');d.classList.toggle('hidden');this.innerHTML=open?'▼ <span>Show Details</span>':'▲ <span>Hide Details</span>'" class="w-full flex items-center justify-center gap-1 py-1.5 text-[8px] font-black uppercase tracking-widest text-slate-600 hover:text-indigo-400 border border-slate-800 hover:border-indigo-500/40 rounded-lg transition-all mb-1">▼ <span>Show Details</span></button>
+          <button onclick="const d=document.getElementById('${cardId}');const open=!d.classList.contains('hidden');d.classList.toggle('hidden');this.innerHTML=open?'▼ <span>Show Details</span>':'▲ <span>Hide Details</span>'" class="w-full flex items-center justify-center gap-1 py-1.5 text-[8px] font-black uppercase tracking-widest text-slate-600 hover:text-indigo-400 border border-slate-800 hover:border-indigo-500/40 rounded-lg transition-colors mb-1">▼ <span>Show Details</span></button>
           <div id="${cardId}" class="hidden">
             <div class="grid grid-cols-2 gap-1.5 text-xs mb-3 mt-2">
               <div class="bg-slate-900/50 p-2 rounded border border-slate-800">
@@ -2461,12 +2481,12 @@
       // Export button shown only when there are actionable trades
       const exportBtn = _lastTradeActions.length > 0
         ? `<div class="mt-4 flex gap-2">
-             <select id="broker-format" class="bg-slate-900 border border-slate-700 text-slate-400 text-[9px] font-black uppercase rounded-xl px-3 outline-none focus:border-indigo-600 cursor-pointer hover:border-slate-600 transition-all" style="min-width:140px">
+             <select id="broker-format" class="bg-slate-900 border border-slate-700 text-slate-400 text-[9px] font-black uppercase rounded-xl px-3 outline-none focus:border-indigo-600 cursor-pointer hover:border-slate-600 transition-colors" style="min-width:140px">
                <option value="standard">Standard CSV</option>
                <option value="ib">Interactive Brokers</option>
                <option value="t212">Trading 212</option>
              </select>
-             <button onclick="exportTradesCSV()" class="flex-1 flex items-center justify-center gap-2 py-2.5 border border-dashed border-emerald-700/50 text-emerald-500 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-emerald-500/10 transition-all">
+             <button onclick="exportTradesCSV()" class="flex-1 flex items-center justify-center gap-2 py-2.5 border border-dashed border-emerald-700/50 text-emerald-500 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-emerald-500/10 transition-colors">
                <span>⬇</span> Export
              </button>
            </div>`
@@ -2642,7 +2662,7 @@
             <span class="text-[10px] font-black text-indigo-400 font-mono">${maxScore}%</span>
           </div>
           <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-            <div class="bg-gradient-to-r from-indigo-500 to-fuchsia-500 h-full transition-all duration-1000" style="width: ${maxScore}%"></div>
+            <div class="bg-gradient-to-r from-indigo-500 to-fuchsia-500 h-full transition-colors duration-1000" style="width: ${maxScore}%"></div>
           </div>
           <div class="flex justify-between items-center mt-4">
             <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Speed to Action</p>
@@ -2671,7 +2691,7 @@
       let actNowCards = act_now.map(item => {
         const fullLogic = scores[item.ticker];
         return `
-        <div class="p-4 bg-fuchsia-950/10 rounded-xl border border-fuchsia-500/20 mb-4 hover:border-fuchsia-500/40 transition-all">
+        <div class="p-4 bg-fuchsia-950/10 rounded-xl border border-fuchsia-500/20 mb-4 hover:border-fuchsia-500/40 transition-colors">
           <div class="flex justify-between items-start mb-2">
             <div>
               <span class="text-sm font-black text-slate-200">${item.ticker}</span>
@@ -2712,7 +2732,7 @@
           <p class="text-[10px] text-slate-600 mb-4">Alpha generation beyond current holdings</p>
           <div class="mt-4 space-y-4">
             ${highWatchlist.map(([tk, data]) => `
-              <div class="p-3 bg-indigo-950/10 rounded-lg border border-indigo-500/20 hover:border-indigo-500/40 transition-all">
+              <div class="p-3 bg-indigo-950/10 rounded-lg border border-indigo-500/20 hover:border-indigo-500/40 transition-colors">
                 <div class="flex justify-between items-center mb-2">
                   <p class="text-xs font-black text-slate-200">${tk}</p>
                   <span class="text-[9px] font-black text-indigo-400">${data.probability} Prob.</span>
@@ -2956,8 +2976,8 @@
       const strip    = document.getElementById('ticker-strip');
       const btn      = document.getElementById('ticker-refresh-btn');
 
-      if (tickers.length === 0) { bar.classList.add('hidden'); updateStickyTops(); return; }
-      bar.classList.remove('hidden'); updateStickyTops();
+      if (tickers.length === 0) { bar.classList.add('hidden'); debounceUpdateStickyTops(); return; }
+      bar.classList.remove('hidden'); debounceUpdateStickyTops();
 
       // Spin indicator
       btn.innerHTML = '<span class="tb-spin">⟳</span>';
@@ -3049,18 +3069,33 @@
     // ── Responsive sticky positioning ───────────────────────────────────────
     // Recomputes ticker-bar, desk-tabs, and sub-nav `top` values from actual
     // header height so they stack correctly on every screen size / zoom level.
-    function updateStickyTops() {
-      const headerH    = document.querySelector('header')?.offsetHeight || 60;
-      const tickerEl   = document.getElementById('ticker-bar');
-      const deskTabsEl = document.getElementById('desk-tabs');
-      const subNavEl   = document.getElementById('sub-nav');
-      if (tickerEl)   tickerEl.style.top   = headerH + 'px';
-      const tickerH   = (tickerEl && !tickerEl.classList.contains('hidden'))   ? (tickerEl.offsetHeight  || 0) : 0;
-      if (deskTabsEl) deskTabsEl.style.top = (headerH + tickerH) + 'px';
-      const deskH     = (deskTabsEl && !deskTabsEl.classList.contains('hidden')) ? (deskTabsEl.offsetHeight || 0) : 0;
-      if (subNavEl)   subNavEl.style.top   = (headerH + tickerH + deskH) + 'px';
+    let _stickyTimeout = null;
+    function debounceUpdateStickyTops() {
+      if (_stickyTimeout) clearTimeout(_stickyTimeout);
+      _stickyTimeout = setTimeout(updateStickyTops, 50);
     }
-    window.addEventListener('resize', updateStickyTops);
+
+    function updateStickyTops() {
+      requestAnimationFrame(() => {
+        const header    = document.querySelector('header');
+        const ticker    = document.getElementById('ticker-bar');
+        const deskTabs  = document.getElementById('desk-tabs');
+        const subNav    = document.getElementById('sub-nav');
+        
+        const hH = header ? header.offsetHeight : 60;
+        const tH = (ticker && !ticker.classList.contains('hidden')) ? ticker.offsetHeight : 0;
+        const dH = (deskTabs && !deskTabs.classList.contains('hidden')) ? deskTabs.offsetHeight : 0;
+
+        const tTop = `${hH}px`;
+        const dTop = `${hH + tH}px`;
+        const sTop = `${hH + tH + dH}px`;
+
+        if (ticker && ticker.style.top !== tTop) ticker.style.top = tTop;
+        if (deskTabs && deskTabs.style.top !== dTop) deskTabs.style.top = dTop;
+        if (subNav && subNav.style.top !== sTop) subNav.style.top = sTop;
+      });
+    }
+    window.addEventListener('resize', debounceUpdateStickyTops);
     function setIntelFilter(acct) {
       _intelAcctFilter = acct;
       const label = acct === 'all' ? 'All Portfolio' : acct;
@@ -3069,11 +3104,32 @@
       analyzePortfolio();
     }
 
+    function requestNotificationPermission() {
+      if (!("Notification" in window)) return;
+      Notification.requestPermission().then(permission => {
+        if (permission === "granted") {
+          document.getElementById('notif-btn').classList.add('hidden');
+          showToast("System notifications active", "success");
+        }
+      });
+    }
+
+    function showDesktopNotification(title, body) {
+      if (!("Notification" in window) || Notification.permission !== "granted") return;
+      new Notification(title, { body, icon: '/favicon.ico' });
+    }
+
     window.addEventListener('DOMContentLoaded', () => {
       // Sync toggle icon with whatever theme was set by the anti-FOUC script
       if (document.documentElement.getAttribute('data-theme') === 'light')
         document.getElementById('theme-icon').textContent = '🌙';
-      updateStickyTops();
+      
+      // Show notification button if not granted
+      if ("Notification" in window && Notification.permission !== "granted") {
+        document.getElementById('notif-btn').classList.remove('hidden');
+      }
+
+      debounceUpdateStickyTops();
       initFirebase();
       pollHealth();
     });
@@ -3220,42 +3276,70 @@
     let _activePnlTab = 'all';
 
     function switchDesk(desk) {
-      document.getElementById('intelligence-view').classList.toggle('hidden', desk !== 'intelligence');
-      document.getElementById('pnl-view').classList.toggle('hidden', desk !== 'pnl');
-      document.getElementById('alpha-view').classList.toggle('hidden', desk !== 'alpha');
-      document.getElementById('desk-tab-intelligence').classList.toggle('active', desk === 'intelligence');
-      document.getElementById('desk-tab-pnl').classList.toggle('active', desk === 'pnl');
-      document.getElementById('desk-tab-alpha').classList.toggle('active', desk === 'alpha');
+      console.log('[Vesper] Switching to desk:', desk);
+      const views = ['intelligence-view', 'pnl-view', 'alpha-view'];
+      views.forEach(v => {
+        const el = document.getElementById(v);
+        if (el) el.classList.toggle('hidden', v !== (desk + '-view'));
+        else console.warn('[Vesper] View element not found:', v);
+      });
+
+      const tabs = ['intelligence', 'pnl', 'alpha'];
+      tabs.forEach(t => {
+        const el = document.getElementById('desk-tab-' + t);
+        if (el) el.classList.toggle('active', t === desk);
+      });
+
       // Sub-nav only shows on intelligence desk when results exist
       const hasResults = !document.getElementById('results-section').classList.contains('hidden');
       document.getElementById('sub-nav').classList.toggle('hidden', !(desk === 'intelligence' && hasResults));
-      updateStickyTops();
+      debounceUpdateStickyTops();
     }
 
     function renderMasterVerdict(mv, ts) {
       if (!mv) return;
-      const rationaleEl = document.getElementById('verdict-rationale');
-      const actionEl = document.getElementById('verdict-action');
-      const timeframeEl = document.getElementById('verdict-timeframe');
-      const quantityEl = document.getElementById('verdict-quantity');
-      const badgeEl = document.getElementById('verdict-priority-badge');
+      const summaryEl = document.getElementById('verdict-summary');
+      const listEl    = document.getElementById('verdict-directives-list');
+      if (!summaryEl || !listEl) return;
 
-      if (rationaleEl) rationaleEl.textContent = mv.rationale_layman || 'Signals synthesized.';
-      if (actionEl) actionEl.textContent = mv.action || 'HOLD';
-      if (timeframeEl) timeframeEl.textContent = mv.timeframe || '—';
-      if (quantityEl) quantityEl.textContent = mv.quantity || '—';
+      summaryEl.textContent = mv.summary || 'Signals synthesized.';
+      const directives = mv.directives || [];
 
-      if (badgeEl) {
-        badgeEl.textContent = mv.priority || 'ROUTINE';
-        const p = (mv.priority || '').toUpperCase();
-        if (p === 'CRITICAL') {
-          badgeEl.className = 'px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border shadow-lg bg-red-600 text-white border-red-400 animate-pulse';
-        } else if (p === 'HIGH') {
-          badgeEl.className = 'px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border shadow-lg bg-amber-600 text-white border-amber-400';
-        } else {
-          badgeEl.className = 'px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border shadow-lg bg-slate-800 text-slate-300 border-slate-600';
+      listEl.innerHTML = directives.map((d, i) => {
+        const p = (d.priority || 'ROUTINE').toUpperCase();
+        let badgeClr = 'bg-slate-800 text-slate-400 border-slate-700';
+        let pulseCls = '';
+        
+        if (p === 'CRITICAL') { 
+          badgeClr = 'bg-red-600 text-white border-red-400'; 
+          pulseCls = 'animate-pulse shadow-[0_0_10px_rgba(220,38,38,0.4)]'; 
         }
-      }
+        else if (p === 'HIGH')   badgeClr = 'bg-amber-600 text-white border-amber-400';
+        else if (p === 'MEDIUM') badgeClr = 'bg-indigo-600 text-white border-indigo-400';
+
+        return `
+          <div class="flex flex-col md:flex-row md:items-center gap-4 p-4 bg-slate-900/40 rounded-xl border border-slate-800/60 hover:bg-slate-900/60 transition-colors group">
+            <div class="flex items-center gap-3 shrink-0 md:w-48">
+              <span class="text-[9px] font-black text-slate-600 font-mono w-4">${i+1}.</span>
+              <div class="px-2.5 py-1 rounded-md text-[8px] font-black uppercase tracking-widest border ${badgeClr} ${pulseCls}">${p}</div>
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-black text-white uppercase tracking-tight group-hover:text-indigo-300 transition-colors">${d.action}</p>
+              <p class="text-[11px] text-slate-500 mt-0.5 leading-relaxed">${d.rationale || ''}</p>
+            </div>
+            <div class="shrink-0 md:text-right">
+              <p class="text-[9px] font-black text-slate-600 uppercase tracking-[0.1em]">Timeframe</p>
+              <p class="text-[10px] font-bold text-indigo-400 uppercase">${d.timeframe || 'N/A'}</p>
+            </div>
+          </div>`;
+      }).join('');
+
+      // Trigger Desktop Notifications for new High/Critical directives
+      directives.forEach(d => {
+        if (d.priority === 'CRITICAL' || d.priority === 'HIGH') {
+          showDesktopNotification(`VESPER: ${d.priority} Priority`, d.action);
+        }
+      });
     }
 
     function renderAlphaAlerts(data) {
@@ -3279,6 +3363,9 @@
       }
 
       feed.innerHTML = alerts.map(a => {
+        if (a.conviction >= 90) {
+          showDesktopNotification(`ALPHA ALERT: ${a.symbol}`, a.title);
+        }
         const isVolume = a.type === 'VOLUME-ANOMALY';
         const isLeadLag = a.type === 'LEAD-LAG';
         const borderClr = isVolume ? 'border-fuchsia-500' : 'border-indigo-500';
@@ -3308,7 +3395,7 @@
           : '';
 
         return `
-          <div class="glass p-5 border-l-4 ${borderClr} hover:scale-[1.005] transition-all space-y-4">
+          <div class="glass p-5 border-l-4 ${borderClr}  transition-colors space-y-4">
             <div class="flex justify-between items-start">
               <div class="flex items-center gap-3">
                 <span class="text-2xl">${icon}</span>
@@ -3358,7 +3445,7 @@
 
             <div class="flex gap-2 items-center justify-between">
               <div class="flex gap-2">
-                <button onclick="console.log('ALPHA TRADE:', JSON.parse(decodeURIComponent('${encodeURIComponent(JSON.stringify(a))}')))" class="px-3 py-1.5 ${isVolume ? 'bg-fuchsia-600 hover:bg-fuchsia-500' : 'bg-indigo-600 hover:bg-indigo-500'} rounded text-[9px] font-black uppercase tracking-wider transition-all">Trade Now</button>
+                <button onclick="console.log('ALPHA TRADE:', JSON.parse(decodeURIComponent('${encodeURIComponent(JSON.stringify(a))}')))" class="px-3 py-1.5 ${isVolume ? 'bg-fuchsia-600 hover:bg-fuchsia-500' : 'bg-indigo-600 hover:bg-indigo-500'} rounded text-[9px] font-black uppercase tracking-wider transition-colors">Trade Now</button>
               </div>
               <span class="text-[8px] text-slate-700 font-mono font-black uppercase">Data-Driven Signal</span>
             </div>
@@ -3583,6 +3670,17 @@
                        net_profit: r2(g + d + i), ror: 0, top_3_holdings: [] };
       });
 
+      // Merge monthly summaries
+      const allMonths = new Set(accounts.flatMap(a => Object.keys(a.monthly || {})));
+      const monthly = {};
+      [...allMonths].sort().forEach(mk => {
+        const g = accounts.reduce((s, a) => s + (a.monthly?.[mk]?.realized_gains || 0), 0);
+        const d = accounts.reduce((s, a) => s + (a.monthly?.[mk]?.dividends      || 0), 0);
+        const i = accounts.reduce((s, a) => s + (a.monthly?.[mk]?.interest       || 0), 0);
+        monthly[mk] = { realized_gains: r2(g), dividends: r2(d), interest: r2(i),
+                        net_profit: r2(g + d + i) };
+      });
+
       return {
         account_type:                'all',
         total_paid_in:               r2(total_paid_in),
@@ -3600,6 +3698,7 @@
         open_positions,
         cash_timeline,
         yearly,
+        monthly,
         transaction_count,
       };
     }
@@ -3626,6 +3725,7 @@
       renderPnlSummaryCards(d);
       renderOpenPositionsTable(d);
       renderYearTable(d);
+      renderMonthlyTable(d);
       renderDisposalLog(d);
       renderTransferInDetail(d);
       renderDividendDetail(d);
@@ -3848,6 +3948,43 @@
               <td colspan="7" class="py-2.5 text-right text-[9px] text-slate-500 font-bold">${unrealPnL !== null ? 'Realized + Unrealized' : 'Realized only (no live prices)'}</td>
             </tr>
           </tfoot>
+        </table>`;
+    }
+
+    function renderMonthlyTable(d) {
+      const monthly = d.monthly || {};
+      const keys = Object.keys(monthly).sort().reverse();
+      const sect = document.getElementById('pnl-monthly-section');
+      if (keys.length === 0) { sect.classList.add('hidden'); return; }
+      sect.classList.remove('hidden');
+      const fmt = v => '£' + Number(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+      document.getElementById('pnl-monthly-body').innerHTML = `
+        <table class="w-full text-xs min-w-[640px]">
+          <thead><tr class="text-[10px] font-bold text-slate-500 uppercase border-b border-slate-800">
+            <th class="text-left pb-2 pr-3">Month</th>
+            <th class="text-right pb-2 pr-3">Realized P&L</th>
+            <th class="text-right pb-2 pr-3">Dividends</th>
+            <th class="text-right pb-2 pr-3">Interest</th>
+            <th class="text-right pb-2">Net Profit</th>
+          </tr></thead>
+          <tbody class="divide-y divide-slate-800/40">
+            ${keys.map(mk => {
+              const m = monthly[mk];
+              const npCls = m.net_profit >= 0 ? 'text-emerald-400' : 'text-red-400';
+              const rgCls = (m.realized_gains || 0) >= 0 ? 'text-emerald-400' : 'text-red-400';
+              // Convert YYYY-MM to Month YYYY
+              const date = new Date(mk + '-01');
+              const label = date.toLocaleString('en-GB', { month: 'long', year: 'numeric' });
+              return `<tr>
+                <td class="py-2 pr-3 font-mono font-bold text-slate-200">${label}</td>
+                <td class="py-2 pr-3 text-right font-mono ${rgCls}">${fmt(m.realized_gains || 0)}</td>
+                <td class="py-2 pr-3 text-right font-mono text-blue-400">${fmt(m.dividends)}</td>
+                <td class="py-2 pr-3 text-right font-mono text-violet-400">${fmt(m.interest)}</td>
+                <td class="py-2 text-right font-mono font-bold ${npCls}">${fmt(m.net_profit)}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
         </table>`;
     }
 
